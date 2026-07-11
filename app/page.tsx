@@ -1,162 +1,67 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import CouncilCards from "@/components/CouncilCards";
-import MarketBrowser from "@/components/MarketBrowser";
-import MarketPanel from "@/components/MarketPanel";
-import NewsSentiment from "@/components/NewsSentiment";
-import SocialPulse from "@/components/SocialPulse";
-import StepsTrace from "@/components/StepsTrace";
-import Verdict from "@/components/Verdict";
-import { executeAgent, fetchMarketDetail } from "@/lib/api";
-import type { ExecuteOut, MarketState, MarketSummary } from "@/lib/types";
+import { useState } from "react";
+import DossierView from "@/components/DossierView";
+import MarketGrid from "@/components/MarketGrid";
+import { useAgentRun } from "@/lib/useAgentRun";
 
 export default function Home() {
   const [prompt, setPrompt] = useState("");
-  const [running, setRunning] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [result, setResult] = useState<ExecuteOut | null>(null);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<MarketState | null>(null);
-  const [selectedError, setSelectedError] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const topRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
-
-  async function run(promptOverride?: string) {
-    const text = (promptOverride ?? prompt).trim();
-    if (!text || running) return;
-    setRunning(true);
-    setResult(null);
-    setFetchError(null);
-    setElapsed(0);
-    const started = Date.now();
-    timerRef.current = setInterval(
-      () => setElapsed(Math.floor((Date.now() - started) / 1000)),
-      1000,
-    );
-    try {
-      setResult(await executeAgent(text));
-    } catch (err) {
-      setFetchError(err instanceof Error ? err.message : String(err));
-    } finally {
-      if (timerRef.current) clearInterval(timerRef.current);
-      setRunning(false);
-    }
-  }
-
-  async function selectMarket(m: MarketSummary) {
-    setSelectedError(null);
-    setPrompt(`Market: ${m.slug}\nFocus: all\nTrade: no`);
-    topRef.current?.scrollIntoView({ behavior: "smooth" });
-    try {
-      setSelected(await fetchMarketDetail(m.slug));
-    } catch (err) {
-      setSelected(null);
-      setSelectedError(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  const ui = result?.ui ?? null;
+  const { running, elapsed, result, fetchError, run } = useAgentRun();
 
   return (
-    <main className="mx-auto max-w-4xl space-y-8 px-4 py-10">
-      <header ref={topRef}>
-        <h1 className="text-3xl font-bold tracking-tight">Polymarkov</h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Pre-trade intelligence dossiers for Polymarket — news, sentiment, AI
-          council, deterministic verdict, paper trading. Educational tool, not
-          financial advice.
+    <div className="mx-auto max-w-6xl space-y-10 px-4 py-8 md:px-8">
+      <header className="pt-2 text-center">
+        <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
+          Market <span className="text-emerald-400">intelligence</span>, on demand
+        </h1>
+        <p className="mx-auto mt-2 max-w-xl text-sm text-zinc-400">
+          AI-built pre-trade dossiers for any Polymarket market — live news, social
+          sentiment, a four-analyst AI council, and a deterministic fair-value verdict.
         </p>
       </header>
 
-      <section className="space-y-3">
+      <section className="mx-auto max-w-3xl rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 shadow-xl shadow-black/20">
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          rows={4}
-          placeholder={
-            'e.g. "Analyze the Fed September rate cut market", paste a Polymarket URL, or pick a market below'
-          }
-          className="w-full resize-y rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
+          rows={3}
+          placeholder={'Ask about any market — e.g. "Analyze the Fed September rate cut market" — or paste a Polymarket URL'}
+          className="w-full resize-y rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 text-sm text-zinc-100 placeholder-zinc-600 focus:border-emerald-500/60 focus:outline-none"
         />
-        <div className="flex items-center gap-4">
+        <div className="mt-3 flex items-center gap-4">
           <button
-            onClick={() => run()}
+            onClick={() => run(prompt)}
             disabled={running || !prompt.trim()}
-            className="rounded-lg bg-sky-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-xl bg-emerald-500 px-6 py-2 text-sm font-bold text-zinc-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {running ? "Running…" : "Run Agent"}
           </button>
           {running && (
-            <span className="flex items-center gap-2 text-sm text-slate-400">
-              <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-600 border-t-sky-400" />
-              {elapsed}s elapsed
+            <span className="flex items-center gap-2 text-sm text-zinc-400">
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-zinc-700 border-t-emerald-400" />
+              {elapsed}s — gathering evidence, convening the council…
             </span>
+          )}
+          {!running && (
+            <span className="text-xs text-zinc-600">Typical run: ~1 minute</span>
           )}
         </div>
       </section>
 
-      {selectedError && (
-        <div className="rounded-lg border border-amber-800 bg-amber-950/40 p-3 text-sm text-amber-300">
-          Could not load market detail: {selectedError}
-        </div>
-      )}
-
-      {selected && (
-        <MarketPanel market={selected} onGenerate={() => run()} running={running} />
-      )}
-
-      {fetchError && (
-        <div className="rounded-lg border border-red-800 bg-red-950/50 p-4 text-sm text-red-300">
-          Request failed: {fetchError}
-        </div>
-      )}
-
-      {result?.status === "error" && (
-        <div className="rounded-lg border border-red-800 bg-red-950/50 p-4 text-sm text-red-300">
-          Agent error: {result.error}
-        </div>
-      )}
-
-      {/* Dossier sections — populated once the pipeline (Phase 5) returns `ui` */}
-      {ui?.verdict && <Verdict data={ui.verdict} market={ui.market ?? selected ?? undefined} />}
-      {ui?.market && !selected && <MarketPanel market={ui.market} />}
-      {ui?.news && <NewsSentiment clusters={ui.news} />}
-      {ui?.social && <SocialPulse data={ui.social} />}
-      {ui?.council && <CouncilCards council={ui.council} />}
-
-      {ui?.fill && (
-        <section className="rounded-lg border border-slate-800 bg-slate-900 p-4 text-sm">
-          <h2 className="mb-2 text-lg font-semibold text-slate-200">Paper-trade fill</h2>
-          <div className="grid grid-cols-2 gap-2 text-slate-300 sm:grid-cols-3">
-            <div>Side: {ui.fill.side}</div>
-            <div>Size: ${ui.fill.size_usd.toFixed(2)}</div>
-            <div>VWAP: {(ui.fill.vwap * 100).toFixed(1)}%</div>
-            <div>Slippage: {ui.fill.slippage_bps.toFixed(1)} bps</div>
-            <div>Fee: ${ui.fill.fee_paid.toFixed(2)}</div>
-            <div className="truncate">Position: {ui.fill.position_id}</div>
-          </div>
+      {(result || fetchError) && (
+        <section className="mx-auto max-w-4xl">
+          <DossierView result={result} fetchError={fetchError} />
         </section>
       )}
 
-      {result?.response && (
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-slate-200">Response</h2>
-          <div className="whitespace-pre-wrap rounded-lg border border-slate-800 bg-slate-900 p-4 text-sm leading-relaxed text-slate-200">
-            {result.response}
-          </div>
-        </section>
-      )}
-
-      {result && <StepsTrace steps={result.steps} />}
-
-      <MarketBrowser onSelect={selectMarket} selectedSlug={selected?.slug ?? null} />
-    </main>
+      <section>
+        <div className="mb-4 flex items-baseline justify-between">
+          <h2 className="text-xl font-bold tracking-tight">Trending markets</h2>
+          <span className="text-xs text-zinc-500">top by 24h volume, live from Polymarket</span>
+        </div>
+        <MarketGrid />
+      </section>
+    </div>
   );
 }

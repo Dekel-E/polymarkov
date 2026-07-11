@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type { SocialPulse as SocialPulseData } from "@/lib/types";
 
@@ -13,27 +13,27 @@ export default function SocialPulse({ data }: { data: SocialPulseData }) {
 
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold text-slate-200">Social pulse</h2>
-      <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+      <h2 className="mb-3 text-lg font-semibold text-zinc-200">Social pulse</h2>
+      <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
         <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
           <div>
-            <span className="text-slate-400">Aggregate sentiment: </span>
-            <span className="font-semibold text-slate-100">
+            <span className="text-zinc-400">Aggregate sentiment: </span>
+            <span className="font-semibold text-zinc-100">
               {avg === null ? "n/a" : `${avg > 0 ? "+" : ""}${avg.toFixed(2)}`}
             </span>
           </div>
           <div>
-            <span className="text-slate-400">Mention velocity: </span>
-            <span className="font-semibold text-slate-100">
-              {data.mention_velocity === null ? "n/a" : `${data.mention_velocity}×`}
+            <span className="text-zinc-400">Mention velocity: </span>
+            <span className="font-semibold text-zinc-100">
+              {data.mention_velocity === null ? "n/a" : `${data.mention_velocity}x`}
             </span>
           </div>
           <div>
-            <span className="text-slate-400">Posts: </span>
-            <span className="font-semibold text-slate-100">{data.posts.length}</span>
+            <span className="text-zinc-400">Posts: </span>
+            <span className="font-semibold text-zinc-100">{data.posts.length}</span>
           </div>
         </div>
-        {data.note && <p className="mt-2 text-xs text-slate-500">{data.note}</p>}
+        {data.note && <p className="mt-2 text-xs text-zinc-500">{data.note}</p>}
       </div>
     </section>
   );

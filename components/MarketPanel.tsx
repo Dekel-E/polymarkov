@@ -20,12 +20,7 @@ function Sparkline({ points }: { points: [number, number][] }) {
   const rising = prices[prices.length - 1] >= prices[0];
   return (
     <svg width={w} height={h} className="overflow-visible">
-      <path
-        d={path}
-        fill="none"
-        stroke={rising ? "#34d399" : "#f87171"}
-        strokeWidth="1.5"
-      />
+      <path d={path} fill="none" stroke={rising ? "#34d399" : "#f87171"} strokeWidth="1.5" />
     </svg>
   );
 }
@@ -33,14 +28,14 @@ function Sparkline({ points }: { points: [number, number][] }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="text-sm font-semibold text-slate-100">{value}</div>
+      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</div>
+      <div className="text-sm font-semibold text-zinc-100">{value}</div>
     </div>
   );
 }
 
 const pct = (v: number | null | undefined) =>
-  v === null || v === undefined ? "—" : `${(v * 100).toFixed(1)}%`;
+  v === null || v === undefined ? "n/a" : `${(v * 100).toFixed(1)}%`;
 
 export default function MarketPanel({
   market,
@@ -52,20 +47,22 @@ export default function MarketPanel({
   running?: boolean;
 }) {
   return (
-    <section className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+    <section className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <h2 className="text-base font-semibold text-slate-100">{market.question}</h2>
-          <div className="mt-1 text-xs text-slate-500">
-            {market.category} · ends{" "}
-            {market.end_date ? new Date(market.end_date).toLocaleDateString() : "—"} ·{" "}
+          <h1 className="text-lg font-bold leading-snug text-zinc-100">{market.question}</h1>
+          <div className="mt-1.5 text-xs text-zinc-500">
+            <span className="capitalize">{market.category}</span>
+            {" | ends "}
+            {market.end_date ? new Date(market.end_date).toLocaleDateString() : "n/a"}
+            {" | "}
             <a
               href={`https://polymarket.com/market/${market.slug}`}
               target="_blank"
               rel="noreferrer"
-              className="text-sky-400 hover:underline"
+              className="text-emerald-400 hover:underline"
             >
-              view on Polymarket ↗
+              view on Polymarket
             </a>
           </div>
         </div>
@@ -73,14 +70,14 @@ export default function MarketPanel({
           <button
             onClick={onGenerate}
             disabled={running}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-zinc-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {running ? "Generating…" : "Generate Intel"}
           </button>
         )}
       </div>
 
-      <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
+      <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
         <div className="grid grid-cols-3 gap-x-6 gap-y-3 sm:grid-cols-6">
           <Stat label="Mid" value={pct(market.mid)} />
           <Stat label="Bid" value={pct(market.best_bid)} />
@@ -93,7 +90,7 @@ export default function MarketPanel({
           <Stat label="Vol 24h" value={`$${Math.round(market.volume24h).toLocaleString()}`} />
         </div>
         <div>
-          <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500">
             7-day price
           </div>
           <Sparkline points={market.price_history_7d} />

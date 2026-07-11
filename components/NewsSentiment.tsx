@@ -1,17 +1,17 @@
-"use client";
+﻿"use client";
 
 import type { EvidenceCluster } from "@/lib/types";
 
 function SentimentChip({ sentiment }: { sentiment: number | null }) {
   if (sentiment === null || sentiment === undefined)
-    return <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">n/a</span>;
+    return <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-400">n/a</span>;
   const positive = sentiment > 0.15;
   const negative = sentiment < -0.15;
   const cls = positive
     ? "bg-emerald-950 text-emerald-300 border-emerald-800"
     : negative
       ? "bg-red-950 text-red-300 border-red-800"
-      : "bg-slate-800 text-slate-300 border-slate-700";
+      : "bg-zinc-800 text-zinc-300 border-zinc-700";
   return (
     <span className={`rounded border px-1.5 py-0.5 text-xs font-medium ${cls}`}>
       {sentiment > 0 ? "+" : ""}
@@ -31,29 +31,29 @@ export default function NewsSentiment({ clusters }: { clusters: EvidenceCluster[
   if (!clusters.length) return null;
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold text-slate-200">News &amp; sentiment</h2>
+      <h2 className="mb-3 text-lg font-semibold text-zinc-200">News &amp; sentiment</h2>
       <div className="space-y-2">
         {clusters.map((c) => (
-          <div key={c.id} className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+          <div key={c.id} className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
             <div className="flex items-start justify-between gap-3">
               <a
                 href={c.url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-sm font-medium text-slate-100 hover:text-sky-400"
+                className="text-sm font-medium text-zinc-100 hover:text-emerald-400"
               >
-                <span className="mr-2 font-mono text-xs text-slate-500">{c.id}</span>
+                <span className="mr-2 font-mono text-xs text-zinc-500">{c.id}</span>
                 {c.headline}
               </a>
               <SentimentChip sentiment={c.sentiment} />
             </div>
-            <div className="mt-1 text-xs text-slate-500">
-              {c.source} · {age(c.date)}
+            <div className="mt-1 text-xs text-zinc-500">
+              {c.source} | {age(c.date)}
               {c.stance && c.stance !== "neutral" && (
                 <span className="ml-2 uppercase">leans {c.stance}</span>
               )}
             </div>
-            {c.summary && <p className="mt-1 text-xs text-slate-400">{c.summary}</p>}
+            {c.summary && <p className="mt-1 text-xs text-zinc-400">{c.summary}</p>}
           </div>
         ))}
       </div>
