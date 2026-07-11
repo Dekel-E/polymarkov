@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 from backend import config
 from backend.agent.types import EvidenceCluster, Precedent, QueryPlan
-from backend.data import gdelt, pinecone_client
+from backend.data import gdelt, google_news, pinecone_client
 from backend.llm import embeddings
 from backend.llm.client import RunContext
 
@@ -99,7 +99,9 @@ async def _pinecone_news(query: str) -> list[dict]:
             "published_at": m["metadata"].get("date") or None,
         }
         for m in matches
-        if m["metadata"].get("url")
+        # below the floor = merely nearest, not related — that's how a
+        # geopolitics market once got a page of World Cup "evidence"
+        if m["metadata"].get("url") and m["score"] >= config.NEWS_MIN_MATCH_SCORE
     ]
 
 
@@ -116,6 +118,8 @@ async def _precedents(question: str) -> list[Precedent]:
     out = []
     for m in matches:
         meta = m["metadata"]
+        if m["score"] < config.PRECEDENT_MIN_MATCH_SCORE:
+            continue
         if meta.get("outcome") in ("YES", "NO"):
             out.append(
                 Precedent(
@@ -131,15 +135,19 @@ async def _precedents(question: str) -> list[Precedent]:
 async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> EvidencePack:
     news_query = " ".join(plan.entities[:3]) or market.question
 
-    gdelt_task = gdelt.fetch_articles(news_query)
-    cached_task = _pinecone_news(market.question)
-    precedents_task = _precedents(market.question)
-    live, cached, precedents = await asyncio.gather(gdelt_task, cached_task, precedents_task)
+    gdelt_live, gnews_live, cached, precedents = await asyncio.gather(
+        gdelt.fetch_articles(news_query),
+        google_news.fetch_articles(news_query, max_records=10),
+        _pinecone_news(market.question),
+        _precedents(market.question),
+    )
 
     # merge, dedup by url (live wins: it's fresher)
     by_url = {a["url"]: a for a in cached}
-    by_url.update({a["url"]: a for a in live})
+    by_url.update({a["url"]: a for a in gdelt_live})
+    by_url.update({a["url"]: a for a in gnews_live})
     articles = list(by_url.values())
+    live = gdelt_live + gnews_live
 
     vectors: list[list[float]] | None = None
     if articles and embeddings.is_configured():
@@ -168,7 +176,8 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
 
     ctx.add_tool_step(
         MODULE,
-        f"news_query={news_query!r}; gdelt={len(live)} cached={len(cached)} articles",
+        f"news_query={news_query!r}; gdelt={len(gdelt_live)} google_news={len(gnews_live)} "
+        f"cached={len(cached)} articles",
         {
             "clusters": [
                 {"id": c.id, "headline": c.headline, "source": c.source, "date": c.date}

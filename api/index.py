@@ -332,23 +332,48 @@ async def put_settings(body: SettingsIn) -> dict:
         return {"settings": None, "error": str(exc)}
 
 
-@app.get("/api/news")
-async def news(limit: int = 12) -> dict:
-    """Latest cached headlines from the news indexer (the desk wire)."""
+@app.get("/api/market/news")
+async def market_news(slug: str, limit: int = 8) -> dict:
+    """Latest news relevant to ONE market: live Google News search on the
+    market question, merged with indexer-tagged articles. Semantic matches
+    only count above the relevance floor."""
     try:
-        if not supabase_client.is_configured():
-            return {"articles": [], "error": None}
-        rows = await asyncio.to_thread(
-            lambda: supabase_client.get_client()
-            .table("articles")
-            .select("title,url,domain,published_at")
-            .order("published_at", desc=True)
-            .limit(min(limit, 30))
-            .execute()
-            .data
-            or []
-        )
-        return {"articles": rows, "error": None}
+        from backend.data import google_news
+
+        limit = min(limit, 15)
+        question = ""
+        articles: list[dict] = []
+
+        if supabase_client.is_configured():
+            def _tagged() -> tuple[str, list[dict]]:
+                client = supabase_client.get_client()
+                rows = (
+                    client.table("markets").select("question").eq("slug", slug).limit(1).execute().data
+                )
+                tagged = (
+                    client.table("articles")
+                    .select("title,url,domain,published_at")
+                    .contains("entities", [slug])
+                    .order("published_at", desc=True)
+                    .limit(limit)
+                    .execute()
+                    .data
+                    or []
+                )
+                return (rows[0]["question"] if rows else "", tagged)
+
+            question, articles = await asyncio.to_thread(_tagged)
+
+        # live, query-relevant headlines (works even when nothing is indexed)
+        if question:
+            seen = {a["url"] for a in articles}
+            for a in await google_news.fetch_articles(question, max_records=limit):
+                if a["url"] not in seen:
+                    articles.append(a)
+                    seen.add(a["url"])
+
+        articles.sort(key=lambda a: a.get("published_at") or "", reverse=True)
+        return {"articles": articles[:limit], "error": None}
     except Exception as exc:
         return {"articles": [], "error": str(exc)}
 

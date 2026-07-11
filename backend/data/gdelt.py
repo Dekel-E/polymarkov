@@ -21,11 +21,12 @@ _HEADERS = {"User-Agent": "polymarkov/0.1 (course project)"}
 
 
 def _quote_query(query: str) -> str:
-    """GDELT treats unquoted multi-word queries as OR — quote phrases."""
+    """GDELT treats unquoted multi-word queries as OR — quote phrases.
+    English-only: multilingual results are noise the pipeline can't use."""
     query = query.strip()
     if " " in query and not query.startswith('"'):
-        return f'"{query}"'
-    return query
+        query = f'"{query}"'
+    return f"{query} sourcelang:english"
 
 
 def parse_seendate(seendate: str) -> Optional[str]:

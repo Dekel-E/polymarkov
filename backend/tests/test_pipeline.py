@@ -12,7 +12,7 @@ from backend.agent import intel_cache
 from backend.data import supabase_client
 from backend.agent import orchestrator
 from backend.agent.types import MarketState, Step, StepPrompt
-from backend.data import gdelt, pinecone_client, polymarket, social
+from backend.data import gdelt, google_news, pinecone_client, polymarket, social
 from backend.llm import embeddings
 from backend.llm.client import RunContext, TOOL_SYSTEM_PROMPT
 
@@ -158,7 +158,11 @@ def mocked_pipeline(monkeypatch):
     monkeypatch.setattr(RunContext, "call_llm", fake_call_llm)
     monkeypatch.setattr(polymarket, "search_markets", fake_search)
     monkeypatch.setattr(polymarket, "get_market_state", fake_state)
+    async def fake_gnews(query, max_records=10, days=7):
+        return []
+
     monkeypatch.setattr(gdelt, "fetch_articles", fake_articles)
+    monkeypatch.setattr(google_news, "fetch_articles", fake_gnews)
     monkeypatch.setattr(social, "gather_social", fake_social)
     # hermetic: never touch live Pinecone/embeddings/Supabase even with .env creds
     monkeypatch.setattr(embeddings, "is_configured", lambda: False)

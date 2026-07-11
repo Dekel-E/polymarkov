@@ -267,8 +267,8 @@ export async function fetchActivity(): Promise<ActivityEvent[]> {
   return data.events;
 }
 
-export async function fetchNews(): Promise<NewsArticle[]> {
-  const res = await fetch("/api/news");
+export async function fetchMarketNews(slug: string): Promise<NewsArticle[]> {
+  const res = await fetch(`/api/market/news?slug=${encodeURIComponent(slug)}`);
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
   const data = (await res.json()) as { articles: NewsArticle[]; error: string | null };
   if (data.error) throw new Error(data.error);

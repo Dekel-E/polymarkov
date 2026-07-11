@@ -17,9 +17,9 @@ def test_parse_seendate():
 
 
 def test_quote_query():
-    assert gdelt._quote_query("fed rate cut") == '"fed rate cut"'
-    assert gdelt._quote_query("bitcoin") == "bitcoin"
-    assert gdelt._quote_query('"already quoted"') == '"already quoted"'
+    assert gdelt._quote_query("fed rate cut") == '"fed rate cut" sourcelang:english'
+    assert gdelt._quote_query("bitcoin") == "bitcoin sourcelang:english"
+    assert gdelt._quote_query('"already quoted"') == '"already quoted" sourcelang:english'
 
 
 def test_extract_text_strips_markup():

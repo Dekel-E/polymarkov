@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import DossierView from "@/components/DossierView";
 import Markdown from "@/components/Markdown";
+import MarketNews from "@/components/MarketNews";
 import PipelineProgress from "@/components/PipelineProgress";
 import ProbabilityGauge from "@/components/ProbabilityGauge";
 import Sparkline from "@/components/Sparkline";
@@ -177,6 +178,9 @@ export default function MarketPage() {
           </div>
         </details>
       )}
+
+      {/* related headlines until the dossier's scored exhibits take over */}
+      {!ui?.news?.length && <MarketNews slug={slug} />}
 
       {running && <PipelineProgress elapsed={elapsed} />}
 

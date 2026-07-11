@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import DossierView from "@/components/DossierView";
 import MarketGrid from "@/components/MarketGrid";
-import NewsWire from "@/components/NewsWire";
 import PipelineProgress from "@/components/PipelineProgress";
 import { useAgentRun } from "@/lib/useAgentRun";
 
@@ -66,8 +65,6 @@ export default function Home() {
           </section>
         )}
       </div>
-
-      <NewsWire />
 
       <section>
         <div className="mb-4 flex items-baseline justify-between">
