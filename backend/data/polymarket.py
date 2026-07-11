@@ -294,6 +294,7 @@ async def get_market_state(slug_or_id: str) -> Optional[MarketState]:
     return MarketState(
         question=market["question"],
         slug=market["slug"],
+        event_id=market["event_id"],
         end_date=market["end_date"],
         resolution_criteria=market["description"],
         category=market["category"] if market["category"] in config.FEE_RATE else "other",

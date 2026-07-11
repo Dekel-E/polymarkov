@@ -63,6 +63,7 @@ class QueryPlan(BaseModel):
 class MarketState(BaseModel):
     question: str
     slug: str
+    event_id: str = ""  # Gamma event id (used for the comments API)
     end_date: Optional[str] = None
     resolution_criteria: str = ""
     category: str = "other"

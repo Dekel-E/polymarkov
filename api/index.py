@@ -11,6 +11,7 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse  # noqa: E402
 
 from backend import config  # noqa: E402
+from backend.agent.orchestrator import run_pipeline  # noqa: E402
 from backend.agent.types import ExecuteIn, ExecuteOut  # noqa: E402
 from backend.data import polymarket  # noqa: E402
 
@@ -92,16 +93,7 @@ async def market_detail(slug: str) -> dict:
 
 @app.post("/api/execute")
 async def execute(body: ExecuteIn) -> ExecuteOut:
-    # Phase 1 stub — replaced by backend.agent.orchestrator.run_pipeline in Phase 5.
     try:
-        return ExecuteOut(
-            status="ok",
-            error=None,
-            response=(
-                "Polymarkov skeleton is live, but the analysis pipeline is not "
-                f"implemented yet. You asked: {body.prompt!r}"
-            ),
-            steps=[],
-        )
+        return await run_pipeline(body.prompt)
     except Exception as exc:  # never leak a 500 — envelope is always HTTP 200
         return ExecuteOut(status="error", error=str(exc), response=None, steps=[])
