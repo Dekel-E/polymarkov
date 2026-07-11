@@ -1,5 +1,5 @@
 fastapi==0.115.12
-pydantic==2.11.4
+pydantic==2.13.4
 httpx==0.28.1
 openai==1.82.0
 supabase==2.31.0
