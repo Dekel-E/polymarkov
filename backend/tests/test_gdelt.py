@@ -44,7 +44,7 @@ async def test_fetch_articles_parses_and_drops_bad_rows():
 @respx.mock
 async def test_fetch_articles_retries_once_then_succeeds():
     route = respx.get(gdelt.GDELT_URL)
-    route.side_effect = [Response(429), Response(200, json=GDELT_FIXTURE)]
+    route.side_effect = [Response(500), Response(200, json=GDELT_FIXTURE)]
     articles = await gdelt.fetch_articles("fed rate cut")
     assert len(articles) == 3
     assert route.call_count == 2
@@ -52,8 +52,16 @@ async def test_fetch_articles_retries_once_then_succeeds():
 
 @respx.mock
 async def test_fetch_articles_degrades_to_empty():
-    respx.get(gdelt.GDELT_URL).mock(return_value=Response(429))
+    respx.get(gdelt.GDELT_URL).mock(return_value=Response(500))
     assert await gdelt.fetch_articles("fed rate cut") == []
+
+
+@respx.mock
+async def test_fetch_articles_rate_limit_fails_fast_no_retry():
+    route = respx.get(gdelt.GDELT_URL)
+    route.mock(return_value=Response(429))
+    assert await gdelt.fetch_articles("fed rate cut") == []
+    assert route.call_count == 1  # a 429 is not retried
 
 
 @respx.mock

@@ -71,8 +71,11 @@ async def fetch_articles(
                 resp.raise_for_status()
                 articles = resp.json().get("articles") or []
                 return [_normalize_article(a) for a in articles if a.get("url")]
-        except (httpx.HTTPError, ValueError):
+        except (httpx.HTTPError, ValueError) as exc:
             # ValueError covers GDELT returning HTML/garbage instead of JSON
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if status == 429:
+                break  # rate-limited: a 1s retry cannot succeed, fail fast
             if attempt == 0:
                 await asyncio.sleep(1.0)
     return []

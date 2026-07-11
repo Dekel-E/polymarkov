@@ -10,7 +10,8 @@ import pytest
 from backend import config
 from backend.agent import orchestrator
 from backend.agent.types import MarketState, Step, StepPrompt
-from backend.data import gdelt, polymarket, social
+from backend.data import gdelt, pinecone_client, polymarket, social
+from backend.llm import embeddings
 from backend.llm.client import RunContext, TOOL_SYSTEM_PROMPT
 
 # ---------------------------------------------------------------------------
@@ -153,6 +154,9 @@ def mocked_pipeline(monkeypatch):
     monkeypatch.setattr(polymarket, "get_market_state", fake_state)
     monkeypatch.setattr(gdelt, "fetch_articles", fake_articles)
     monkeypatch.setattr(social, "gather_social", fake_social)
+    # hermetic: never touch live Pinecone/embeddings even when .env has creds
+    monkeypatch.setattr(embeddings, "is_configured", lambda: False)
+    monkeypatch.setattr(pinecone_client, "is_configured", lambda: False)
 
 
 LLM_MODULES = {"QueryPlanner", "SentimentScorer", "BullAnalyst", "BearAnalyst", "QuantAnalyst", "ResolutionSkeptic", "Judge"}
