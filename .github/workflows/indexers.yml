@@ -1,0 +1,48 @@
+name: indexers
+
+on:
+  schedule:
+    - cron: "0 */2 * * *" # every 2h: index markets + news
+    - cron: "30 4 * * *" # daily: resolve positions -> precedents
+  workflow_dispatch: {}
+
+env:
+  LLMOD_API_KEY: ${{ secrets.LLMOD_API_KEY }}
+  LLMOD_BASE_URL: ${{ secrets.LLMOD_BASE_URL }}
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+  PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+  PINECONE_INDEX: ${{ secrets.PINECONE_INDEX }}
+
+jobs:
+  index:
+    # every-2h schedule + manual runs (not the daily resolve tick)
+    if: github.event.schedule != '30 4 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: MarketIndexer
+        run: python -m jobs.index_markets --top 300
+      - name: NewsIndexer
+        run: python -m jobs.index_news --markets 20
+
+  resolve:
+    # daily tick + manual runs
+    if: github.event.schedule == '30 4 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: ResolvePositions
+        run: python -m jobs.resolve_positions

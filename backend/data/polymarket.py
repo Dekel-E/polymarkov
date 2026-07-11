@@ -110,21 +110,31 @@ def normalize_market(raw: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
-async def get_trending_markets(limit: int = 20) -> list[dict]:
-    """Top active markets by 24h volume."""
+async def list_markets(
+    limit: int = 100,
+    offset: int = 0,
+    closed: bool = False,
+    order: str = "volume24hr",
+) -> list[dict]:
+    """One page of markets, normalized, sorted by `order` descending."""
+    params = {
+        "closed": str(closed).lower(),
+        "order": order,
+        "ascending": "false",
+        "limit": limit,
+        "offset": offset,
+    }
+    if not closed:
+        params["active"] = "true"
     async with _client() as client:
-        resp = await client.get(
-            f"{GAMMA_BASE}/markets",
-            params={
-                "active": "true",
-                "closed": "false",
-                "order": "volume24hr",
-                "ascending": "false",
-                "limit": limit,
-            },
-        )
+        resp = await client.get(f"{GAMMA_BASE}/markets", params=params)
         resp.raise_for_status()
         return [normalize_market(m) for m in resp.json()]
+
+
+async def get_trending_markets(limit: int = 20) -> list[dict]:
+    """Top active markets by 24h volume."""
+    return await list_markets(limit=limit)
 
 
 async def search_markets(query: str, limit: int = 10) -> list[dict]:

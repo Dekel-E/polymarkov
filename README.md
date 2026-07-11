@@ -41,6 +41,19 @@ npm run dev                # terminal 2: Next.js on :3000, /api/* proxied to :80
 
 Open http://localhost:3000.
 
+## Storage setup (one-time, Phase 3)
+
+1. **Supabase**: create a project at https://supabase.com/dashboard → Project Settings → Data API: copy the URL into `SUPABASE_URL` and the `service_role` key into `SUPABASE_SERVICE_KEY` in `.env`. Then open the SQL Editor and run each file in [supabase/migrations/](supabase/migrations/) in order (0001 → 0005).
+2. **Pinecone**: create an API key at https://app.pinecone.io → put it in `PINECONE_API_KEY`. The index (`PINECONE_INDEX`, default `polymarkov`, serverless, dim 1536, cosine) is created automatically on first use.
+3. **Backfill & first index run** (needs `LLMOD_*` set too, for embeddings):
+   ```bash
+   .venv\Scripts\python -m jobs.index_markets
+   .venv\Scripts\python -m jobs.index_news
+   .venv\Scripts\python -m scripts.seed_precedents   # ≥200 resolved markets
+   ```
+   Every job supports `--dry-run` to preview without writing.
+4. **GitHub Actions**: add all six env values as repo secrets so [.github/workflows/indexers.yml](.github/workflows/indexers.yml) can run on schedule.
+
 ## Notes
 
 - The taker-fee table in [backend/config.py](backend/config.py) is a config default — re-check against Polymarket fee docs at deploy time.
