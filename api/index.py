@@ -115,6 +115,34 @@ async def portfolio(request: Request, scope: str = "agent") -> dict:
         return {"portfolio": None, "error": str(exc)}
 
 
+class RegisterIn(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/api/auth/register")
+async def register(body: RegisterIn) -> dict:
+    """Create a user pre-confirmed (no confirmation email round-trip)."""
+    try:
+        if not supabase_client.is_configured():
+            return {"error": "auth is not configured on the server"}
+        if len(body.password) < 6:
+            return {"error": "password must be at least 6 characters"}
+
+        def _create():
+            return supabase_client.get_client().auth.admin.create_user(
+                {"email": body.email, "password": body.password, "email_confirm": True}
+            )
+
+        await asyncio.to_thread(_create)
+        return {"error": None}
+    except Exception as exc:
+        msg = str(exc)
+        if "already been registered" in msg or "already registered" in msg:
+            return {"error": "this email is already registered — log in instead"}
+        return {"error": msg}
+
+
 class TradeIn(BaseModel):
     slug: str
     side: Literal["BUY_YES", "BUY_NO"]

@@ -44,10 +44,17 @@ export function useAuth() {
     },
     async signUp(email: string, password: string) {
       if (!supabase) throw new Error("Auth is not configured");
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      // server-side registration creates the user pre-confirmed
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+      const data = (await res.json()) as { error: string | null };
+      if (data.error) throw new Error(data.error);
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw new Error(error.message);
-      // when email confirmation is on, there is no session yet
-      return { needsConfirmation: !data.session };
     },
     async signOut() {
       await supabase?.auth.signOut();

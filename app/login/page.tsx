@@ -12,26 +12,18 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    setNotice(null);
     try {
       if (mode === "login") {
         await signIn(email, password);
-        router.push("/portfolio");
       } else {
-        const { needsConfirmation } = await signUp(email, password);
-        if (needsConfirmation) {
-          setNotice("Account created — check your email for the confirmation link, then log in.");
-          setMode("login");
-        } else {
-          router.push("/portfolio");
-        }
+        await signUp(email, password);
       }
+      router.push("/portfolio");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -92,11 +84,6 @@ export default function LoginPage() {
         {error && (
           <div className="mt-3 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-300">
             {error}
-          </div>
-        )}
-        {notice && (
-          <div className="mt-3 rounded-lg border border-emerald-900/60 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-300">
-            {notice}
           </div>
         )}
 
