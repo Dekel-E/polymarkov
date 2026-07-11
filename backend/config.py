@@ -36,26 +36,31 @@ def _load_dotenv() -> None:
 
 _load_dotenv()
 
-LLMOD_API_KEY = os.environ.get("LLMOD_API_KEY", "")
-LLMOD_BASE_URL = os.environ.get("LLMOD_BASE_URL", "")
+def _env(name: str, default: str = "") -> str:
+    """Env read hardened for CI: strips whitespace/newlines (a pasted GitHub
+    secret often carries a trailing newline, which makes an illegal HTTP
+    header) and treats empty strings as unset."""
+    return (os.environ.get(name) or "").strip() or default
+
+
+LLMOD_API_KEY = _env("LLMOD_API_KEY")
+LLMOD_BASE_URL = _env("LLMOD_BASE_URL")
 # Course submission requires the LLMod models (defaults below). For local dev
 # any OpenAI-compatible provider works — e.g. Gemini via
 # LLMOD_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 # LLM_MODEL=gemini-2.5-flash  EMBEDDING_MODEL=gemini-embedding-001
-# `or` (not a get() default) so empty-string env vars — e.g. an unset GitHub
-# Actions secret — still fall back to the course defaults.
-LLM_MODEL = os.environ.get("LLM_MODEL") or "MB5R2CF-azure/gpt-5.4-mini"
-EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL") or "MB5R2CF-azure/text-embedding-3-small"
-EMBEDDING_DIM = int(os.environ.get("EMBEDDING_DIM") or "1536")
+LLM_MODEL = _env("LLM_MODEL", "MB5R2CF-azure/gpt-5.4-mini")
+EMBEDDING_MODEL = _env("EMBEDDING_MODEL", "MB5R2CF-azure/text-embedding-3-small")
+EMBEDDING_DIM = int(_env("EMBEDDING_DIM", "1536"))
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+SUPABASE_URL = _env("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = _env("SUPABASE_SERVICE_KEY")
 
-PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY", "")
-PINECONE_INDEX = os.environ.get("PINECONE_INDEX", "polymarkov")
+PINECONE_API_KEY = _env("PINECONE_API_KEY")
+PINECONE_INDEX = _env("PINECONE_INDEX", "polymarkov")
 
-REDDIT_CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID", "")
-REDDIT_CLIENT_SECRET = os.environ.get("REDDIT_CLIENT_SECRET", "")
+REDDIT_CLIENT_ID = _env("REDDIT_CLIENT_ID")
+REDDIT_CLIENT_SECRET = _env("REDDIT_CLIENT_SECRET")
 
 # Social sources are best-effort and feature-flagged (§2).
 ENABLE_POLYMARKET_COMMENTS = True
