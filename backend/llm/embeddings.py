@@ -32,9 +32,17 @@ def embed(texts: list[str]) -> list[list[float]]:
     clipped = [t[:MAX_INPUT_CHARS] if t else " " for t in texts]
     vectors: list[list[float]] = []
     for i in range(0, len(clipped), BATCH_SIZE):
-        resp = _client().embeddings.create(
-            model=config.EMBEDDING_MODEL, input=clipped[i : i + BATCH_SIZE]
-        )
+        batch = clipped[i : i + BATCH_SIZE]
+        try:
+            # pin the output dimension so Pinecone stays compatible across
+            # providers (text-embedding-3-* and gemini-embedding-001 support it)
+            resp = _client().embeddings.create(
+                model=config.EMBEDDING_MODEL, input=batch, dimensions=config.EMBEDDING_DIM
+            )
+        except Exception as exc:
+            if "dimensions" not in str(exc):
+                raise
+            resp = _client().embeddings.create(model=config.EMBEDDING_MODEL, input=batch)
         vectors.extend(d.embedding for d in resp.data)
     return vectors
 

@@ -38,9 +38,13 @@ _load_dotenv()
 
 LLMOD_API_KEY = os.environ.get("LLMOD_API_KEY", "")
 LLMOD_BASE_URL = os.environ.get("LLMOD_BASE_URL", "")
-LLM_MODEL = "MB5R2CF-azure/gpt-5.4-mini"
-EMBEDDING_MODEL = "MB5R2CF-azure/text-embedding-3-small"
-EMBEDDING_DIM = 1536
+# Course submission requires the LLMod models (defaults below). For local dev
+# any OpenAI-compatible provider works — e.g. Gemini via
+# LLMOD_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+# LLM_MODEL=gemini-2.5-flash  EMBEDDING_MODEL=gemini-embedding-001
+LLM_MODEL = os.environ.get("LLM_MODEL", "MB5R2CF-azure/gpt-5.4-mini")
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "MB5R2CF-azure/text-embedding-3-small")
+EMBEDDING_DIM = int(os.environ.get("EMBEDDING_DIM", "1536"))
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
