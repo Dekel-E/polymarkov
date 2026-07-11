@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:api": "uvicorn api.index:app --reload --port 8000",
+    "dev:api": ".venv\\Scripts\\python -m uvicorn api.index:app --reload --port 8000",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

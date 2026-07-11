@@ -30,14 +30,13 @@ An AI agent that produces a **pre-trade intelligence dossier** for a Polymarket 
 # 1. Env
 cp .env.example .env       # then fill in the values
 
-# 2. Backend (Python 3.12)
+# 2. Backend (Python 3.12) — one-time setup
 python -m venv .venv
 .venv\Scripts\pip install -r requirements-dev.txt
-npm run dev:api            # FastAPI on :8000
 
-# 3. Frontend (separate terminal)
-npm install
-npm run dev                # Next.js on :3000, /api/* proxied to :8000
+# 3. Run BOTH servers (two terminals — the GUI 500s without the backend)
+npm run dev:api            # terminal 1: FastAPI on :8000 (uses .venv, no activation needed)
+npm run dev                # terminal 2: Next.js on :3000, /api/* proxied to :8000
 ```
 
 Open http://localhost:3000.

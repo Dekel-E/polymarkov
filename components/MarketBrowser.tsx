@@ -48,6 +48,13 @@ export default function MarketBrowser({
       {error && (
         <div className="rounded-lg border border-amber-800 bg-amber-950/40 p-3 text-sm text-amber-300">
           Could not load markets: {error}
+          {error.includes("500") && (
+            <div className="mt-1 text-xs text-amber-400/80">
+              In local dev this usually means the FastAPI backend is not running —
+              start it with <code className="rounded bg-slate-900 px-1">npm run dev:api</code>{" "}
+              in a second terminal, then reload.
+            </div>
+          )}
         </div>
       )}
 
