@@ -54,6 +54,15 @@ Open http://localhost:3000.
    Every job supports `--dry-run` to preview without writing.
 4. **GitHub Actions**: add all six env values as repo secrets so [.github/workflows/indexers.yml](.github/workflows/indexers.yml) can run on schedule.
 
+## Automation (GitHub Actions)
+
+Once the repo is on GitHub with secrets set, two workflows run on schedule:
+
+- [indexers.yml](.github/workflows/indexers.yml) — every 2h: index top markets + GDELT news into Supabase/Pinecone; daily: settle paper positions and harvest resolved markets into precedents.
+- [automation.yml](.github/workflows/automation.yml) — every 4h: **AutoTrade** (the agent scans trending markets, analyzes up to `AUTO_RUNS_PER_JOB`, and paper-trades when the deterministic engine finds real net edge, capped at `AUTO_MAX_OPEN_POSITIONS` open positions) and **RefreshWatchlist** (re-analyzes user-watched markets whose dossier cache expired).
+
+All jobs support `--dry-run` locally, e.g. `.venv\Scripts\python -m jobs.auto_trade --dry-run`.
+
 ## Notes
 
 - The taker-fee table in [backend/config.py](backend/config.py) is a config default — re-check against Polymarket fee docs at deploy time.

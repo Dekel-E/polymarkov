@@ -1,77 +1,200 @@
 "use client";
 
-const SAMPLE_ROWS = [
-  { rank: 1, wallet: "0x7a3f…e921", pnl30d: "+$184,220", winRate: "71%", positions: 34 },
-  { rank: 2, wallet: "0xb1c4…0d77", pnl30d: "+$96,410", winRate: "64%", positions: 51 },
-  { rank: 3, wallet: "0x33d9…4ac2", pnl30d: "+$71,835", winRate: "59%", positions: 27 },
-  { rank: 4, wallet: "0xe802…19bb", pnl30d: "+$44,102", winRate: "62%", positions: 19 },
-  { rank: 5, wallet: "0x51f6…c3d8", pnl30d: "+$38,577", winRate: "55%", positions: 42 },
+import { useCallback, useEffect, useState } from "react";
+import { fetchLeague, fetchWalletPositions } from "@/lib/api";
+import type { LeaderRow, WalletPosition } from "@/lib/types";
+
+const WINDOWS = [
+  { key: "7d", label: "7 days" },
+  { key: "30d", label: "30 days" },
+  { key: "all", label: "All time" },
 ];
 
-export default function LeaguePage() {
+const usd = (v: number) =>
+  v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+
+function shortWallet(w: string): string {
+  return w.length > 12 ? `${w.slice(0, 6)}…${w.slice(-4)}` : w;
+}
+
+function WalletPositions({ address }: { address: string }) {
+  const [positions, setPositions] = useState<WalletPosition[] | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    fetchWalletPositions(address)
+      .then(setPositions)
+      .catch(() => setError(true));
+  }, [address]);
+
+  if (error)
+    return <div className="px-5 py-3 text-xs text-desk-dim">Positions unavailable for this wallet.</div>;
+  if (positions === null)
+    return <div className="h-16 animate-pulse bg-desk-panel/60" />;
+  if (positions.length === 0)
+    return <div className="px-5 py-3 text-xs text-desk-dim">No open positions right now.</div>;
+
   return (
-    <div className="mx-auto max-w-5xl space-y-8 px-4 py-8 md:px-8">
-      <header>
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-            Smart Money <span className="text-instrument">League</span>
-          </h1>
-          <span className="rounded-full border border-instrument/50 bg-instrument/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-instrument">
-            Coming soon
+    <div className="space-y-1.5 px-5 py-3">
+      {positions.map((p, i) => (
+        <div key={i} className="flex flex-wrap items-center gap-3 text-xs">
+          <span className="min-w-0 flex-1 truncate text-desk-soft">{p.market}</span>
+          {p.outcome && (
+            <span
+              className={`rounded px-1.5 py-px font-mono text-[10px] font-bold uppercase ${
+                p.outcome.toLowerCase() === "yes"
+                  ? "bg-emerald-950 text-emerald-300"
+                  : "bg-red-950 text-red-300"
+              }`}
+            >
+              {p.outcome}
+            </span>
+          )}
+          <span className="font-mono tabular-nums text-desk-dim">{usd(p.size_usd)}</span>
+          <span
+            className={`font-mono tabular-nums ${
+              p.pnl > 0 ? "text-emerald-400" : p.pnl < 0 ? "text-red-400" : "text-desk-dim"
+            }`}
+          >
+            {p.pnl >= 0 ? "+" : ""}
+            {usd(p.pnl)}
           </span>
         </div>
-        <p className="mt-2 max-w-2xl text-sm text-desk-dim">
-          A leaderboard of Polymarket&apos;s sharpest wallets — tracked by realized PnL, win
-          rate, and category edge. Follow what smart money is buying before you run the
-          agent on a market.
-        </p>
+      ))}
+    </div>
+  );
+}
+
+export default function LeaguePage() {
+  const [window_, setWindow] = useState("30d");
+  const [leaders, setLeaders] = useState<LeaderRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    setExpanded(null);
+    fetchLeague(window_)
+      .then(setLeaders)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
+  }, [window_]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 md:px-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold uppercase tracking-wide md:text-3xl">
+            Smart Money <span className="text-instrument">League</span>
+          </h1>
+          <p className="mt-1 max-w-2xl text-sm text-desk-dim">
+            Polymarket&apos;s most profitable wallets, live from the public data API. Open a
+            row to see what a wallet is holding right now.
+          </p>
+        </div>
+        <div className="flex rounded-xl border border-desk-line bg-desk-panel p-1">
+          {WINDOWS.map((w) => (
+            <button
+              key={w.key}
+              onClick={() => setWindow(w.key)}
+              className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+                window_ === w.key
+                  ? "bg-instrument text-desk-deep"
+                  : "text-desk-dim hover:text-desk-ink"
+              }`}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
       </header>
 
-      <div className="relative overflow-hidden rounded-2xl border border-desk-line bg-desk-panel/60">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-desk-line text-[11px] uppercase tracking-wider text-desk-dim">
-              <th className="px-5 py-3 font-semibold">#</th>
-              <th className="px-5 py-3 font-semibold">Wallet</th>
-              <th className="px-5 py-3 font-semibold">30d PnL</th>
-              <th className="px-5 py-3 font-semibold">Win rate</th>
-              <th className="px-5 py-3 font-semibold">Open positions</th>
-            </tr>
-          </thead>
-          <tbody className="select-none blur-[5px]">
-            {SAMPLE_ROWS.map((r) => (
-              <tr key={r.rank} className="border-b border-desk-line/60 last:border-0">
-                <td className="px-5 py-3.5 font-bold text-desk-dim">{r.rank}</td>
-                <td className="px-5 py-3.5 font-mono text-desk-soft">{r.wallet}</td>
-                <td className="px-5 py-3.5 font-semibold text-emerald-400">{r.pnl30d}</td>
-                <td className="px-5 py-3.5 text-desk-soft">{r.winRate}</td>
-                <td className="px-5 py-3.5 text-desk-soft">{r.positions}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="absolute inset-0 flex items-center justify-center bg-desk-deep/40">
-          <div className="rounded-xl border border-desk-edge bg-desk-panel px-5 py-3 text-center shadow-2xl">
-            <div className="text-sm font-bold text-desk-ink">Wallet tracking is on the roadmap</div>
-            <div className="mt-1 text-xs text-desk-dim">
-              Sample data shown — on-chain tracking lands in a future update.
-            </div>
-          </div>
+      {error && (
+        <div className="rounded-xl border border-amber-900/60 bg-amber-950/30 p-4 text-sm text-amber-300">
+          Could not load the leaderboard: {error}
+          <button onClick={load} className="ml-2 text-instrument hover:underline">
+            Retry
+          </button>
         </div>
-      </div>
+      )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        {[
-          ["Track", "Follow specific wallets and get their entries surfaced on market pages."],
-          ["Rank", "Realized PnL and win-rate leaderboards, by category and overall."],
-          ["Compare", "See where the agent's verdict agrees — or disagrees — with smart money."],
-        ].map(([title, body]) => (
-          <div key={title} className="rounded-2xl border border-desk-line bg-desk-panel/60 p-4">
-            <div className="text-sm font-bold text-instrument">{title}</div>
-            <p className="mt-1 text-xs leading-relaxed text-desk-dim">{body}</p>
+      {loading && <div className="h-72 animate-pulse rounded-2xl bg-desk-panel" />}
+
+      {!loading && !error && leaders.length === 0 && (
+        <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-6 text-sm text-desk-dim">
+          The leaderboard came back empty — Polymarket&apos;s data API may be unavailable.
+          <button onClick={load} className="ml-2 text-instrument hover:underline">
+            Retry
+          </button>
+        </div>
+      )}
+
+      {!loading && leaders.length > 0 && (
+        <div className="overflow-hidden rounded-2xl border border-desk-line bg-desk-panel/60">
+          <div className="grid grid-cols-[2.5rem_1fr_auto_auto] items-center gap-3 border-b border-desk-line px-5 py-2.5 font-mono text-[10px] uppercase tracking-widest text-desk-faint md:grid-cols-[2.5rem_1fr_8rem_8rem]">
+            <span>#</span>
+            <span>Wallet</span>
+            <span className="text-right">PnL ({window_})</span>
+            <span className="hidden text-right md:block">Volume</span>
           </div>
-        ))}
-      </div>
+          {leaders.map((l) => (
+            <div key={l.wallet} className="border-b border-desk-line/60 last:border-0">
+              <button
+                onClick={() => setExpanded(expanded === l.wallet ? null : l.wallet)}
+                className="grid w-full grid-cols-[2.5rem_1fr_auto_auto] items-center gap-3 px-5 py-3 text-left transition hover:bg-desk-raised/50 md:grid-cols-[2.5rem_1fr_8rem_8rem]"
+              >
+                <span className="font-mono text-sm font-bold text-desk-faint">{l.rank}</span>
+                <span className="flex min-w-0 items-center gap-2.5">
+                  {l.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={l.image} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
+                  ) : (
+                    <span className="h-7 w-7 shrink-0 rounded-full bg-desk-line" />
+                  )}
+                  <span className="truncate text-sm font-semibold text-desk-ink">
+                    {l.name || shortWallet(l.wallet)}
+                  </span>
+                  {l.verified && <span className="text-instrument" title="Verified">✦</span>}
+                </span>
+                <span className="text-right font-mono text-sm font-semibold tabular-nums text-emerald-400">
+                  +{usd(l.pnl)}
+                </span>
+                <span className="hidden text-right font-mono text-xs tabular-nums text-desk-dim md:block">
+                  {usd(l.volume)}
+                </span>
+              </button>
+              {expanded === l.wallet && (
+                <div className="border-t border-desk-line/60 bg-desk-deep/40">
+                  <div className="flex items-center justify-between px-5 pt-3">
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-desk-faint">
+                      current holdings
+                    </span>
+                    <a
+                      href={`https://polymarket.com/profile/${l.wallet}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-mono text-[10px] uppercase tracking-wider text-instrument hover:underline"
+                    >
+                      full profile ↗
+                    </a>
+                  </div>
+                  <WalletPositions address={l.wallet} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="font-mono text-[11px] text-desk-faint">
+        Wallet tracking against the agent&apos;s own verdicts is on the roadmap.
+      </p>
     </div>
   );
 }

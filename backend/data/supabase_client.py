@@ -176,7 +176,12 @@ def resolve_position(position_id: str, resolved_outcome: str, pnl: float) -> Non
     if not is_configured():
         return
     get_client().table("positions").update(
-        {"status": "resolved", "resolved_outcome": resolved_outcome, "pnl": pnl}
+        {
+            "status": "resolved",
+            "resolved_outcome": resolved_outcome,
+            "pnl": pnl,
+            "resolved_at": _now(),
+        }
     ).eq("id", position_id).execute()
 
 
@@ -187,3 +192,63 @@ def log_run(run: dict) -> None:
         get_client().table("runs").insert(run).execute()
     except Exception:
         pass  # budget telemetry must never break a run
+
+
+def get_recent_runs(limit: int = 200) -> list[dict]:
+    if not is_configured():
+        return []
+    return (
+        get_client()
+        .table("runs")
+        .select("*")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+        .data
+        or []
+    )
+
+
+# ---------------------------------------------------------------------------
+# watchlist
+# ---------------------------------------------------------------------------
+
+
+def add_watch(user_id: str, market_id: str) -> None:
+    if not is_configured():
+        return
+    get_client().table("watchlist").upsert(
+        {"user_id": user_id, "market_id": market_id}, on_conflict="user_id,market_id"
+    ).execute()
+
+
+def remove_watch(user_id: str, market_id: str) -> None:
+    if not is_configured():
+        return
+    get_client().table("watchlist").delete().eq("user_id", user_id).eq(
+        "market_id", market_id
+    ).execute()
+
+
+def get_watchlist(user_id: str) -> list[str]:
+    if not is_configured():
+        return []
+    rows = (
+        get_client()
+        .table("watchlist")
+        .select("market_id")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
+        .data
+        or []
+    )
+    return [r["market_id"] for r in rows]
+
+
+def distinct_watched_market_ids() -> list[str]:
+    """All watched markets across users (for the refresh job)."""
+    if not is_configured():
+        return []
+    rows = get_client().table("watchlist").select("market_id").execute().data or []
+    return sorted({r["market_id"] for r in rows})

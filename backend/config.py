@@ -132,6 +132,16 @@ PAPER_BANKROLL_USD = 10_000      # simulated bankroll for PaperBroker sizing
 INTEL_CACHE_TTL_S = 900  # 15 minutes
 
 # ---------------------------------------------------------------------------
+# Automation (jobs/auto_trade.py + jobs/refresh_watchlist.py, run on a
+# GitHub Actions schedule). Caps protect the LLM quota.
+# ---------------------------------------------------------------------------
+AUTO_RUNS_PER_JOB = 3            # markets analyzed per auto-trade run
+AUTO_MAX_OPEN_POSITIONS = 10     # agent stops opening new trades at this count
+AUTO_MIN_MID = 0.05              # skip near-settled markets
+AUTO_MAX_MID = 0.95
+WATCHLIST_RUNS_PER_JOB = 5       # watched markets re-analyzed per refresh run
+
+# ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
 CANONICAL_MODULES = [

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import EquityChart from "@/components/EquityChart";
 import { closePosition, fetchPortfolio } from "@/lib/api";
 import { authConfigured, useAuth } from "@/lib/auth";
 import type { Portfolio, Position } from "@/lib/types";
@@ -175,6 +176,8 @@ export default function PortfolioPage() {
 
           {!loading && portfolio && (
             <>
+              <EquityChart portfolio={portfolio} />
+
               <section>
                 <h2 className="mb-3 text-lg font-bold tracking-tight">Open positions</h2>
                 {portfolio.open.length === 0 ? (

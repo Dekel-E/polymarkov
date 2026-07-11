@@ -168,6 +168,7 @@ async def _run(ctx: RunContext, user_prompt: str, started: float) -> ExecuteOut:
         supabase_client.log_run,
         {
             "prompt": user_prompt[:2000],
+            "market_id": market.slug,
             "verdict": priced.verdict,
             "fair_prob": priced.fair_adj,
             "mid_at_run": market.mid,

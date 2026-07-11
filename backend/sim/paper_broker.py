@@ -147,9 +147,7 @@ async def close_position(position_id: str, user_id: Optional[str] = None) -> dic
     exit_fee = round(pricing_mod.taker_fee(market.category, exit_price) * shares, 4)
     pnl = exit_pnl(position, exit_price, exit_fee)
 
-    supabase_client.get_client().table("positions").update(
-        {"status": "resolved", "resolved_outcome": "CLOSED", "pnl": pnl}
-    ).eq("id", position_id).execute()
+    supabase_client.resolve_position(position_id, "CLOSED", pnl)
 
     return {
         "error": None,

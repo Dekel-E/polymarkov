@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import MarketCard from "@/components/MarketCard";
-import { fetchMarkets } from "@/lib/api";
+import { fetchMarkets, fetchWatchlist, searchMarkets, setWatched } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type { MarketSummary } from "@/lib/types";
 
 const CATEGORY_ORDER = [
@@ -32,10 +33,67 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default function MarketGrid() {
+  const { user, token } = useAuth();
   const [markets, setMarkets] = useState<MarketSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [category, setCategory] = useState<string>("all");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<MarketSummary[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [watchedSlugs, setWatchedSlugs] = useState<Set<string>>(new Set());
+
+  // debounced text search — replaces the grid while a query is active
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setResults(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const id = setTimeout(() => {
+      searchMarkets(q)
+        .then(setResults)
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false));
+    }, 400);
+    return () => clearTimeout(id);
+  }, [query]);
+
+  useEffect(() => {
+    if (!token) {
+      setWatchedSlugs(new Set());
+      return;
+    }
+    fetchWatchlist(token)
+      .then((items) => setWatchedSlugs(new Set(items.map((i) => i.market_id))))
+      .catch(() => undefined);
+  }, [token]);
+
+  const toggleWatch = useCallback(
+    (slug: string, watched: boolean) => {
+      if (!token) {
+        window.location.href = "/login";
+        return;
+      }
+      setWatchedSlugs((prev) => {
+        const next = new Set(prev);
+        if (watched) next.add(slug);
+        else next.delete(slug);
+        return next;
+      });
+      setWatched(slug, watched, token).catch(() =>
+        setWatchedSlugs((prev) => {
+          const next = new Set(prev);
+          if (watched) next.delete(slug);
+          else next.add(slug);
+          return next;
+        }),
+      );
+    },
+    [token],
+  );
 
   const load = useCallback(() => {
     setLoading(true);
@@ -68,9 +126,43 @@ export default function MarketGrid() {
     [markets, category],
   );
 
+  const cardProps = user
+    ? (m: MarketSummary) => ({ watched: watchedSlugs.has(m.slug), onToggleWatch: toggleWatch })
+    : () => ({ onToggleWatch: toggleWatch });
+
   return (
     <section>
-      <div className="mb-5 flex flex-wrap items-center gap-2">
+      <div className="mb-4">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search any market — team, candidate, event…"
+          className="w-full max-w-md rounded-xl border border-desk-line bg-desk-deep/80 px-4 py-2 text-sm text-desk-ink placeholder-desk-faint focus:border-instrument/60 focus:outline-none"
+        />
+      </div>
+
+      {query.trim() && (
+        <div className="mb-6">
+          <div className="mb-3 font-mono text-[11px] uppercase tracking-wider text-desk-dim">
+            {searching
+              ? "searching…"
+              : `${results?.length ?? 0} result${(results?.length ?? 0) === 1 ? "" : "s"} for “${query.trim()}”`}
+          </div>
+          {!searching && results && results.length === 0 && (
+            <div className="rounded-xl border border-desk-line bg-desk-panel p-5 text-sm text-desk-dim">
+              No active markets match. Try fewer or different words.
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {(results ?? []).map((m) => (
+              <MarketCard key={m.id} market={m} {...cardProps(m)} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className={`mb-5 flex flex-wrap items-center gap-2 ${query.trim() ? "hidden" : ""}`}>
         {chips.map((c) => (
           <button
             key={c}
@@ -135,7 +227,7 @@ export default function MarketGrid() {
       )}
 
       {/* grouped by category (All) */}
-      {!loading && category === "all" && (
+      {!loading && !query.trim() && category === "all" && (
         <div className="space-y-10">
           {grouped.map(({ category: c, markets: group }) => (
             <div key={c}>
@@ -157,7 +249,7 @@ export default function MarketGrid() {
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {group.slice(0, 6).map((m) => (
-                  <MarketCard key={m.id} market={m} />
+                  <MarketCard key={m.id} market={m} {...cardProps(m)} />
                 ))}
               </div>
             </div>
@@ -166,10 +258,10 @@ export default function MarketGrid() {
       )}
 
       {/* single category (flat) */}
-      {!loading && category !== "all" && (
+      {!loading && !query.trim() && category !== "all" && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {flat.map((m) => (
-            <MarketCard key={m.id} market={m} />
+            <MarketCard key={m.id} market={m} {...cardProps(m)} />
           ))}
         </div>
       )}

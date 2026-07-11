@@ -17,7 +17,15 @@ function daysLeft(endDate: string | null): string | null {
   return `${days}d`;
 }
 
-export default function MarketCard({ market }: { market: MarketSummary }) {
+export default function MarketCard({
+  market,
+  watched,
+  onToggleWatch,
+}: {
+  market: MarketSummary;
+  watched?: boolean;
+  onToggleWatch?: (slug: string, watched: boolean) => void;
+}) {
   const days = daysLeft(market.end_date);
   const prob = market.mid * 100;
   return (
@@ -35,6 +43,24 @@ export default function MarketCard({ market }: { market: MarketSummary }) {
         <h3 className="line-clamp-2 flex-1 text-sm font-semibold leading-snug text-desk-ink">
           {market.question}
         </h3>
+        {onToggleWatch && (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleWatch(market.slug, !watched);
+            }}
+            aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+            title={watched ? "Remove from watchlist" : "Add to watchlist"}
+            className={`-mr-1 -mt-1 rounded-lg p-1 transition ${
+              watched ? "text-instrument" : "text-desk-faint hover:text-desk-soft"
+            }`}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill={watched ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
+              <path d="M12 3l2.7 5.7 6.3.8-4.6 4.3 1.2 6.2L12 17l-5.6 3 1.2-6.2L3 9.5l6.3-.8L12 3Z" />
+            </svg>
+          </button>
+        )}
       </div>
 
       <div className="mt-4 flex items-end justify-between">

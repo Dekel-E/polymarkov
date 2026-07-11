@@ -44,8 +44,17 @@ function IconWallet() {
   );
 }
 
+function IconStar() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 3l2.7 5.7 6.3.8-4.6 4.3 1.2 6.2L12 17l-5.6 3 1.2-6.2L3 9.5l6.3-.8L12 3Z" />
+    </svg>
+  );
+}
+
 const NAV = [
   { href: "/", label: "Markets", icon: IconGrid },
+  { href: "/watchlist", label: "Watchlist", icon: IconStar },
   { href: "/portfolio", label: "Portfolio", icon: IconWallet },
   { href: "/league", label: "Smart Money League", icon: IconTrophy },
   { href: "/agent", label: "The Agent", icon: IconCpu },

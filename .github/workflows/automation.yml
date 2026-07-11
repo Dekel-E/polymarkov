@@ -1,0 +1,32 @@
+name: automation
+
+on:
+  schedule:
+    - cron: "15 */4 * * *" # every 4h: autonomous trading + watchlist refresh
+  workflow_dispatch: {}
+
+env:
+  LLMOD_API_KEY: ${{ secrets.LLMOD_API_KEY }}
+  LLMOD_BASE_URL: ${{ secrets.LLMOD_BASE_URL }}
+  LLM_MODEL: ${{ secrets.LLM_MODEL }}
+  EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+  PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+  PINECONE_INDEX: ${{ secrets.PINECONE_INDEX }}
+
+jobs:
+  trade-and-refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: AutoTrade
+        run: python -m jobs.auto_trade
+      - name: RefreshWatchlist
+        run: python -m jobs.refresh_watchlist

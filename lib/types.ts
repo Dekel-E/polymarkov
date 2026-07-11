@@ -135,6 +135,7 @@ export interface Position {
   opened_at: string;
   status: "open" | "resolved";
   resolved_outcome: string | null;
+  resolved_at: string | null;
   pnl: number | null;
   user_id: string | null;
   // enrichment on open rows
@@ -158,6 +159,61 @@ export interface Portfolio {
   open: Position[];
   resolved: Position[];
   stats: PortfolioStats;
+}
+
+// ---------------------------------------------------------------------------
+// Smart Money League, watchlist, agent stats
+// ---------------------------------------------------------------------------
+
+export interface LeaderRow {
+  rank: number;
+  wallet: string;
+  name: string;
+  pnl: number;
+  volume: number;
+  image: string;
+  verified: boolean;
+}
+
+export interface WalletPosition {
+  market: string;
+  slug: string;
+  event_slug: string;
+  outcome: string;
+  size_usd: number;
+  pnl: number;
+  avg_price: number;
+  current_price: number;
+}
+
+export interface WatchItem {
+  market_id: string;
+  question: string;
+  last_mid: number | null;
+  category: string;
+  verdict: string | null;
+  fair_probability: number | null;
+  analyzed_at: string | null;
+}
+
+export interface AgentStats {
+  total_runs: number;
+  verdicts: Record<string, number>;
+  avg_latency_s: number | null;
+  total_tokens_out: number;
+  calibration: {
+    scored_runs: number;
+    agent_brier: number;
+    market_brier: number;
+  } | null;
+  recent: {
+    market_id: string | null;
+    verdict: string | null;
+    fair_prob: number | null;
+    mid_at_run: number | null;
+    latency_ms: number | null;
+    created_at: string;
+  }[];
 }
 
 export interface ExecuteOut {

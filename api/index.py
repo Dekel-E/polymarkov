@@ -115,6 +115,124 @@ async def portfolio(request: Request, scope: str = "agent") -> dict:
         return {"portfolio": None, "error": str(exc)}
 
 
+@app.get("/api/search")
+async def search(q: str, limit: int = 12) -> dict:
+    """Text search over active Polymarket markets (Gamma public search)."""
+    try:
+        if not q.strip():
+            return {"markets": [], "error": None}
+        results = await polymarket.search_markets(q.strip(), limit=min(limit, 20))
+        return {"markets": results, "error": None}
+    except Exception as exc:
+        return {"markets": [], "error": str(exc)}
+
+
+@app.get("/api/league")
+async def league(window: str = "30d") -> dict:
+    """Smart Money League: top wallets by profit (Polymarket Data API)."""
+    try:
+        from backend.data import smart_money
+
+        if window not in ("1d", "7d", "30d", "all"):
+            window = "30d"
+        rows = await smart_money.fetch_leaderboard(window=window, limit=20)
+        return {"leaders": rows, "error": None}
+    except Exception as exc:
+        return {"leaders": [], "error": str(exc)}
+
+
+@app.get("/api/league/wallet")
+async def league_wallet(address: str) -> dict:
+    """One wallet's current open positions."""
+    try:
+        from backend.data import smart_money
+
+        return {"positions": await smart_money.fetch_wallet_positions(address), "error": None}
+    except Exception as exc:
+        return {"positions": [], "error": str(exc)}
+
+
+@app.get("/api/agent/stats")
+async def agent_stats() -> dict:
+    """Run history + calibration for the agent report card."""
+    try:
+        from backend.agent.report_card import get_report_card
+
+        return {"stats": await asyncio.to_thread(get_report_card), "error": None}
+    except Exception as exc:
+        return {"stats": None, "error": str(exc)}
+
+
+class WatchIn(BaseModel):
+    market_id: str
+
+
+@app.get("/api/watchlist")
+async def watchlist(request: Request) -> dict:
+    """The logged-in user's watched markets, enriched from the cache."""
+    try:
+        user_id = await _user_id_from_request(request)
+        if user_id is None:
+            return {"items": [], "error": "login required"}
+        from backend.agent import intel_cache
+
+        slugs = await asyncio.to_thread(supabase_client.get_watchlist, user_id)
+        rows = []
+        if slugs and supabase_client.is_configured():
+            cached_markets = await asyncio.to_thread(
+                lambda: supabase_client.get_client()
+                .table("markets")
+                .select("slug,question,last_mid,category")
+                .in_("slug", slugs)
+                .execute()
+                .data
+                or []
+            )
+            by_slug = {m["slug"]: m for m in cached_markets}
+            for slug in slugs:
+                m = by_slug.get(slug, {})
+                dossier = intel_cache.get(slug)
+                verdict = ((dossier or {}).get("ui") or {}).get("verdict") or {}
+                rows.append(
+                    {
+                        "market_id": slug,
+                        "question": m.get("question") or slug,
+                        "last_mid": m.get("last_mid"),
+                        "category": m.get("category") or "other",
+                        "verdict": verdict.get("verdict"),
+                        "fair_probability": verdict.get("fair_probability"),
+                        "analyzed_at": (dossier or {}).get("created_at"),
+                    }
+                )
+        return {"items": rows, "error": None}
+    except Exception as exc:
+        return {"items": [], "error": str(exc)}
+
+
+@app.post("/api/watchlist")
+async def watch(body: WatchIn, request: Request) -> dict:
+    try:
+        user_id = await _user_id_from_request(request)
+        if user_id is None:
+            return {"error": "login required"}
+        await asyncio.to_thread(supabase_client.add_watch, user_id, body.market_id)
+        return {"error": None}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@app.delete("/api/watchlist")
+async def unwatch(market_id: str, request: Request) -> dict:
+    try:
+        user_id = await _user_id_from_request(request)
+        if user_id is None:
+            return {"error": "login required"}
+        await asyncio.to_thread(supabase_client.remove_watch, user_id, market_id)
+        return {"error": None}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
 class RegisterIn(BaseModel):
     email: str
     password: str
