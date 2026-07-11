@@ -1,30 +1,75 @@
-"""Portfolio views over the paper-trading positions table."""
+"""Portfolio views over the paper-trading positions table.
+
+Scopes: "agent" = the agent's own book (user_id IS NULL);
+"mine" = positions belonging to a specific logged-in user.
+Open rows are enriched with the cached market mid so the GUI can show
+current price and unrealized PnL without hammering Gamma.
+"""
 
 from __future__ import annotations
 
+from typing import Optional
+
+from backend import config
 from backend.data import supabase_client
 
 
-def get_portfolio() -> dict:
-    """All positions + headline stats. Empty shell when Supabase is off."""
+def get_portfolio(scope: str = "agent", user_id: Optional[str] = None) -> dict:
     if not supabase_client.is_configured():
         return {"open": [], "resolved": [], "stats": _stats([], [])}
+
     client = supabase_client.get_client()
-    rows = (
-        client.table("positions").select("*").order("opened_at", desc=True).limit(200).execute().data
-        or []
-    )
+    q = client.table("positions").select("*").order("opened_at", desc=True).limit(200)
+    if scope == "mine" and user_id:
+        q = q.eq("user_id", user_id)
+    else:
+        q = q.is_("user_id", "null")
+    rows = q.execute().data or []
+
     open_rows = [r for r in rows if r.get("status") == "open"]
     resolved = [r for r in rows if r.get("status") == "resolved"]
+    _enrich_open(client, open_rows)
     return {"open": open_rows, "resolved": resolved, "stats": _stats(open_rows, resolved)}
+
+
+def _enrich_open(client, open_rows: list[dict]) -> None:
+    """Attach current_price + unrealized_pnl from the cached markets table."""
+    slugs = sorted({r["market_id"] for r in open_rows})
+    if not slugs:
+        return
+    try:
+        markets = (
+            client.table("markets").select("slug,last_mid").in_("slug", slugs).execute().data or []
+        )
+    except Exception:
+        markets = []
+    mid_by_slug = {m["slug"]: float(m["last_mid"]) for m in markets if m.get("last_mid") is not None}
+
+    for r in open_rows:
+        mid = mid_by_slug.get(r["market_id"])
+        if mid is None:
+            r["current_price"] = None
+            r["unrealized_pnl"] = None
+            continue
+        current = mid if r["side"] == "BUY_YES" else 1 - mid
+        entry = float(r["entry_price"])
+        shares = float(r["size_usd"]) / entry if entry > 0 else 0.0
+        r["current_price"] = round(current, 4)
+        r["unrealized_pnl"] = round(shares * (current - entry), 2)
 
 
 def _stats(open_rows: list[dict], resolved: list[dict]) -> dict:
     realized = sum(float(r.get("pnl") or 0) for r in resolved)
+    unrealized = sum(float(r.get("unrealized_pnl") or 0) for r in open_rows)
+    open_exposure = sum(float(r.get("size_usd") or 0) for r in open_rows)
     wins = sum(1 for r in resolved if float(r.get("pnl") or 0) > 0)
     return {
+        "bankroll_usd": config.PAPER_BANKROLL_USD,
+        "balance_usd": round(config.PAPER_BANKROLL_USD + realized, 2),
+        "equity_usd": round(config.PAPER_BANKROLL_USD + realized + unrealized, 2),
         "open_positions": len(open_rows),
-        "open_exposure_usd": round(sum(float(r.get("size_usd") or 0) for r in open_rows), 2),
+        "open_exposure_usd": round(open_exposure, 2),
+        "unrealized_pnl_usd": round(unrealized, 2),
         "resolved_positions": len(resolved),
         "realized_pnl_usd": round(realized, 2),
         "win_rate": round(wins / len(resolved), 3) if resolved else None,

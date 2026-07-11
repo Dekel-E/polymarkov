@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { authConfigured, useAuth } from "@/lib/auth";
 
 function IconGrid() {
   return (
@@ -33,11 +34,48 @@ function IconCpu() {
   );
 }
 
+function IconWallet() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v2" />
+      <path d="M3 7v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2Z" />
+      <circle cx="16.5" cy="14.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 const NAV = [
   { href: "/", label: "Markets", icon: IconGrid },
+  { href: "/portfolio", label: "Portfolio", icon: IconWallet },
   { href: "/league", label: "Smart Money League", icon: IconTrophy },
   { href: "/agent", label: "The Agent", icon: IconCpu },
 ];
+
+function AuthFooter() {
+  const { user, loading, signOut } = useAuth();
+  if (!authConfigured || loading) return null;
+  if (!user) {
+    return (
+      <Link
+        href="/login"
+        className="mb-3 flex items-center justify-center rounded-xl border border-emerald-500/50 px-3 py-2 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/10 md:mx-2"
+      >
+        Log in / Register
+      </Link>
+    );
+  }
+  return (
+    <div className="mb-3 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2.5 md:mx-2">
+      <div className="truncate text-xs font-semibold text-zinc-300">{user.email}</div>
+      <button
+        onClick={() => signOut()}
+        className="mt-1 text-[11px] text-zinc-500 transition hover:text-red-400"
+      >
+        Sign out
+      </button>
+    </div>
+  );
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -73,10 +111,13 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="hidden text-[11px] leading-relaxed text-zinc-600 md:block md:px-2">
-        Educational tool.
-        <br />
-        Paper trading only — not financial advice.
+      <div className="hidden md:block">
+        <AuthFooter />
+        <div className="text-[11px] leading-relaxed text-zinc-600 md:px-2">
+          Educational tool.
+          <br />
+          Paper trading only — not financial advice.
+        </div>
       </div>
     </aside>
   );

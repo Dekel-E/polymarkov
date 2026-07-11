@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import DossierView from "@/components/DossierView";
 import MarketPanel from "@/components/MarketPanel";
+import TradePanel from "@/components/TradePanel";
 import { fetchMarketDetail } from "@/lib/api";
 import type { MarketState } from "@/lib/types";
 import { useAgentRun } from "@/lib/useAgentRun";
@@ -68,6 +69,10 @@ export default function MarketPage() {
       )}
 
       <DossierView result={result} fetchError={fetchError} liveMarket={market} />
+
+      {result?.status === "ok" && result.ui && (
+        <TradePanel slug={slug} ui={result.ui} />
+      )}
     </div>
   );
 }

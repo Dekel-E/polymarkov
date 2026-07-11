@@ -118,6 +118,47 @@ export interface DossierUi {
   fill?: FillReport | null;
 }
 
+// ---------------------------------------------------------------------------
+// Portfolio (GET /api/portfolio)
+// ---------------------------------------------------------------------------
+
+export interface Position {
+  id: string;
+  market_id: string; // slug
+  side: "BUY_YES" | "BUY_NO";
+  entry_price: number;
+  size_usd: number;
+  fee_paid: number;
+  slippage_bps: number;
+  fair_prob_at_entry: number | null;
+  opened_at: string;
+  status: "open" | "resolved";
+  resolved_outcome: string | null;
+  pnl: number | null;
+  user_id: string | null;
+  // enrichment on open rows
+  current_price?: number | null;
+  unrealized_pnl?: number | null;
+}
+
+export interface PortfolioStats {
+  bankroll_usd: number;
+  balance_usd: number;
+  equity_usd: number;
+  open_positions: number;
+  open_exposure_usd: number;
+  unrealized_pnl_usd: number;
+  resolved_positions: number;
+  realized_pnl_usd: number;
+  win_rate: number | null;
+}
+
+export interface Portfolio {
+  open: Position[];
+  resolved: Position[];
+  stats: PortfolioStats;
+}
+
 export interface ExecuteOut {
   status: "ok" | "error";
   error: string | null;

@@ -22,13 +22,25 @@ MODULE = "PaperBroker"
 
 
 async def execute_paper_trade(
-    ctx: RunContext, market: MarketState, priced: PricingResult
+    ctx: RunContext,
+    market: MarketState,
+    priced: PricingResult,
+    size_usd: Optional[float] = None,
+    user_id: Optional[str] = None,
 ) -> Optional[FillReport]:
-    """Fill the suggested size against the live book. None if nothing to trade."""
-    if priced.verdict == "PASS" or priced.suggested_size_pct_bankroll <= 0:
-        return None
+    """Fill the suggested size against the live book. None if nothing to trade.
 
-    size_usd = round(config.PAPER_BANKROLL_USD * priced.suggested_size_pct_bankroll / 100, 2)
+    `size_usd` overrides the Kelly sizing (manual trades from the GUI);
+    `user_id` tags the position to a logged-in user (None = agent book).
+    """
+    if priced.verdict == "PASS":
+        return None
+    if size_usd is None:
+        if priced.suggested_size_pct_bankroll <= 0:
+            return None
+        size_usd = round(config.PAPER_BANKROLL_USD * priced.suggested_size_pct_bankroll / 100, 2)
+    if size_usd <= 0:
+        return None
     book = await polymarket.get_order_book(market.yes_token_id)
 
     if priced.verdict == "BUY_YES":
@@ -59,6 +71,7 @@ async def execute_paper_trade(
         "fee_paid": fee_paid,
         "slippage_bps": slippage_bps,
         "fair_prob_at_entry": priced.fair_adj,
+        "user_id": user_id,
     }
     position_id = await asyncio.to_thread(supabase_client.insert_position, position)
     if position_id is None:  # Supabase unconfigured — still report the simulated fill
@@ -81,3 +94,67 @@ async def execute_paper_trade(
         {**report.model_dump(), "requested_usd": size_usd, "exhausted": fill["exhausted"]},
     )
     return report
+
+
+# ---------------------------------------------------------------------------
+# Manual close (GUI "direct the agent" control)
+# ---------------------------------------------------------------------------
+
+
+def exit_pnl(position: dict, exit_price: float, exit_fee: float) -> float:
+    """Realized PnL of closing a position at `exit_price` (the traded token)."""
+    entry = float(position["entry_price"])
+    size_usd = float(position["size_usd"])
+    shares = size_usd / entry if entry > 0 else 0.0
+    proceeds = shares * exit_price
+    return round(proceeds - size_usd - float(position.get("fee_paid") or 0) - exit_fee, 4)
+
+
+async def close_position(position_id: str, user_id: Optional[str] = None) -> dict:
+    """Close an open paper position at the current book. Returns a report dict
+    with an `error` key on failure (never raises for expected cases)."""
+    rows = (
+        supabase_client.get_client()
+        .table("positions")
+        .select("*")
+        .eq("id", position_id)
+        .limit(1)
+        .execute()
+        .data
+        if supabase_client.is_configured()
+        else []
+    )
+    if not rows:
+        return {"error": "position not found"}
+    position = rows[0]
+    if position.get("status") != "open":
+        return {"error": "position is already resolved"}
+    if position.get("user_id") and position["user_id"] != user_id:
+        return {"error": "this position belongs to another user"}
+
+    market = await polymarket.get_market_state(str(position["market_id"]))
+    if market is None:
+        return {"error": "market no longer resolvable"}
+
+    if position["side"] == "BUY_YES":
+        exit_price = market.best_bid  # sell YES into the bid
+    else:
+        exit_price = (1 - market.best_ask) if market.best_ask is not None else None
+    if not exit_price or exit_price <= 0:
+        return {"error": "no live quote to close against"}
+
+    shares = float(position["size_usd"]) / float(position["entry_price"])
+    exit_fee = round(pricing_mod.taker_fee(market.category, exit_price) * shares, 4)
+    pnl = exit_pnl(position, exit_price, exit_fee)
+
+    supabase_client.get_client().table("positions").update(
+        {"status": "resolved", "resolved_outcome": "CLOSED", "pnl": pnl}
+    ).eq("id", position_id).execute()
+
+    return {
+        "error": None,
+        "position_id": position_id,
+        "exit_price": exit_price,
+        "exit_fee": exit_fee,
+        "pnl": pnl,
+    }
