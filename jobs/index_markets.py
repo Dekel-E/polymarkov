@@ -14,21 +14,8 @@ import asyncio
 from backend.data import pinecone_client, polymarket, supabase_client
 from backend.llm import embeddings
 
-PAGE_SIZE = 100
-
-
 async def fetch_top_markets(top: int) -> list[dict]:
-    markets: list[dict] = []
-    seen: set[str] = set()
-    for offset in range(0, top, PAGE_SIZE):
-        page = await polymarket.list_markets(limit=min(PAGE_SIZE, top - offset), offset=offset)
-        if not page:
-            break
-        for m in page:
-            if m["id"] and m["id"] not in seen:
-                seen.add(m["id"])
-                markets.append(m)
-    return markets
+    return await polymarket.get_trending_markets(top)  # pages past 100
 
 
 def embed_markets(markets: list[dict]) -> int:

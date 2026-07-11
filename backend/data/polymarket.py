@@ -201,8 +201,19 @@ async def list_markets(
 
 
 async def get_trending_markets(limit: int = 20) -> list[dict]:
-    """Top active markets by 24h volume."""
-    return await list_markets(limit=limit)
+    """Top active markets by 24h volume. Pages past Gamma's 100-per-request
+    cap so category groups deeper than the top 100 still fill up."""
+    markets: list[dict] = []
+    seen: set[str] = set()
+    for offset in range(0, limit, 100):
+        page = await list_markets(limit=min(100, limit - offset), offset=offset)
+        if not page:
+            break
+        for m in page:
+            if m["id"] and m["id"] not in seen:
+                seen.add(m["id"])
+                markets.append(m)
+    return markets
 
 
 async def list_events(limit: int = 20, neg_risk_only: bool = False) -> list[dict]:

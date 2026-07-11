@@ -91,11 +91,21 @@ def model_architecture():
 # --- GUI support endpoints (not part of the graded four) ---------------------
 
 
+_markets_cache: dict = {"ts": 0.0, "limit": 0, "markets": []}
+
+
 @app.get("/api/markets")
 async def markets(limit: int = 20) -> dict:
-    """Trending markets for the GUI market browser."""
+    """Trending markets for the GUI market browser (30s server cache)."""
     try:
-        return {"markets": await polymarket.get_trending_markets(min(limit, 100)), "error": None}
+        import time as _time
+
+        limit = min(limit, 300)
+        if _time.time() - _markets_cache["ts"] < 30 and _markets_cache["limit"] >= limit:
+            return {"markets": _markets_cache["markets"][:limit], "error": None}
+        rows = await polymarket.get_trending_markets(limit)
+        _markets_cache.update(ts=_time.time(), limit=limit, markets=rows)
+        return {"markets": rows, "error": None}
     except Exception as exc:
         return {"markets": [], "error": str(exc)}
 

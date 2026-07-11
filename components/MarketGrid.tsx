@@ -6,6 +6,10 @@ import { fetchMarkets, fetchWatchlist, searchMarkets, setWatched } from "@/lib/a
 import { useAuth } from "@/lib/auth";
 import type { MarketSummary } from "@/lib/types";
 
+// How many trending markets the dashboard pulls (server caps at 300).
+// Deeper = fuller category groups, slightly slower first load.
+const MARKETS_TO_FETCH = 200;
+
 const CATEGORY_ORDER = [
   "politics",
   "geopolitics",
@@ -112,7 +116,7 @@ export default function MarketGrid() {
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    fetchMarkets(90)
+    fetchMarkets(MARKETS_TO_FETCH)
       .then(setMarkets)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
