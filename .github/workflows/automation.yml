@@ -26,7 +26,13 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: ManageRisk # first: close breached positions, arm the breaker
+        run: python -m jobs.manage_risk
       - name: AutoTrade
         run: python -m jobs.auto_trade
       - name: RefreshWatchlist
         run: python -m jobs.refresh_watchlist
+      - name: ScanArbitrage
+        run: python -m jobs.scan_arbitrage
+      - name: CopyTrade
+        run: python -m jobs.copy_trade

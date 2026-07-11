@@ -148,7 +148,7 @@ async def _run(ctx: RunContext, user_prompt: str, started: float) -> ExecuteOut:
         if priced.verdict == "PASS":
             trade_note = "No paper trade opened: the verdict is PASS."
         else:
-            fill = await paper_broker.execute_paper_trade(ctx, market, priced)
+            fill = await paper_broker.execute_paper_trade(ctx, market, priced, strategy="ai_signal")
             trade_note = None if fill else "No paper trade opened: the order book had no fillable liquidity."
 
     response = _dossier_markdown(market, verdict, priced, evidence.clusters, pulse, council, trade_note, fill)

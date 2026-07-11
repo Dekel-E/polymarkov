@@ -138,6 +138,7 @@ export interface Position {
   resolved_at: string | null;
   pnl: number | null;
   user_id: string | null;
+  strategy: string | null;
   // enrichment on open rows
   current_price?: number | null;
   unrealized_pnl?: number | null;
@@ -184,6 +185,49 @@ export interface WalletPosition {
   pnl: number;
   avg_price: number;
   current_price: number;
+}
+
+// ---------------------------------------------------------------------------
+// Strategy Desk
+// ---------------------------------------------------------------------------
+
+export interface AgentSettings {
+  strategies: { ai_signal: boolean; arbitrage: boolean; copy_trading: boolean };
+  risk: {
+    stop_loss_pct: number;
+    take_profit_pct: number;
+    max_position_usd: number;
+    max_open_positions: number;
+    daily_loss_halt_usd: number;
+  };
+  halt: { active: boolean; reason: string; at: string };
+}
+
+export interface ArbLeg {
+  slug: string;
+  side: "BUY_YES" | "BUY_NO";
+  price: number;
+  size_usd: number;
+}
+
+export interface ArbOpportunity {
+  type: "spread" | "dutch_book";
+  question: string;
+  event_title: string;
+  cost_per_share: number;
+  fees_per_share: number;
+  profit_per_share: number;
+  roi_pct: number;
+  max_shares: number;
+  guaranteed_profit_usd: number;
+  legs: ArbLeg[];
+}
+
+export interface NewsArticle {
+  title: string;
+  url: string;
+  domain: string;
+  published_at: string | null;
 }
 
 export interface FollowedWallet {

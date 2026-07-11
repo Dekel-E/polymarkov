@@ -247,6 +247,89 @@ def get_watchlist(user_id: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# agent settings (Strategy Desk) — GUI writes, jobs read
+# ---------------------------------------------------------------------------
+
+
+def _merge_settings(defaults: dict, stored: dict) -> dict:
+    """Two-level merge so new default keys appear without wiping stored ones."""
+    merged = {}
+    for section, section_defaults in defaults.items():
+        stored_section = stored.get(section)
+        if isinstance(section_defaults, dict) and isinstance(stored_section, dict):
+            merged[section] = {**section_defaults, **stored_section}
+        elif stored_section is not None:
+            merged[section] = stored_section
+        else:
+            merged[section] = section_defaults
+    return merged
+
+
+def get_agent_settings() -> dict:
+    from backend import config
+
+    if not is_configured():
+        return config.DEFAULT_AGENT_SETTINGS
+    try:
+        rows = (
+            get_client().table("agent_settings").select("value").eq("key", "main").execute().data
+        )
+        stored = rows[0]["value"] if rows else {}
+    except Exception:
+        stored = {}
+    return _merge_settings(config.DEFAULT_AGENT_SETTINGS, stored)
+
+
+def update_agent_settings(patch: dict) -> dict:
+    """Apply a partial update ({strategies?, risk?, halt?}) and persist."""
+    current = get_agent_settings()
+    merged = _merge_settings(current, patch)
+    if is_configured():
+        get_client().table("agent_settings").upsert(
+            {"key": "main", "value": merged, "updated_at": _now()}
+        ).execute()
+    return merged
+
+
+# ---------------------------------------------------------------------------
+# mirrored trades (copy trading)
+# ---------------------------------------------------------------------------
+
+
+def already_mirrored(wallet: str, market_id: str, outcome: str) -> bool:
+    if not is_configured():
+        return False
+    rows = (
+        get_client()
+        .table("mirrored_trades")
+        .select("id")
+        .eq("wallet", wallet)
+        .eq("market_id", market_id)
+        .eq("outcome", outcome)
+        .limit(1)
+        .execute()
+        .data
+    )
+    return bool(rows)
+
+
+def record_mirrored(wallet: str, market_id: str, outcome: str, position_id: str | None) -> None:
+    if not is_configured():
+        return
+    get_client().table("mirrored_trades").upsert(
+        {"wallet": wallet, "market_id": market_id, "outcome": outcome, "position_id": position_id},
+        on_conflict="wallet,market_id,outcome",
+    ).execute()
+
+
+def distinct_followed_wallets() -> list[str]:
+    if not is_configured():
+        return []
+    rows = get_client().table("followed_wallets").select("wallet").execute().data or []
+    return sorted({r["wallet"] for r in rows})
+
+
+# ---------------------------------------------------------------------------
 # followed wallets (Smart Money League)
 # ---------------------------------------------------------------------------
 

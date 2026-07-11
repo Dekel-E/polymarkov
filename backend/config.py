@@ -141,6 +141,32 @@ AUTO_MIN_MID = 0.05              # skip near-settled markets
 AUTO_MAX_MID = 0.95
 WATCHLIST_RUNS_PER_JOB = 5       # watched markets re-analyzed per refresh run
 
+# Strategy Desk defaults — the GUI edits these in Supabase (agent_settings);
+# jobs read the merged result at run time. This dict is the schema + fallback.
+DEFAULT_AGENT_SETTINGS = {
+    "strategies": {
+        "ai_signal": True,       # the intel pipeline auto-trade loop
+        "arbitrage": True,       # spread + dutch-book scanner
+        "copy_trading": False,   # mirror followed wallets (opt-in)
+    },
+    "risk": {
+        "stop_loss_pct": 50,         # close when a position loses this % of its stake
+        "take_profit_pct": 100,      # close when a position gains this %
+        "max_position_usd": 500,     # hard cap per position
+        "max_open_positions": 10,
+        "daily_loss_halt_usd": 300,  # circuit breaker: halt all strategies for the day
+    },
+    "halt": {"active": False, "reason": "", "at": ""},
+}
+COPY_TRADE_SIZE_USD = 25         # paper size per mirrored whale position
+COPY_TRADES_PER_JOB = 5
+
+# Arbitrage scanner (no LLM involved — pure book math)
+ARB_MIN_EDGE = 0.01              # min guaranteed profit per share AFTER fees ($)
+ARB_MAX_SIZE_USD = 100           # paper cap per leg
+ARB_SCAN_MARKETS = 25            # binary markets checked per scan
+ARB_SCAN_EVENTS = 12             # mutually-exclusive events checked per scan
+
 # ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------

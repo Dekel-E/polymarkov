@@ -30,6 +30,22 @@ function SideChip({ side }: { side: Position["side"] }) {
   );
 }
 
+const STRATEGY_LABELS: Record<string, string> = {
+  ai_signal: "ai signal",
+  arbitrage: "arb",
+  copy: "copy",
+  manual: "manual",
+};
+
+function StrategyTag({ strategy }: { strategy: string | null }) {
+  if (!strategy) return null;
+  return (
+    <span className="rounded bg-desk-line/70 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-desk-dim">
+      {STRATEGY_LABELS[strategy] ?? strategy}
+    </span>
+  );
+}
+
 function StatCard({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
   return (
     <div className="rounded-2xl border border-desk-line bg-desk-panel/60 p-4">
@@ -208,7 +224,12 @@ export default function PortfolioPage() {
                                 {p.market_id}
                               </Link>
                             </td>
-                            <td className="px-4 py-3"><SideChip side={p.side} /></td>
+                            <td className="px-4 py-3">
+                              <span className="flex items-center gap-1.5">
+                                <SideChip side={p.side} />
+                                <StrategyTag strategy={p.strategy} />
+                              </span>
+                            </td>
                             <td className="px-4 py-3 tabular-nums text-desk-soft">{(p.entry_price * 100).toFixed(1)}%</td>
                             <td className="px-4 py-3 tabular-nums text-desk-soft">
                               {p.current_price != null ? `${(p.current_price * 100).toFixed(1)}%` : "—"}
@@ -262,7 +283,12 @@ export default function PortfolioPage() {
                                 {p.market_id}
                               </Link>
                             </td>
-                            <td className="px-4 py-3"><SideChip side={p.side} /></td>
+                            <td className="px-4 py-3">
+                              <span className="flex items-center gap-1.5">
+                                <SideChip side={p.side} />
+                                <StrategyTag strategy={p.strategy} />
+                              </span>
+                            </td>
                             <td className="px-4 py-3 tabular-nums text-desk-soft">{(p.entry_price * 100).toFixed(1)}%</td>
                             <td className="px-4 py-3 tabular-nums text-desk-soft">{usd(p.size_usd)}</td>
                             <td className="px-4 py-3 text-xs font-semibold text-desk-dim">{p.resolved_outcome}</td>

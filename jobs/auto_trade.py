@@ -50,12 +50,23 @@ async def main_async(runs: int, dry_run: bool) -> None:
         print("LLM is not configured — aborting")
         return
 
+    from backend.sim.risk import strategies_allowed
+
+    strategies, allowed = strategies_allowed()
+    if not strategies.get("ai_signal"):
+        print("ai_signal strategy is disabled in agent settings — skipping")
+        return
+    settings = supabase_client.get_agent_settings()
+    max_open = int(settings["risk"]["max_open_positions"])
+
     open_positions = supabase_client.get_open_positions()
     agent_open = {p["market_id"] for p in open_positions if p.get("user_id") is None}
-    at_cap = len(agent_open) >= config.AUTO_MAX_OPEN_POSITIONS
+    at_cap = len(agent_open) >= max_open or not allowed
+    if not allowed:
+        print("circuit breaker active — analyzing without trading")
     trade_flag = "no" if at_cap else "yes"
-    if at_cap:
-        print(f"open positions at cap ({len(agent_open)}) — analyzing without trading")
+    if at_cap and allowed:
+        print(f"open positions at cap ({len(agent_open)}/{max_open}) — analyzing without trading")
 
     markets = await polymarket.get_trending_markets(50)
     cached = {m["slug"] for m in markets if intel_cache.get(m["slug"])}

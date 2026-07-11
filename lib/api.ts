@@ -1,11 +1,14 @@
 import type {
+  AgentSettings,
   AgentStats,
+  ArbOpportunity,
   ExecuteOut,
   FillReport,
   FollowedWallet,
   LeaderRow,
   MarketState,
   MarketSummary,
+  NewsArticle,
   Portfolio,
   WalletPosition,
   WatchItem,
@@ -186,6 +189,69 @@ export async function importWallets(
   };
   if (data.error) throw new Error(data.error);
   return { imported: data.imported, skipped: data.skipped };
+}
+
+export async function fetchSettings(): Promise<{ settings: AgentSettings; realized_today: number }> {
+  const res = await fetch("/api/settings");
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as {
+    settings: AgentSettings | null;
+    realized_today: number;
+    error: string | null;
+  };
+  if (!data.settings) throw new Error(data.error ?? "settings unavailable");
+  return { settings: data.settings, realized_today: data.realized_today };
+}
+
+export async function updateSettings(patch: {
+  strategies?: Partial<AgentSettings["strategies"]>;
+  risk?: Partial<AgentSettings["risk"]>;
+  halt?: { active: boolean };
+}): Promise<AgentSettings> {
+  const res = await fetch("/api/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as { settings: AgentSettings | null; error: string | null };
+  if (!data.settings) throw new Error(data.error ?? "update failed");
+  return data.settings;
+}
+
+export async function fetchArbitrage(fresh = false): Promise<{ opportunities: ArbOpportunity[]; cached: boolean }> {
+  const res = await fetch(`/api/arbitrage${fresh ? "?fresh=true" : ""}`);
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as {
+    opportunities: ArbOpportunity[];
+    cached: boolean;
+    error: string | null;
+  };
+  if (data.error) throw new Error(data.error);
+  return { opportunities: data.opportunities, cached: data.cached };
+}
+
+export async function executeArbitrage(
+  opportunity: ArbOpportunity,
+  token?: string | null,
+): Promise<{ slug: string; filled: boolean; vwap?: number }[]> {
+  const res = await fetch("/api/arbitrage/execute", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    body: JSON.stringify({ opportunity }),
+  });
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as { reports: never[]; error: string | null };
+  if (data.error) throw new Error(data.error);
+  return data.reports;
+}
+
+export async function fetchNews(): Promise<NewsArticle[]> {
+  const res = await fetch("/api/news");
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as { articles: NewsArticle[]; error: string | null };
+  if (data.error) throw new Error(data.error);
+  return data.articles;
 }
 
 export async function fetchMarketDetail(slug: string): Promise<MarketState> {

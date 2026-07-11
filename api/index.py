@@ -233,6 +233,125 @@ async def unwatch(market_id: str, request: Request) -> dict:
         return {"error": str(exc)}
 
 
+class SettingsIn(BaseModel):
+    strategies: Optional[dict] = None
+    risk: Optional[dict] = None
+    halt: Optional[dict] = None
+
+
+_RISK_BOUNDS = {
+    "stop_loss_pct": (5, 95),
+    "take_profit_pct": (10, 500),
+    "max_position_usd": (10, 2000),
+    "max_open_positions": (1, 50),
+    "daily_loss_halt_usd": (10, 5000),
+}
+
+
+@app.get("/api/settings")
+async def get_settings() -> dict:
+    """Strategy Desk state: strategy toggles, risk rules, breaker status."""
+    try:
+        settings = await asyncio.to_thread(supabase_client.get_agent_settings)
+        from backend.sim.risk import realized_pnl_today
+
+        realized = await asyncio.to_thread(realized_pnl_today)
+        return {"settings": settings, "realized_today": realized, "error": None}
+    except Exception as exc:
+        return {"settings": None, "realized_today": 0, "error": str(exc)}
+
+
+@app.put("/api/settings")
+async def put_settings(body: SettingsIn) -> dict:
+    """Partial update from the Strategy Desk (numbers clamped to sane bounds)."""
+    try:
+        patch: dict = {}
+        if body.strategies is not None:
+            patch["strategies"] = {
+                k: bool(v)
+                for k, v in body.strategies.items()
+                if k in config.DEFAULT_AGENT_SETTINGS["strategies"]
+            }
+        if body.risk is not None:
+            cleaned = {}
+            for key, (lo, hi) in _RISK_BOUNDS.items():
+                if key in body.risk:
+                    try:
+                        cleaned[key] = max(lo, min(hi, float(body.risk[key])))
+                    except (TypeError, ValueError):
+                        continue
+            patch["risk"] = cleaned
+        if body.halt is not None and body.halt.get("active") is False:
+            patch["halt"] = {"active": False, "reason": "", "at": ""}  # manual resume
+        settings = await asyncio.to_thread(supabase_client.update_agent_settings, patch)
+        return {"settings": settings, "error": None}
+    except Exception as exc:
+        return {"settings": None, "error": str(exc)}
+
+
+@app.get("/api/news")
+async def news(limit: int = 12) -> dict:
+    """Latest cached headlines from the news indexer (the desk wire)."""
+    try:
+        if not supabase_client.is_configured():
+            return {"articles": [], "error": None}
+        rows = await asyncio.to_thread(
+            lambda: supabase_client.get_client()
+            .table("articles")
+            .select("title,url,domain,published_at")
+            .order("published_at", desc=True)
+            .limit(min(limit, 30))
+            .execute()
+            .data
+            or []
+        )
+        return {"articles": rows, "error": None}
+    except Exception as exc:
+        return {"articles": [], "error": str(exc)}
+
+
+_arb_cache: dict = {"ts": 0.0, "opportunities": []}
+
+
+@app.get("/api/arbitrage")
+async def arbitrage_scan(fresh: bool = False) -> dict:
+    """Scan books for pricing violations (cached 3 min; ?fresh=true rescans)."""
+    try:
+        import time as _time
+
+        from backend.sim import arbitrage
+
+        if not fresh and _time.time() - _arb_cache["ts"] < 180:
+            return {"opportunities": _arb_cache["opportunities"], "cached": True, "error": None}
+        opportunities = await arbitrage.scan(n_markets=20, n_events=10)
+        _arb_cache.update(ts=_time.time(), opportunities=opportunities)
+        return {"opportunities": opportunities, "cached": False, "error": None}
+    except Exception as exc:
+        return {"opportunities": [], "cached": False, "error": str(exc)}
+
+
+class ArbExecuteIn(BaseModel):
+    opportunity: dict
+
+
+@app.post("/api/arbitrage/execute")
+async def arbitrage_execute(body: ArbExecuteIn, request: Request) -> dict:
+    """Paper-fill all legs of a scanned opportunity."""
+    try:
+        from backend.sim import arbitrage
+
+        legs = body.opportunity.get("legs") or []
+        if not legs or len(legs) > 16:
+            return {"reports": [], "error": "opportunity has no executable legs"}
+        for leg in legs:
+            leg["size_usd"] = max(1.0, min(float(leg.get("size_usd", 0)), config.ARB_MAX_SIZE_USD))
+        user_id = await _user_id_from_request(request)
+        reports = await arbitrage.execute_legs(body.opportunity, user_id=user_id)
+        return {"reports": reports, "error": None}
+    except Exception as exc:
+        return {"reports": [], "error": str(exc)}
+
+
 class FollowIn(BaseModel):
     wallet: str
     label: str = ""

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import DossierView from "@/components/DossierView";
 import MarketGrid from "@/components/MarketGrid";
+import NewsWire from "@/components/NewsWire";
 import { useAgentRun } from "@/lib/useAgentRun";
 
 export default function Home() {
@@ -54,6 +55,8 @@ export default function Home() {
           <DossierView result={result} fetchError={fetchError} />
         </section>
       )}
+
+      <NewsWire />
 
       <section>
         <div className="mb-4 flex items-baseline justify-between">

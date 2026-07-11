@@ -27,11 +27,13 @@ async def execute_paper_trade(
     priced: PricingResult,
     size_usd: Optional[float] = None,
     user_id: Optional[str] = None,
+    strategy: str = "manual",
 ) -> Optional[FillReport]:
     """Fill the suggested size against the live book. None if nothing to trade.
 
     `size_usd` overrides the Kelly sizing (manual trades from the GUI);
-    `user_id` tags the position to a logged-in user (None = agent book).
+    `user_id` tags the position to a logged-in user (None = agent book);
+    `strategy` attributes the trade (manual/ai_signal/arbitrage/copy).
     """
     if priced.verdict == "PASS":
         return None
@@ -72,6 +74,7 @@ async def execute_paper_trade(
         "slippage_bps": slippage_bps,
         "fair_prob_at_entry": priced.fair_adj,
         "user_id": user_id,
+        "strategy": strategy,
     }
     position_id = await asyncio.to_thread(supabase_client.insert_position, position)
     if position_id is None:  # Supabase unconfigured — still report the simulated fill

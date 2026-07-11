@@ -202,6 +202,43 @@ async def get_trending_markets(limit: int = 20) -> list[dict]:
     return await list_markets(limit=limit)
 
 
+async def list_events(limit: int = 20, neg_risk_only: bool = False) -> list[dict]:
+    """Active events with their markets. negRisk events are mutually
+    exclusive (exactly one outcome wins) — the precondition for dutch books."""
+    async with _client() as client:
+        resp = await client.get(
+            f"{GAMMA_BASE}/events",
+            params={
+                "active": "true",
+                "closed": "false",
+                "order": "volume24hr",
+                "ascending": "false",
+                "limit": limit,
+            },
+        )
+        resp.raise_for_status()
+        events = []
+        for e in resp.json():
+            neg_risk = bool(e.get("negRisk"))
+            if neg_risk_only and not neg_risk:
+                continue
+            markets = [
+                normalize_market({**m, "events": [e]})
+                for m in e.get("markets") or []
+                if m.get("active", True) and not m.get("closed", False)
+            ]
+            events.append(
+                {
+                    "id": str(e.get("id", "")),
+                    "title": e.get("title", ""),
+                    "slug": e.get("slug", ""),
+                    "neg_risk": neg_risk,
+                    "markets": [m for m in markets if m["yes_token_id"]],
+                }
+            )
+        return events
+
+
 async def search_markets(query: str, limit: int = 10) -> list[dict]:
     """Gamma public text search; returns normalized markets, best first."""
     async with _client() as client:
