@@ -63,6 +63,66 @@ def parse_market_ref(text: str) -> Optional[str]:
     return match.group(2) or match.group(1)
 
 
+# Gamma's `category` field is empty for most markets. Infer one from the
+# question text so the dashboard can group markets and fees use the right
+# rate. First match wins; keep phrases specific to avoid false positives.
+_CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
+    ("sports", (
+        "world cup", "fifa", "uefa", "champions league", "premier league", "la liga",
+        "nba", "nfl", "nhl", "mlb", "super bowl", "olympic", "grand slam", "wimbledon",
+        "us open", "f1", "grand prix", "ufc", "heavyweight", "playoff", "finals",
+        "win the match", "relegat", "world series", "stanley cup", "ballon d'or",
+        # match-market phrasings ("Norway vs. England: O/U 2.5", "Exact Score")
+        " vs. ", " vs ", "exact score", "both teams to score", "o/u", "to advance",
+        "in a draw", "clean sheet", "first goalscorer", "hat-trick", "penalty shootout",
+    )),
+    ("crypto", (
+        "bitcoin", "btc", "ethereum", " eth ", "solana", "crypto", "dogecoin", "xrp",
+        "binance", "coinbase", "stablecoin", "microstrategy", "satoshi", "memecoin",
+    )),
+    ("geopolitics", (
+        "ceasefire", "war ", " war", "invasion", "invade", "military strike", "strike on",
+        "nato", "sanction", "nuclear", "missile", "hostage", "blockade", "annex",
+        "peace deal", "territory", "airspace", "border clash", "mou",
+        "strait of", "idf", "hezbollah", "hamas", "kremlin",
+    )),
+    ("politics", (
+        "election", "president", "prime minister", "senate", "congress", "parliament",
+        "governor", "mayor", "minister", "impeach", "nominee", "cabinet", "coalition",
+        "supreme court", "knesset", "chancellor", "referendum", "veto", "legislation",
+    )),
+    ("economics", (
+        "fed ", "the fed", "fomc", "interest rate", "rate cut", "rate hike", "inflation",
+        "cpi", "gdp", "recession", "unemployment", "tariff", "ecb", "central bank",
+    )),
+    ("finance", (
+        "stock", "s&p", "nasdaq", "dow jones", "ipo", "market cap", "earnings",
+        "shares", "acquisition", "merger", "bankrupt",
+    )),
+    ("tech", (
+        "openai", "chatgpt", "gpt-", "anthropic", "ai model", "artificial intelligence",
+        "apple", "google", "tesla", "spacex", "nvidia", "iphone", "starship", "self-driving",
+    )),
+    ("culture", (
+        "oscar", "grammy", "emmy", "box office", "album", "movie", "netflix",
+        "taylor swift", "billboard", "eurovision", "time person of the year", "spotify",
+    )),
+    ("weather", (
+        "hurricane", "temperature", "rainfall", "snowfall", "heatwave", "tornado",
+        "named storm", "degrees",
+    )),
+]
+
+
+def infer_category(text: str) -> str:
+    """Best-effort category from question/title text; 'other' when unsure."""
+    haystack = f" {text.lower()} "
+    for category, keywords in _CATEGORY_KEYWORDS:
+        if any(k in haystack for k in keywords):
+            return category
+    return "other"
+
+
 def normalize_market(raw: dict) -> dict:
     """Normalize one Gamma market object into plain, typed fields."""
     outcomes = _json_list(raw.get("outcomes"))
@@ -79,7 +139,12 @@ def normalize_market(raw: dict) -> dict:
         mid = 0.5
 
     events = raw.get("events") or []
-    category = (raw.get("category") or (events[0].get("category") if events else "") or "other")
+    category = str(
+        raw.get("category") or (events[0].get("category") if events else "") or ""
+    ).lower()
+    if not category or category == "other":
+        event_title = events[0].get("title", "") if events else ""
+        category = infer_category(f"{raw.get('question', '')} {event_title}")
 
     return {
         "id": str(raw.get("id", "")),

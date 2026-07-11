@@ -24,7 +24,7 @@ export default function DossierView({
         {fetchError.includes("500") && (
           <div className="mt-1 text-xs text-red-400/80">
             In local dev this usually means the FastAPI backend is not running — start it
-            with <code className="rounded bg-zinc-900 px-1">npm run dev:api</code>.
+            with <code className="rounded bg-desk-panel px-1">npm run dev:api</code>.
           </div>
         )}
       </div>
@@ -50,9 +50,9 @@ export default function DossierView({
       {ui?.council && <CouncilCards council={ui.council} />}
 
       {ui?.fill && (
-        <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm">
-          <h2 className="mb-2 text-lg font-semibold text-zinc-200">Paper-trade fill</h2>
-          <div className="grid grid-cols-2 gap-2 text-zinc-300 sm:grid-cols-3">
+        <section className="rounded-xl border border-desk-line bg-desk-panel p-4 text-sm">
+          <h2 className="mb-2 text-lg font-semibold text-desk-ink">Paper-trade fill</h2>
+          <div className="grid grid-cols-2 gap-2 text-desk-soft sm:grid-cols-3">
             <div>Side: {ui.fill.side}</div>
             <div>Size: ${ui.fill.size_usd.toFixed(2)}</div>
             <div>VWAP: {(ui.fill.vwap * 100).toFixed(1)}%</div>
@@ -65,8 +65,10 @@ export default function DossierView({
 
       {result.response && (
         <section>
-          <h2 className="mb-3 text-lg font-semibold text-zinc-200">Full report</h2>
-          <div className="whitespace-pre-wrap rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm leading-relaxed text-zinc-200">
+          <h2 className="mb-3 font-display text-lg font-bold uppercase tracking-wide text-desk-ink">
+            Full report
+          </h2>
+          <div className="whitespace-pre-wrap rounded-xl border border-desk-line bg-desk-panel p-5 text-sm leading-relaxed text-desk-ink">
             {result.response}
           </div>
         </section>

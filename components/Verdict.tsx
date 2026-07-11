@@ -1,12 +1,23 @@
-﻿"use client";
+"use client";
 
 import type { MarketState, VerdictData } from "@/lib/types";
 
-const STYLES: Record<VerdictData["verdict"], { bg: string; label: string }> = {
-  BUY_YES: { bg: "border-emerald-700 bg-emerald-950/50 text-emerald-300", label: "BUY YES" },
-  BUY_NO: { bg: "border-red-700 bg-red-950/50 text-red-300", label: "BUY NO" },
-  PASS: { bg: "border-zinc-700 bg-zinc-900 text-zinc-300", label: "PASS" },
+const STAMP: Record<VerdictData["verdict"], { cls: string; label: string }> = {
+  BUY_YES: { cls: "border-emerald-400 text-emerald-400", label: "BUY YES" },
+  BUY_NO: { cls: "border-red-400 text-red-400", label: "BUY NO" },
+  PASS: { cls: "border-desk-edge text-desk-dim", label: "PASS" },
 };
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="font-mono text-[10px] uppercase tracking-widest text-desk-faint">
+        {label}
+      </div>
+      <div className="mt-0.5 font-mono text-sm font-semibold text-desk-ink">{value}</div>
+    </div>
+  );
+}
 
 export default function Verdict({
   data,
@@ -15,46 +26,50 @@ export default function Verdict({
   data: VerdictData;
   market?: MarketState;
 }) {
-  const style = STYLES[data.verdict];
+  const stamp = STAMP[data.verdict];
   return (
-    <section className={`rounded-lg border p-4 ${style.bg}`}>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="text-2xl font-bold tracking-tight">{style.label}</div>
-        <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-          <div>
-            <span className="text-zinc-400">Fair: </span>
-            <span className="font-semibold">{(data.fair_probability * 100).toFixed(1)}%</span>
-            {market && (
-              <span className="text-zinc-400">
-                {" "}
-                vs market {(market.mid * 100).toFixed(1)}%
-              </span>
-            )}
-          </div>
-          <div>
-            <span className="text-zinc-400">Net edge: </span>
-            <span className="font-semibold">{(data.net_edge_pts * 100).toFixed(1)} pts</span>
-          </div>
-          <div>
-            <span className="text-zinc-400">Size: </span>
-            <span className="font-semibold">
-              {data.suggested_size_pct_bankroll.toFixed(1)}% bankroll
-            </span>
-          </div>
-          <div>
-            <span className="text-zinc-400">Confidence: </span>
-            <span className="font-semibold">{data.confidence}</span>
+    <section className="rounded-2xl border border-desk-line bg-desk-panel/70 p-5">
+      <div className="flex flex-wrap items-start gap-6">
+        {/* the stamp: pressed onto the dossier, slightly off-axis */}
+        <div className="flex min-w-[128px] items-center justify-center py-2">
+          <div
+            className={`-rotate-6 rounded border-[3px] px-4 py-1.5 font-display text-2xl font-bold uppercase tracking-[0.18em] opacity-90 ${stamp.cls}`}
+            aria-label={`Verdict: ${stamp.label}`}
+          >
+            {stamp.label}
           </div>
         </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+            <Metric
+              label="fair value"
+              value={`${(data.fair_probability * 100).toFixed(1)}%${
+                market ? ` vs ${(market.mid * 100).toFixed(1)}%` : ""
+              }`}
+            />
+            <Metric label="net edge" value={`${(data.net_edge_pts * 100).toFixed(1)} pts`} />
+            <Metric
+              label="size"
+              value={`${data.suggested_size_pct_bankroll.toFixed(1)}% bankroll`}
+            />
+            <Metric label="confidence" value={data.confidence} />
+          </div>
+          {data.summary && (
+            <p className="mt-4 text-sm leading-relaxed text-desk-soft">{data.summary}</p>
+          )}
+          {data.key_risks?.length > 0 && (
+            <ul className="mt-3 space-y-1 text-xs text-desk-dim">
+              {data.key_risks.map((r, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="text-instrument">▲</span>
+                  {r}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
-      {data.summary && <p className="mt-3 text-sm leading-relaxed">{data.summary}</p>}
-      {data.key_risks?.length > 0 && (
-        <ul className="mt-2 list-inside list-disc text-xs text-zinc-400">
-          {data.key_risks.map((r, i) => (
-            <li key={i}>{r}</li>
-          ))}
-        </ul>
-      )}
     </section>
   );
 }

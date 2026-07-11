@@ -105,6 +105,7 @@ export interface FillReport {
 }
 
 export interface DossierUi {
+  cached_at?: string | null;
   verdict?: VerdictData;
   market?: MarketState;
   news?: EvidenceCluster[];

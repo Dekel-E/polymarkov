@@ -126,6 +126,12 @@ MAX_SIZE_PCT_BANKROLL = 0.05     # hard cap: 5% of bankroll
 PAPER_BANKROLL_USD = 10_000      # simulated bankroll for PaperBroker sizing
 
 # ---------------------------------------------------------------------------
+# Intel cache: serve a recent dossier for the same market instead of
+# re-running 7 LLM calls. Trades always bypass the cache.
+# ---------------------------------------------------------------------------
+INTEL_CACHE_TTL_S = 900  # 15 minutes
+
+# ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
 CANONICAL_MODULES = [

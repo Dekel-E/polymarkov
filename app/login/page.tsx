@@ -44,11 +44,11 @@ export default function LoginPage() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-16">
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 shadow-xl shadow-black/20">
+      <div className="rounded-2xl border border-desk-line bg-desk-panel/60 p-6 shadow-xl shadow-black/20">
         <h1 className="text-xl font-bold tracking-tight">
           {mode === "login" ? "Welcome back" : "Create an account"}
         </h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <p className="mt-1 text-sm text-desk-dim">
           {mode === "login"
             ? "Log in to track and direct your own paper trades."
             : "Register to get your own paper-trading book."}
@@ -61,7 +61,7 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-950/80 px-3.5 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:border-emerald-500/60 focus:outline-none"
+            className="w-full rounded-xl border border-desk-line bg-desk-deep/80 px-3.5 py-2.5 text-sm text-desk-ink placeholder-desk-faint focus:border-instrument/60 focus:outline-none"
           />
           <input
             type="password"
@@ -70,12 +70,12 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password (min 6 characters)"
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-950/80 px-3.5 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:border-emerald-500/60 focus:outline-none"
+            className="w-full rounded-xl border border-desk-line bg-desk-deep/80 px-3.5 py-2.5 text-sm text-desk-ink placeholder-desk-faint focus:border-instrument/60 focus:outline-none"
           />
           <button
             type="submit"
             disabled={busy}
-            className="w-full rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-40"
+            className="w-full rounded-xl bg-instrument px-4 py-2.5 text-sm font-bold text-desk-deep transition hover:bg-instrument-bright disabled:opacity-40"
           >
             {busy ? "Working…" : mode === "login" ? "Log in" : "Register"}
           </button>
@@ -92,7 +92,7 @@ export default function LoginPage() {
             setMode(mode === "login" ? "register" : "login");
             setError(null);
           }}
-          className="mt-4 text-xs text-zinc-500 transition hover:text-zinc-300"
+          className="mt-4 text-xs text-desk-dim transition hover:text-desk-soft"
         >
           {mode === "login"
             ? "No account yet? Register instead"
@@ -100,7 +100,7 @@ export default function LoginPage() {
         </button>
       </div>
 
-      <p className="mt-4 text-center text-[11px] text-zinc-600">
+      <p className="mt-4 text-center text-[11px] text-desk-faint">
         Login is optional — the agent and all analysis pages work without an account.
       </p>
     </div>

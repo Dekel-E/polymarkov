@@ -11,7 +11,8 @@ from __future__ import annotations
 import asyncio
 import time
 
-from backend.agent import pricing
+from backend import config
+from backend.agent import intel_cache, pricing
 from backend.agent.modules import (
     evidence_retriever,
     judge,
@@ -63,7 +64,33 @@ async def run_pipeline(user_prompt: str) -> ExecuteOut:
         )
 
 
+def _serve_cached(payload: dict) -> ExecuteOut:
+    created_at = payload.get("created_at", "")
+    age_min = max(0, int(intel_cache._age_s(created_at) // 60))
+    note = (
+        f"_(Cached dossier compiled {age_min} min ago — a fresh analysis runs "
+        f"automatically once the cache expires after "
+        f"{config.INTEL_CACHE_TTL_S // 60} min.)_\n\n"
+    )
+    ui = dict(payload.get("ui") or {})
+    ui["cached_at"] = created_at
+    return ExecuteOut(
+        status="ok",
+        response=note + (payload.get("response") or ""),
+        steps=payload.get("steps") or [],
+        ui=ui,
+    )
+
+
 async def _run(ctx: RunContext, user_prompt: str, started: float) -> ExecuteOut:
+    # 0. Cache fast path: templated GUI prompts name the market outright,
+    #    so a fresh dossier can be served with ZERO LLM calls.
+    fast_slug = intel_cache.slug_from_prompt(user_prompt)
+    if fast_slug:
+        cached = await asyncio.to_thread(intel_cache.get, fast_slug)
+        if cached:
+            return _serve_cached(cached)
+
     # 1. QueryPlanner (LLM #1)
     plan = await query_planner.plan_query(ctx, user_prompt)
     if not plan.in_scope:
@@ -82,6 +109,13 @@ async def _run(ctx: RunContext, user_prompt: str, started: float) -> ExecuteOut:
         ]
         return ExecuteOut(status="ok", response="\n".join(lines), steps=ctx.steps)
     market = resolved.market
+
+    # 2b. Cache check post-resolve (free-text prompts). Trades bypass: the
+    #     user asked for an action, not just the analysis.
+    if not plan.wants_trade:
+        cached = await asyncio.to_thread(intel_cache.get, market.slug)
+        if cached:
+            return _serve_cached(cached)
 
     # 3+4. EvidenceRetriever ∥ SocialScanner (tools, concurrent)
     evidence, pulse = await asyncio.gather(
@@ -119,6 +153,15 @@ async def _run(ctx: RunContext, user_prompt: str, started: float) -> ExecuteOut:
 
     response = _dossier_markdown(market, verdict, priced, evidence.clusters, pulse, council, trade_note, fill)
     ui = _ui_payload(market, verdict, priced, evidence.clusters, pulse, council, fill)
+
+    # cache the analysis for repeat requests (the fill itself is not replayed)
+    await asyncio.to_thread(
+        intel_cache.put,
+        market.slug,
+        response,
+        [s.model_dump() for s in ctx.steps],
+        {**ui, "fill": None},
+    )
 
     latency_ms = int((time.monotonic() - started) * 1000)
     await asyncio.to_thread(

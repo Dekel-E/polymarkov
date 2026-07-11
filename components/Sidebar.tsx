@@ -58,18 +58,18 @@ function AuthFooter() {
     return (
       <Link
         href="/login"
-        className="mb-3 flex items-center justify-center rounded-xl border border-emerald-500/50 px-3 py-2 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/10 md:mx-2"
+        className="mb-3 flex items-center justify-center rounded-xl border border-instrument/50 px-3 py-2 text-sm font-semibold text-instrument transition hover:bg-instrument/10 md:mx-2"
       >
         Log in / Register
       </Link>
     );
   }
   return (
-    <div className="mb-3 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2.5 md:mx-2">
-      <div className="truncate text-xs font-semibold text-zinc-300">{user.email}</div>
+    <div className="mb-3 rounded-xl border border-desk-line bg-desk-panel/70 px-3 py-2.5 md:mx-2">
+      <div className="truncate text-xs font-semibold text-desk-soft">{user.email}</div>
       <button
         onClick={() => signOut()}
-        className="mt-1 text-[11px] text-zinc-500 transition hover:text-red-400"
+        className="mt-1 text-[11px] text-desk-dim transition hover:text-red-400"
       >
         Sign out
       </button>
@@ -80,14 +80,14 @@ function AuthFooter() {
 export default function Sidebar() {
   const pathname = usePathname();
   return (
-    <aside className="flex shrink-0 flex-row items-center gap-1 border-b border-zinc-800/80 bg-zinc-950/80 px-3 py-2 backdrop-blur md:h-screen md:w-60 md:flex-col md:items-stretch md:gap-0 md:border-b-0 md:border-r md:px-4 md:py-6 md:sticky md:top-0">
+    <aside className="flex shrink-0 flex-row items-center gap-1 border-b border-desk-line/80 bg-desk-deep/80 px-3 py-2 backdrop-blur md:h-screen md:w-60 md:flex-col md:items-stretch md:gap-0 md:border-b-0 md:border-r md:px-4 md:py-6 md:sticky md:top-0">
       <Link href="/" className="flex items-center gap-2.5 md:mb-8 md:px-2">
-        <span className="relative flex h-8 w-8 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10">
-          <span className="h-2 w-2 rounded-full bg-emerald-400" />
-          <span className="absolute inset-0 animate-ping rounded-full border border-emerald-500/30 [animation-duration:3s]" />
+        <span className="relative flex h-8 w-8 items-center justify-center rounded-full border border-instrument/40 bg-instrument/10">
+          <span className="h-2 w-2 rounded-full bg-instrument" />
+          <span className="absolute inset-0 animate-ping rounded-full border border-instrument/30 [animation-duration:3s]" />
         </span>
-        <span className="text-base font-bold tracking-tight text-zinc-100">
-          Poly<span className="text-emerald-400">markov</span>
+        <span className="text-base font-bold tracking-tight text-desk-ink">
+          Poly<span className="text-instrument">markov</span>
         </span>
       </Link>
 
@@ -100,8 +100,8 @@ export default function Sidebar() {
               href={href}
               className={`flex items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm transition ${
                 active
-                  ? "bg-emerald-500/10 font-semibold text-emerald-300"
-                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                  ? "bg-instrument/10 font-semibold text-instrument"
+                  : "text-desk-dim hover:bg-desk-panel hover:text-desk-ink"
               }`}
             >
               <Icon />
@@ -113,7 +113,7 @@ export default function Sidebar() {
 
       <div className="hidden md:block">
         <AuthFooter />
-        <div className="text-[11px] leading-relaxed text-zinc-600 md:px-2">
+        <div className="text-[11px] leading-relaxed text-desk-faint md:px-2">
           Educational tool.
           <br />
           Paper trading only — not financial advice.

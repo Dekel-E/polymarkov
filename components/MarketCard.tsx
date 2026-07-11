@@ -23,34 +23,34 @@ export default function MarketCard({ market }: { market: MarketSummary }) {
   return (
     <Link
       href={`/market/${market.slug}`}
-      className="group flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 transition hover:-translate-y-0.5 hover:border-zinc-600 hover:bg-zinc-900"
+      className="group flex flex-col rounded-2xl border border-desk-line bg-desk-panel/70 p-4 transition hover:-translate-y-0.5 hover:border-desk-faint hover:bg-desk-panel"
     >
       <div className="flex items-start gap-3">
         {market.image ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={market.image} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
         ) : (
-          <div className="h-10 w-10 shrink-0 rounded-lg bg-zinc-800" />
+          <div className="h-10 w-10 shrink-0 rounded-lg bg-desk-line" />
         )}
-        <h3 className="line-clamp-2 flex-1 text-sm font-semibold leading-snug text-zinc-100">
+        <h3 className="line-clamp-2 flex-1 text-sm font-semibold leading-snug text-desk-ink">
           {market.question}
         </h3>
       </div>
 
       <div className="mt-4 flex items-end justify-between">
         <div>
-          <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+          <div className="text-[11px] uppercase tracking-wider text-desk-dim">
             Market probability
           </div>
           <div
             className={`text-3xl font-bold tabular-nums tracking-tight ${
-              prob >= 50 ? "text-emerald-400" : "text-zinc-100"
+              prob >= 50 ? "text-emerald-400" : "text-desk-ink"
             }`}
           >
             {prob < 1 ? prob.toFixed(1) : prob.toFixed(0)}%
           </div>
         </div>
-        <div className="text-right text-xs text-zinc-500">
+        <div className="text-right text-xs text-desk-dim">
           <div>{formatVolume(market.volume24h)} / 24h</div>
           {days && (
             <div className="mt-0.5 flex items-center justify-end gap-1">
@@ -64,11 +64,11 @@ export default function MarketCard({ market }: { market: MarketSummary }) {
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-between border-t border-zinc-800/80 pt-3">
-        <span className="rounded-md bg-zinc-800/80 px-2 py-0.5 text-[11px] capitalize text-zinc-400">
+      <div className="mt-4 flex items-center justify-between border-t border-desk-line/80 pt-3">
+        <span className="rounded-md bg-desk-line/80 px-2 py-0.5 text-[11px] capitalize text-desk-dim">
           {market.category || "other"}
         </span>
-        <span className="rounded-lg border border-amber-500/50 px-3 py-1 text-xs font-semibold text-amber-400 transition group-hover:bg-amber-500/10">
+        <span className="rounded-lg border border-instrument/50 px-3 py-1 text-xs font-semibold text-instrument transition group-hover:bg-instrument/10">
           Full analysis →
         </span>
       </div>

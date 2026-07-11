@@ -8,6 +8,7 @@ flowing through, and the dossier/ui assembly.
 import pytest
 
 from backend import config
+from backend.agent import intel_cache
 from backend.data import supabase_client
 from backend.agent import orchestrator
 from backend.agent.types import MarketState, Step, StepPrompt
@@ -126,8 +127,12 @@ POSTS = [
 
 @pytest.fixture
 def mocked_pipeline(monkeypatch):
+    intel_cache.clear_memory()  # dossier cache must not leak between tests
+    llm_calls = {"count": 0}
+
     async def fake_call_llm(self, module, system_prompt, user_prompt):
         assert module in CANNED, f"unexpected LLM module {module}"
+        llm_calls["count"] += 1
         response = CANNED[module]
         self.steps.append(
             Step(
@@ -160,6 +165,8 @@ def mocked_pipeline(monkeypatch):
     monkeypatch.setattr(pinecone_client, "is_configured", lambda: False)
     monkeypatch.setattr(supabase_client, "log_run", lambda run: None)
     monkeypatch.setattr(supabase_client, "insert_position", lambda p: "pos-test")
+    monkeypatch.setattr(supabase_client, "is_configured", lambda: False)
+    return llm_calls
 
 
 LLM_MODULES = {"QueryPlanner", "SentimentScorer", "BullAnalyst", "BearAnalyst", "QuantAnalyst", "ResolutionSkeptic", "Judge"}
@@ -228,6 +235,29 @@ async def test_failure_returns_error_envelope(monkeypatch):
     assert "LLM is down" in result.error
     assert result.response is None
     assert result.steps == []
+
+
+async def test_repeat_request_served_from_cache(mocked_pipeline):
+    llm_calls = mocked_pipeline
+    first = await orchestrator.run_pipeline("analyze the fed september rate cut market")
+    assert first.status == "ok"
+    calls_after_first = llm_calls["count"]
+    assert calls_after_first == 7
+
+    # same market again (free text) -> cached; only QueryPlanner runs (1 call)
+    second = await orchestrator.run_pipeline("analyze the fed september rate cut market")
+    assert second.status == "ok"
+    assert llm_calls["count"] == calls_after_first + 1
+    assert "Cached dossier" in second.response
+    assert second.ui["cached_at"]
+    assert len(second.steps) == len(first.steps)  # original trace preserved
+
+    # templated GUI prompt -> fast path, ZERO extra calls
+    third = await orchestrator.run_pipeline(
+        f"Market: {FIXTURE_MARKET.slug}\nFocus: all\nTrade: no"
+    )
+    assert llm_calls["count"] == calls_after_first + 1
+    assert "Cached dossier" in third.response
 
 
 async def test_wants_trade_executes_paper_broker(mocked_pipeline, monkeypatch):

@@ -10,8 +10,8 @@ const usd = (v: number) =>
   v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
 function Pnl({ value }: { value: number | null | undefined }) {
-  if (value === null || value === undefined) return <span className="text-zinc-600">—</span>;
-  const cls = value > 0 ? "text-emerald-400" : value < 0 ? "text-red-400" : "text-zinc-400";
+  if (value === null || value === undefined) return <span className="text-desk-faint">—</span>;
+  const cls = value > 0 ? "text-emerald-400" : value < 0 ? "text-red-400" : "text-desk-dim";
   return <span className={`font-semibold ${cls}`}>{value >= 0 ? "+" : ""}{usd(value)}</span>;
 }
 
@@ -31,12 +31,12 @@ function SideChip({ side }: { side: Position["side"] }) {
 
 function StatCard({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
-      <div className="text-[11px] uppercase tracking-wider text-zinc-500">{label}</div>
-      <div className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-zinc-100">
+    <div className="rounded-2xl border border-desk-line bg-desk-panel/60 p-4">
+      <div className="text-[11px] uppercase tracking-wider text-desk-dim">{label}</div>
+      <div className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-desk-ink">
         {value}
       </div>
-      {sub && <div className="mt-0.5 text-xs text-zinc-500">{sub}</div>}
+      {sub && <div className="mt-0.5 text-xs text-desk-dim">{sub}</div>}
     </div>
   );
 }
@@ -86,18 +86,18 @@ export default function PortfolioPage() {
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-            Paper <span className="text-emerald-400">Portfolio</span>
+            Paper <span className="text-instrument">Portfolio</span>
           </h1>
-          <p className="mt-1 text-sm text-zinc-400">
+          <p className="mt-1 text-sm text-desk-dim">
             Follow the agent&apos;s book, or your own — every fill is simulated against the
             live order book.
           </p>
         </div>
-        <div className="flex rounded-xl border border-zinc-800 bg-zinc-900 p-1">
+        <div className="flex rounded-xl border border-desk-line bg-desk-panel p-1">
           <button
             onClick={() => setScope("agent")}
             className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
-              scope === "agent" ? "bg-emerald-500 text-zinc-950" : "text-zinc-400 hover:text-zinc-200"
+              scope === "agent" ? "bg-instrument text-desk-deep" : "text-desk-dim hover:text-desk-ink"
             }`}
           >
             Agent book
@@ -105,7 +105,7 @@ export default function PortfolioPage() {
           <button
             onClick={() => setScope("mine")}
             className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
-              scope === "mine" ? "bg-emerald-500 text-zinc-950" : "text-zinc-400 hover:text-zinc-200"
+              scope === "mine" ? "bg-instrument text-desk-deep" : "text-desk-dim hover:text-desk-ink"
             }`}
           >
             My trades
@@ -114,12 +114,12 @@ export default function PortfolioPage() {
       </header>
 
       {scope === "mine" && !user && !authLoading && (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-6 text-center">
-          <p className="text-sm text-zinc-300">Log in to see your personal trades.</p>
+        <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-6 text-center">
+          <p className="text-sm text-desk-soft">Log in to see your personal trades.</p>
           {authConfigured && (
             <Link
               href="/login"
-              className="mt-3 inline-block rounded-xl bg-emerald-500 px-5 py-2 text-sm font-bold text-zinc-950 transition hover:bg-emerald-400"
+              className="mt-3 inline-block rounded-xl bg-instrument px-5 py-2 text-sm font-bold text-desk-deep transition hover:bg-instrument-bright"
             >
               Log in / Register
             </Link>
@@ -161,32 +161,32 @@ export default function PortfolioPage() {
           {error && (
             <div className="rounded-xl border border-amber-900/60 bg-amber-950/30 p-4 text-sm text-amber-300">
               Could not load portfolio: {error}
-              <button onClick={load} className="ml-2 text-emerald-400 hover:underline">
+              <button onClick={load} className="ml-2 text-instrument hover:underline">
                 Retry
               </button>
             </div>
           )}
           {closeNote && (
-            <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-3 text-sm text-zinc-200">
+            <div className="rounded-xl border border-desk-edge bg-desk-panel p-3 text-sm text-desk-ink">
               {closeNote}
             </div>
           )}
-          {loading && <div className="h-40 animate-pulse rounded-2xl bg-zinc-900" />}
+          {loading && <div className="h-40 animate-pulse rounded-2xl bg-desk-panel" />}
 
           {!loading && portfolio && (
             <>
               <section>
                 <h2 className="mb-3 text-lg font-bold tracking-tight">Open positions</h2>
                 {portfolio.open.length === 0 ? (
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 text-sm text-zinc-500">
-                    No open positions. Run the agent with <code className="rounded bg-zinc-950 px-1">Trade: yes</code>,
+                  <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-5 text-sm text-desk-dim">
+                    No open positions. Run the agent with <code className="rounded bg-desk-deep px-1">Trade: yes</code>,
                     or execute a trade from any market&apos;s analysis.
                   </div>
                 ) : (
-                  <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-900/60">
+                  <div className="overflow-x-auto rounded-2xl border border-desk-line bg-desk-panel/60">
                     <table className="w-full min-w-[720px] text-left text-sm">
                       <thead>
-                        <tr className="border-b border-zinc-800 text-[11px] uppercase tracking-wider text-zinc-500">
+                        <tr className="border-b border-desk-line text-[11px] uppercase tracking-wider text-desk-dim">
                           <th className="px-4 py-3 font-semibold">Market</th>
                           <th className="px-4 py-3 font-semibold">Side</th>
                           <th className="px-4 py-3 font-semibold">Entry</th>
@@ -199,20 +199,20 @@ export default function PortfolioPage() {
                       </thead>
                       <tbody>
                         {portfolio.open.map((p) => (
-                          <tr key={p.id} className="border-b border-zinc-800/60 last:border-0">
+                          <tr key={p.id} className="border-b border-desk-line/60 last:border-0">
                             <td className="max-w-[260px] truncate px-4 py-3">
-                              <Link href={`/market/${p.market_id}`} className="text-zinc-200 hover:text-emerald-400">
+                              <Link href={`/market/${p.market_id}`} className="text-desk-ink hover:text-instrument">
                                 {p.market_id}
                               </Link>
                             </td>
                             <td className="px-4 py-3"><SideChip side={p.side} /></td>
-                            <td className="px-4 py-3 tabular-nums text-zinc-300">{(p.entry_price * 100).toFixed(1)}%</td>
-                            <td className="px-4 py-3 tabular-nums text-zinc-300">
+                            <td className="px-4 py-3 tabular-nums text-desk-soft">{(p.entry_price * 100).toFixed(1)}%</td>
+                            <td className="px-4 py-3 tabular-nums text-desk-soft">
                               {p.current_price != null ? `${(p.current_price * 100).toFixed(1)}%` : "—"}
                             </td>
-                            <td className="px-4 py-3 tabular-nums text-zinc-300">{usd(p.size_usd)}</td>
+                            <td className="px-4 py-3 tabular-nums text-desk-soft">{usd(p.size_usd)}</td>
                             <td className="px-4 py-3 tabular-nums"><Pnl value={p.unrealized_pnl} /></td>
-                            <td className="px-4 py-3 text-xs text-zinc-500">
+                            <td className="px-4 py-3 text-xs text-desk-dim">
                               {new Date(p.opened_at).toLocaleDateString()}
                             </td>
                             <td className="px-4 py-3 text-right">
@@ -235,14 +235,14 @@ export default function PortfolioPage() {
               <section>
                 <h2 className="mb-3 text-lg font-bold tracking-tight">History</h2>
                 {portfolio.resolved.length === 0 ? (
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 text-sm text-zinc-500">
+                  <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-5 text-sm text-desk-dim">
                     No resolved trades yet.
                   </div>
                 ) : (
-                  <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-900/60">
+                  <div className="overflow-x-auto rounded-2xl border border-desk-line bg-desk-panel/60">
                     <table className="w-full min-w-[640px] text-left text-sm">
                       <thead>
-                        <tr className="border-b border-zinc-800 text-[11px] uppercase tracking-wider text-zinc-500">
+                        <tr className="border-b border-desk-line text-[11px] uppercase tracking-wider text-desk-dim">
                           <th className="px-4 py-3 font-semibold">Market</th>
                           <th className="px-4 py-3 font-semibold">Side</th>
                           <th className="px-4 py-3 font-semibold">Entry</th>
@@ -253,16 +253,16 @@ export default function PortfolioPage() {
                       </thead>
                       <tbody>
                         {portfolio.resolved.map((p) => (
-                          <tr key={p.id} className="border-b border-zinc-800/60 last:border-0">
+                          <tr key={p.id} className="border-b border-desk-line/60 last:border-0">
                             <td className="max-w-[260px] truncate px-4 py-3">
-                              <Link href={`/market/${p.market_id}`} className="text-zinc-200 hover:text-emerald-400">
+                              <Link href={`/market/${p.market_id}`} className="text-desk-ink hover:text-instrument">
                                 {p.market_id}
                               </Link>
                             </td>
                             <td className="px-4 py-3"><SideChip side={p.side} /></td>
-                            <td className="px-4 py-3 tabular-nums text-zinc-300">{(p.entry_price * 100).toFixed(1)}%</td>
-                            <td className="px-4 py-3 tabular-nums text-zinc-300">{usd(p.size_usd)}</td>
-                            <td className="px-4 py-3 text-xs font-semibold text-zinc-400">{p.resolved_outcome}</td>
+                            <td className="px-4 py-3 tabular-nums text-desk-soft">{(p.entry_price * 100).toFixed(1)}%</td>
+                            <td className="px-4 py-3 tabular-nums text-desk-soft">{usd(p.size_usd)}</td>
+                            <td className="px-4 py-3 text-xs font-semibold text-desk-dim">{p.resolved_outcome}</td>
                             <td className="px-4 py-3 tabular-nums"><Pnl value={p.pnl} /></td>
                           </tr>
                         ))}

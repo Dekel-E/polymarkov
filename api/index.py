@@ -95,7 +95,7 @@ def model_architecture():
 async def markets(limit: int = 20) -> dict:
     """Trending markets for the GUI market browser."""
     try:
-        return {"markets": await polymarket.get_trending_markets(min(limit, 50)), "error": None}
+        return {"markets": await polymarket.get_trending_markets(min(limit, 100)), "error": None}
     except Exception as exc:
         return {"markets": [], "error": str(exc)}
 

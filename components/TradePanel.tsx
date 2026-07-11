@@ -40,7 +40,7 @@ export default function TradePanel({ slug, ui }: { slug: string; ui: DossierUi }
         <h2 className="text-sm font-bold uppercase tracking-wider text-emerald-400">
           Paper trade executed
         </h2>
-        <p className="mt-2 text-sm text-zinc-200">
+        <p className="mt-2 text-sm text-desk-ink">
           {fill.side.replace("_", " ")} ${fill.size_usd.toFixed(2)} at VWAP{" "}
           {(fill.vwap * 100).toFixed(1)}% — fee ${fill.fee_paid.toFixed(2)}, slippage{" "}
           {fill.slippage_bps.toFixed(1)} bps.
@@ -56,11 +56,11 @@ export default function TradePanel({ slug, ui }: { slug: string; ui: DossierUi }
   }
 
   return (
-    <section className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
-      <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-400">
+    <section className="rounded-2xl border border-desk-line bg-desk-panel/60 p-5">
+      <h2 className="text-sm font-bold uppercase tracking-wider text-desk-dim">
         {recommended ? "Execute the agent's trade" : "Override: trade anyway"}
       </h2>
-      <p className="mt-1 text-xs text-zinc-500">
+      <p className="mt-1 text-xs text-desk-dim">
         {recommended
           ? `The verdict is ${recommended.replace("_", " ")} with a suggested ${verdict.suggested_size_pct_bankroll.toFixed(1)}% of the $10k paper bankroll.`
           : "The agent says PASS — you can still direct a paper trade at your own discretion."}
@@ -68,7 +68,7 @@ export default function TradePanel({ slug, ui }: { slug: string; ui: DossierUi }
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <div className="flex rounded-xl border border-zinc-800 bg-zinc-950 p-1">
+        <div className="flex rounded-xl border border-desk-line bg-desk-deep p-1">
           {(["BUY_YES", "BUY_NO"] as const).map((s) => (
             <button
               key={s}
@@ -76,16 +76,16 @@ export default function TradePanel({ slug, ui }: { slug: string; ui: DossierUi }
               className={`rounded-lg px-4 py-1.5 text-xs font-bold transition ${
                 side === s
                   ? s === "BUY_YES"
-                    ? "bg-emerald-500 text-zinc-950"
-                    : "bg-red-500 text-zinc-950"
-                  : "text-zinc-400 hover:text-zinc-200"
+                    ? "bg-emerald-500 text-desk-deep"
+                    : "bg-red-500 text-desk-deep"
+                  : "text-desk-dim hover:text-desk-ink"
               }`}
             >
               {s.replace("_", " ")}
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-2 text-sm text-zinc-400">
+        <label className="flex items-center gap-2 text-sm text-desk-dim">
           $
           <input
             type="number"
@@ -93,13 +93,13 @@ export default function TradePanel({ slug, ui }: { slug: string; ui: DossierUi }
             max={1000}
             value={amount}
             onChange={(e) => setAmount(Number(e.target.value))}
-            className="w-24 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
+            className="w-24 rounded-xl border border-desk-line bg-desk-deep px-3 py-1.5 text-sm text-desk-ink focus:border-instrument/60 focus:outline-none"
           />
         </label>
         <button
           onClick={submit}
           disabled={busy || amount <= 0}
-          className="rounded-xl bg-amber-500 px-5 py-2 text-sm font-bold text-zinc-950 transition hover:bg-amber-400 disabled:opacity-40"
+          className="rounded-xl bg-instrument px-5 py-2 text-sm font-bold text-desk-deep transition hover:bg-instrument-bright disabled:opacity-40"
         >
           {busy ? "Filling…" : "Execute paper trade"}
         </button>

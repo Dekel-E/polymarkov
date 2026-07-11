@@ -11,15 +11,15 @@ const PERSONAS: { key: keyof NonNullable<DossierUi["council"]>; name: string; ac
 
 function Card({ name, accent, opinion }: { name: string; accent: string; opinion: PersonaOpinion }) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+    <div className="rounded-lg border border-desk-line bg-desk-panel p-4">
       <div className="flex items-center justify-between">
         <span className={`font-mono text-sm font-semibold ${accent}`}>{name}</span>
-        <span className="text-sm font-bold text-zinc-100">
+        <span className="text-sm font-bold text-desk-ink">
           {(opinion.estimated_probability * 100).toFixed(0)}%
-          <span className="ml-1 text-xs font-normal text-zinc-500">({opinion.confidence})</span>
+          <span className="ml-1 text-xs font-normal text-desk-dim">({opinion.confidence})</span>
         </span>
       </div>
-      <p className="mt-2 text-xs leading-relaxed text-zinc-300">{opinion.thesis}</p>
+      <p className="mt-2 text-xs leading-relaxed text-desk-soft">{opinion.thesis}</p>
       {opinion.red_flags?.length > 0 && (
         <ul className="mt-2 list-inside list-disc text-xs text-amber-400/80">
           {opinion.red_flags.map((f, i) => (
@@ -36,7 +36,9 @@ export default function CouncilCards({ council }: { council: NonNullable<Dossier
   if (!present.length) return null;
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold text-zinc-200">AI council</h2>
+      <h2 className="mb-3 font-display text-lg font-bold uppercase tracking-wide text-desk-ink">
+        The council
+      </h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {present.map((p) => (
           <Card key={p.key} name={p.name} accent={p.accent} opinion={council[p.key]!} />

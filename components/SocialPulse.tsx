@@ -13,27 +13,29 @@ export default function SocialPulse({ data }: { data: SocialPulseData }) {
 
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold text-zinc-200">Social pulse</h2>
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+      <h2 className="mb-3 font-display text-lg font-bold uppercase tracking-wide text-desk-ink">
+        Social pulse
+      </h2>
+      <div className="rounded-lg border border-desk-line bg-desk-panel p-4">
         <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
           <div>
-            <span className="text-zinc-400">Aggregate sentiment: </span>
-            <span className="font-semibold text-zinc-100">
+            <span className="text-desk-dim">Aggregate sentiment: </span>
+            <span className="font-semibold text-desk-ink">
               {avg === null ? "n/a" : `${avg > 0 ? "+" : ""}${avg.toFixed(2)}`}
             </span>
           </div>
           <div>
-            <span className="text-zinc-400">Mention velocity: </span>
-            <span className="font-semibold text-zinc-100">
+            <span className="text-desk-dim">Mention velocity: </span>
+            <span className="font-semibold text-desk-ink">
               {data.mention_velocity === null ? "n/a" : `${data.mention_velocity}x`}
             </span>
           </div>
           <div>
-            <span className="text-zinc-400">Posts: </span>
-            <span className="font-semibold text-zinc-100">{data.posts.length}</span>
+            <span className="text-desk-dim">Posts: </span>
+            <span className="font-semibold text-desk-ink">{data.posts.length}</span>
           </div>
         </div>
-        {data.note && <p className="mt-2 text-xs text-zinc-500">{data.note}</p>}
+        {data.note && <p className="mt-2 text-xs text-desk-dim">{data.note}</p>}
       </div>
     </section>
   );

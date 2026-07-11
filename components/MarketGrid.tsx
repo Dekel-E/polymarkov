@@ -10,13 +10,26 @@ const CATEGORY_ORDER = [
   "geopolitics",
   "sports",
   "crypto",
-  "finance",
   "economics",
+  "finance",
   "tech",
   "culture",
   "weather",
   "other",
 ];
+
+const CATEGORY_LABELS: Record<string, string> = {
+  politics: "Politics",
+  geopolitics: "Geopolitics",
+  sports: "Sports",
+  crypto: "Crypto",
+  economics: "Economics",
+  finance: "Finance",
+  tech: "Tech",
+  culture: "Culture",
+  weather: "Weather",
+  other: "Everything else",
+};
 
 export default function MarketGrid() {
   const [markets, setMarkets] = useState<MarketSummary[]>([]);
@@ -27,7 +40,7 @@ export default function MarketGrid() {
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    fetchMarkets(40)
+    fetchMarkets(90)
       .then(setMarkets)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -37,36 +50,49 @@ export default function MarketGrid() {
     load();
   }, [load]);
 
-  const categories = useMemo(() => {
-    const present = new Set(markets.map((m) => m.category || "other"));
-    return ["all", ...CATEGORY_ORDER.filter((c) => present.has(c))];
+  const grouped = useMemo(() => {
+    const byCategory = new Map<string, MarketSummary[]>();
+    for (const m of markets) {
+      const c = m.category || "other";
+      byCategory.set(c, [...(byCategory.get(c) ?? []), m]);
+    }
+    return CATEGORY_ORDER.filter((c) => byCategory.has(c)).map((c) => ({
+      category: c,
+      markets: byCategory.get(c)!,
+    }));
   }, [markets]);
 
-  const visible = useMemo(
-    () => (category === "all" ? markets : markets.filter((m) => (m.category || "other") === category)),
+  const chips = useMemo(() => ["all", ...grouped.map((g) => g.category)], [grouped]);
+  const flat = useMemo(
+    () => (category === "all" ? [] : markets.filter((m) => (m.category || "other") === category)),
     [markets, category],
   );
 
   return (
     <section>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {categories.map((c) => (
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        {chips.map((c) => (
           <button
             key={c}
             onClick={() => setCategory(c)}
-            className={`rounded-full px-3.5 py-1.5 text-xs font-semibold capitalize transition ${
+            className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
               category === c
-                ? "bg-emerald-500 text-zinc-950"
-                : "border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                ? "bg-instrument text-desk-deep"
+                : "border border-desk-edge text-desk-dim hover:border-desk-dim hover:text-desk-ink"
             }`}
           >
-            {c === "all" ? "All markets" : c}
+            {c === "all" ? "All" : CATEGORY_LABELS[c] ?? c}
+            {c !== "all" && (
+              <span className="ml-1.5 font-mono text-[10px] opacity-70">
+                {grouped.find((g) => g.category === c)?.markets.length}
+              </span>
+            )}
           </button>
         ))}
         <button
           onClick={load}
           disabled={loading}
-          className="ml-auto rounded-full border border-zinc-800 px-3 py-1.5 text-xs text-zinc-500 transition hover:border-zinc-600 hover:text-zinc-300 disabled:opacity-40"
+          className="ml-auto rounded-full border border-desk-line px-3 py-1.5 text-xs text-desk-dim transition hover:border-desk-edge hover:text-desk-soft disabled:opacity-40"
           title="Refresh markets"
         >
           {loading ? "Loading…" : "↻ Refresh"}
@@ -76,7 +102,7 @@ export default function MarketGrid() {
       {loading && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-44 animate-pulse rounded-2xl bg-zinc-900" />
+            <div key={i} className="h-44 animate-pulse rounded-2xl bg-desk-panel" />
           ))}
         </div>
       )}
@@ -87,7 +113,7 @@ export default function MarketGrid() {
           {error.includes("500") && (
             <div className="mt-1 text-xs text-amber-400/80">
               In local dev this usually means the FastAPI backend is not running — start it
-              with <code className="rounded bg-zinc-900 px-1">npm run dev:api</code>.
+              with <code className="rounded bg-desk-deep px-1">npm run dev:api</code>.
             </div>
           )}
           <button
@@ -99,18 +125,50 @@ export default function MarketGrid() {
         </div>
       )}
 
-      {!loading && !error && visible.length === 0 && (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-400">
-          No markets in this category right now.
-          <button onClick={load} className="ml-2 text-emerald-400 hover:underline">
+      {!loading && !error && markets.length === 0 && (
+        <div className="rounded-xl border border-desk-line bg-desk-panel p-5 text-sm text-desk-dim">
+          No markets returned from Polymarket right now.
+          <button onClick={load} className="ml-2 text-instrument hover:underline">
             Retry
           </button>
         </div>
       )}
 
-      {!loading && (
+      {/* grouped by category (All) */}
+      {!loading && category === "all" && (
+        <div className="space-y-10">
+          {grouped.map(({ category: c, markets: group }) => (
+            <div key={c}>
+              <div className="mb-3 flex items-baseline gap-3 border-b border-desk-line pb-2">
+                <h3 className="font-display text-lg font-bold uppercase tracking-wide text-desk-ink">
+                  {CATEGORY_LABELS[c] ?? c}
+                </h3>
+                <span className="font-mono text-[11px] text-desk-faint">
+                  {group.length} market{group.length === 1 ? "" : "s"}
+                </span>
+                {group.length > 6 && (
+                  <button
+                    onClick={() => setCategory(c)}
+                    className="ml-auto font-mono text-[11px] uppercase tracking-wider text-instrument hover:underline"
+                  >
+                    view all →
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {group.slice(0, 6).map((m) => (
+                  <MarketCard key={m.id} market={m} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* single category (flat) */}
+      {!loading && category !== "all" && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {visible.map((m) => (
+          {flat.map((m) => (
             <MarketCard key={m.id} market={m} />
           ))}
         </div>

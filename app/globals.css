@@ -3,10 +3,15 @@
 @tailwind utilities;
 
 ::selection {
-  background: rgb(52 211 153 / 0.25);
+  background: rgb(240 180 65 / 0.3);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(63 63 70) transparent;
+  scrollbar-color: rgb(36 50 71) transparent;
+}
+
+:focus-visible {
+  outline: 2px solid #f0b441;
+  outline-offset: 2px;
 }
