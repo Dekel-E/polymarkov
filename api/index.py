@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse  # noqa: E402
 
 from backend import config  # noqa: E402
 from backend.agent.types import ExecuteIn, ExecuteOut  # noqa: E402
+from backend.data import polymarket  # noqa: E402
 
 app = FastAPI(title="Polymarkov", docs_url=None, redoc_url=None)
 
@@ -63,6 +64,30 @@ def model_architecture():
             content={"error": "architecture.png not generated yet — run scripts/gen_architecture_png.py"},
         )
     return FileResponse(config.ARCHITECTURE_PNG, media_type="image/png")
+
+
+# --- GUI support endpoints (not part of the graded four) ---------------------
+
+
+@app.get("/api/markets")
+async def markets(limit: int = 20) -> dict:
+    """Trending markets for the GUI market browser."""
+    try:
+        return {"markets": await polymarket.get_trending_markets(min(limit, 50)), "error": None}
+    except Exception as exc:
+        return {"markets": [], "error": str(exc)}
+
+
+@app.get("/api/market")
+async def market_detail(slug: str) -> dict:
+    """Live detail (order book, spread, depth, 7d history) for one market."""
+    try:
+        state = await polymarket.get_market_state(slug)
+        if state is None:
+            return {"market": None, "error": f"No market found for {slug!r}"}
+        return {"market": state.model_dump(), "error": None}
+    except Exception as exc:
+        return {"market": None, "error": str(exc)}
 
 
 @app.post("/api/execute")

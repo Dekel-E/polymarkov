@@ -1,0 +1,44 @@
+{
+  "articles": [
+    {
+      "url": "https://www.reuters.com/markets/us/fed-officials-signal-september-rate-cut-2026-07-09/",
+      "url_mobile": "",
+      "title": "Fed officials signal openness to September rate cut",
+      "seendate": "20260709T143000Z",
+      "socialimage": "",
+      "domain": "reuters.com",
+      "language": "English",
+      "sourcecountry": "United States"
+    },
+    {
+      "url": "https://www.cnbc.com/2026/07/08/powell-testimony-rate-cut-odds.html",
+      "url_mobile": "",
+      "title": "Powell testimony sends rate-cut odds higher",
+      "seendate": "20260708T201500Z",
+      "socialimage": "",
+      "domain": "cnbc.com",
+      "language": "English",
+      "sourcecountry": "United States"
+    },
+    {
+      "url": "https://www.ft.com/content/abc123",
+      "url_mobile": "",
+      "title": "Investors split on timing of next Fed move",
+      "seendate": "20260707T091200Z",
+      "socialimage": "",
+      "domain": "ft.com",
+      "language": "English",
+      "sourcecountry": "United Kingdom"
+    },
+    {
+      "url": "",
+      "url_mobile": "",
+      "title": "Malformed row with no url — must be dropped",
+      "seendate": "not-a-date",
+      "socialimage": "",
+      "domain": "example.com",
+      "language": "English",
+      "sourcecountry": ""
+    }
+  ]
+}
