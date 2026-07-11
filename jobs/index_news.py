@@ -70,6 +70,14 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="fetch and report, write nothing")
     args = parser.parse_args()
 
+    if not args.dry_run:
+        from jobs._preflight import require
+
+        require(
+            "LLMOD_API_KEY", "LLMOD_BASE_URL",
+            "SUPABASE_URL", "SUPABASE_SERVICE_KEY", "PINECONE_API_KEY",
+        )
+
     markets = asyncio.run(polymarket.get_trending_markets(args.markets))
     print(f"tracking {len(markets)} markets")
     articles = asyncio.run(collect_articles(markets))

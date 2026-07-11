@@ -110,6 +110,10 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="report only, write nothing")
     args = parser.parse_args()
 
+    from jobs._preflight import require
+
+    require("SUPABASE_URL", "SUPABASE_SERVICE_KEY")
+
     settled = asyncio.run(settle_positions(args.dry_run))
     print(f"settled {settled} positions")
     harvested = asyncio.run(harvest_precedents(args.dry_run))

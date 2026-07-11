@@ -20,6 +20,10 @@ from backend.llm import client as llm_client
 
 
 async def main_async(limit: int, dry_run: bool) -> None:
+    if not dry_run:
+        from jobs._preflight import require
+
+        require("LLMOD_API_KEY", "LLMOD_BASE_URL", "SUPABASE_URL", "SUPABASE_SERVICE_KEY")
     if not llm_client.is_configured():
         print("LLM is not configured — aborting")
         return

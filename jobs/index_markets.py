@@ -56,6 +56,14 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="fetch and report, write nothing")
     args = parser.parse_args()
 
+    if not args.dry_run:
+        from jobs._preflight import require
+
+        require(
+            "LLMOD_API_KEY", "LLMOD_BASE_URL",
+            "SUPABASE_URL", "SUPABASE_SERVICE_KEY", "PINECONE_API_KEY",
+        )
+
     markets = asyncio.run(fetch_top_markets(args.top))
     print(f"fetched {len(markets)} active markets from Gamma")
     if not markets:

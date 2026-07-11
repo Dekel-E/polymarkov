@@ -45,6 +45,10 @@ async def mirror_position(wallet: str, pos: dict) -> bool:
 
 
 async def main_async(dry_run: bool) -> None:
+    if not dry_run:
+        from jobs._preflight import require
+
+        require("SUPABASE_URL", "SUPABASE_SERVICE_KEY")
     strategies, allowed = strategies_allowed()
     if not strategies.get("copy_trading"):
         print("copy_trading is disabled in agent settings — skipping")
