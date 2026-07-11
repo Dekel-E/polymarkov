@@ -233,6 +233,73 @@ async def unwatch(market_id: str, request: Request) -> dict:
         return {"error": str(exc)}
 
 
+class FollowIn(BaseModel):
+    wallet: str
+    label: str = ""
+
+
+class ImportWalletsIn(BaseModel):
+    wallets: list  # ["0x..."] or [{wallet|address, label|name}]
+
+
+@app.get("/api/wallets")
+async def followed_wallets(request: Request) -> dict:
+    """Wallets the logged-in user follows."""
+    try:
+        user_id = await _user_id_from_request(request)
+        if user_id is None:
+            return {"wallets": [], "error": "login required"}
+        rows = await asyncio.to_thread(supabase_client.get_followed_wallets, user_id)
+        return {"wallets": rows, "error": None}
+    except Exception as exc:
+        return {"wallets": [], "error": str(exc)}
+
+
+@app.post("/api/wallets")
+async def follow_wallet(body: FollowIn, request: Request) -> dict:
+    try:
+        from backend.data import smart_money
+
+        user_id = await _user_id_from_request(request)
+        if user_id is None:
+            return {"error": "login required"}
+        valid, _ = smart_money.validate_wallet_import([{"wallet": body.wallet, "label": body.label}])
+        if not valid:
+            return {"error": "not a valid wallet address (expected 0x + 40 hex chars)"}
+        await asyncio.to_thread(supabase_client.follow_wallets, user_id, valid)
+        return {"error": None}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@app.delete("/api/wallets")
+async def unfollow_wallet(wallet: str, request: Request) -> dict:
+    try:
+        user_id = await _user_id_from_request(request)
+        if user_id is None:
+            return {"error": "login required"}
+        await asyncio.to_thread(supabase_client.unfollow_wallet, user_id, wallet.lower())
+        return {"error": None}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@app.post("/api/wallets/import")
+async def import_wallets(body: ImportWalletsIn, request: Request) -> dict:
+    """Bulk-follow wallets from a user-supplied JSON list."""
+    try:
+        from backend.data import smart_money
+
+        user_id = await _user_id_from_request(request)
+        if user_id is None:
+            return {"imported": 0, "skipped": 0, "error": "login required"}
+        valid, skipped = smart_money.validate_wallet_import(body.wallets)
+        written = await asyncio.to_thread(supabase_client.follow_wallets, user_id, valid)
+        return {"imported": written, "skipped": skipped, "error": None}
+    except Exception as exc:
+        return {"imported": 0, "skipped": 0, "error": str(exc)}
+
+
 class RegisterIn(BaseModel):
     email: str
     password: str

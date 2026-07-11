@@ -7,7 +7,8 @@ import DossierView from "@/components/DossierView";
 import ProbabilityGauge from "@/components/ProbabilityGauge";
 import Sparkline from "@/components/Sparkline";
 import TradePanel from "@/components/TradePanel";
-import { fetchMarketDetail } from "@/lib/api";
+import { fetchMarketDetail, fetchWatchlist, setWatched } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type { MarketState } from "@/lib/types";
 import { useAgentRun } from "@/lib/useAgentRun";
 
@@ -32,8 +33,10 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 export default function MarketPage() {
   const { slug } = useParams<{ slug: string }>();
+  const { token } = useAuth();
   const [market, setMarket] = useState<MarketState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [watched, setWatchedState] = useState(false);
   const { running, elapsed, result, fetchError, run } = useAgentRun();
 
   useEffect(() => {
@@ -42,6 +45,23 @@ export default function MarketPage() {
       .then(setMarket)
       .catch((e) => setLoadError(e instanceof Error ? e.message : String(e)));
   }, [slug]);
+
+  useEffect(() => {
+    if (!token || !slug) return;
+    fetchWatchlist(token)
+      .then((items) => setWatchedState(items.some((i) => i.market_id === slug)))
+      .catch(() => undefined);
+  }, [token, slug]);
+
+  function toggleWatch() {
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
+    const next = !watched;
+    setWatchedState(next);
+    setWatched(slug, next, token).catch(() => setWatchedState(!next));
+  }
 
   const ui = result?.status === "ok" ? result.ui : null;
   const fairValue = ui?.verdict?.fair_probability ?? null;
@@ -78,14 +98,29 @@ export default function MarketPage() {
                 cached {cachedAge(ui.cached_at)}
               </span>
             )}
-            <a
-              href={`https://polymarket.com/market/${market.slug}`}
-              target="_blank"
-              rel="noreferrer"
-              className="ml-auto text-desk-dim transition hover:text-instrument"
-            >
-              polymarket ↗
-            </a>
+            <span className="ml-auto flex items-center gap-3">
+              <button
+                onClick={toggleWatch}
+                aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+                title={watched ? "Remove from watchlist" : "Add to watchlist"}
+                className={`flex items-center gap-1.5 transition ${
+                  watched ? "text-instrument" : "text-desk-dim hover:text-instrument"
+                }`}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill={watched ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
+                  <path d="M12 3l2.7 5.7 6.3.8-4.6 4.3 1.2 6.2L12 17l-5.6 3 1.2-6.2L3 9.5l6.3-.8L12 3Z" />
+                </svg>
+                {watched ? "watching" : "watch"}
+              </button>
+              <a
+                href={`https://polymarket.com/market/${market.slug}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-desk-dim transition hover:text-instrument"
+              >
+                polymarket ↗
+              </a>
+            </span>
           </div>
 
           <div className="space-y-6 p-5">

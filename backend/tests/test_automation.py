@@ -2,7 +2,7 @@ import pytest
 
 from backend import config
 from backend.agent.report_card import brier, score_runs
-from backend.data.smart_money import parse_leaderboard, parse_positions
+from backend.data.smart_money import parse_leaderboard, parse_positions, validate_wallet_import
 from jobs.auto_trade import select_candidates
 
 
@@ -90,6 +90,29 @@ def test_parse_leaderboard_variants():
     }
     assert rows[1]["rank"] == 7
     assert rows[1]["pnl"] == 55.5
+
+
+def test_validate_wallet_import_mixed_shapes():
+    addr1 = "0x" + "a" * 40
+    addr2 = "0x" + "B" * 40
+    valid, skipped = validate_wallet_import(
+        [
+            addr1,  # bare string
+            {"wallet": addr2, "label": "whale two"},
+            {"address": addr1, "name": "dupe of first"},  # duplicate -> skipped
+            "not-a-wallet",
+            {"label": "no address"},
+            42,
+        ]
+    )
+    assert [v["wallet"] for v in valid] == [addr1, addr2.lower()]
+    assert valid[1]["label"] == "whale two"
+    assert skipped == 4
+
+
+def test_validate_wallet_import_rejects_non_list():
+    assert validate_wallet_import({"wallet": "0x" + "a" * 40}) == ([], 0)
+    assert validate_wallet_import("0x" + "a" * 40) == ([], 0)
 
 
 def test_parse_positions_sorted_and_capped():

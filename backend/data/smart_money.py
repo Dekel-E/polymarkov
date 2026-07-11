@@ -6,6 +6,7 @@ parsing is defensive and everything degrades to [] on failure.
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any, Optional
 
@@ -15,6 +16,39 @@ from backend import config
 
 DATA_API = "https://data-api.polymarket.com"
 _HEADERS = {"User-Agent": "polymarkov/0.1 (course project)"}
+
+WALLET_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
+MAX_IMPORT = 100
+
+
+def validate_wallet_import(items: Any) -> tuple[list[dict], int]:
+    """Normalize a user-supplied wallet list (JSON import).
+
+    Accepts ["0x..."] or [{"wallet"|"address": "0x...", "label"|"name": "..."}].
+    Returns (valid unique wallets as {wallet, label}, skipped count).
+    """
+    if not isinstance(items, list):
+        return [], 0
+    valid: list[dict] = []
+    seen: set[str] = set()
+    skipped = 0
+    for item in items[:MAX_IMPORT]:
+        if isinstance(item, str):
+            wallet, label = item.strip(), ""
+        elif isinstance(item, dict):
+            wallet = str(item.get("wallet") or item.get("address") or "").strip()
+            label = str(item.get("label") or item.get("name") or "").strip()[:60]
+        else:
+            skipped += 1
+            continue
+        wallet = wallet.lower()
+        if not WALLET_RE.match(wallet) or wallet in seen:
+            skipped += 1
+            continue
+        seen.add(wallet)
+        valid.append({"wallet": wallet, "label": label})
+    skipped += max(0, len(items) - MAX_IMPORT)
+    return valid, skipped
 
 LEAGUE_CACHE_TTL_S = 600
 _league_cache: dict[str, tuple[float, list[dict]]] = {}

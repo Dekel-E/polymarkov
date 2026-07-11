@@ -246,6 +246,47 @@ def get_watchlist(user_id: str) -> list[str]:
     return [r["market_id"] for r in rows]
 
 
+# ---------------------------------------------------------------------------
+# followed wallets (Smart Money League)
+# ---------------------------------------------------------------------------
+
+
+def follow_wallets(user_id: str, wallets: list[dict]) -> int:
+    """Upsert [{wallet, label}] for a user. Returns rows written."""
+    if not is_configured() or not wallets:
+        return 0
+    rows = [
+        {"user_id": user_id, "wallet": w["wallet"], "label": w.get("label", "")}
+        for w in wallets
+    ]
+    get_client().table("followed_wallets").upsert(rows, on_conflict="user_id,wallet").execute()
+    return len(rows)
+
+
+def unfollow_wallet(user_id: str, wallet: str) -> None:
+    if not is_configured():
+        return
+    get_client().table("followed_wallets").delete().eq("user_id", user_id).eq(
+        "wallet", wallet
+    ).execute()
+
+
+def get_followed_wallets(user_id: str) -> list[dict]:
+    if not is_configured():
+        return []
+    rows = (
+        get_client()
+        .table("followed_wallets")
+        .select("wallet,label")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
+        .data
+        or []
+    )
+    return rows
+
+
 def distinct_watched_market_ids() -> list[str]:
     """All watched markets across users (for the refresh job)."""
     if not is_configured():

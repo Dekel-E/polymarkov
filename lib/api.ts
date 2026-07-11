@@ -2,6 +2,7 @@ import type {
   AgentStats,
   ExecuteOut,
   FillReport,
+  FollowedWallet,
   LeaderRow,
   MarketState,
   MarketSummary,
@@ -133,6 +134,58 @@ export async function setWatched(
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
   const data = (await res.json()) as { error: string | null };
   if (data.error) throw new Error(data.error);
+}
+
+export async function fetchFollowedWallets(token: string): Promise<FollowedWallet[]> {
+  const res = await fetch("/api/wallets", { headers: authHeaders(token) });
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as { wallets: FollowedWallet[]; error: string | null };
+  if (data.error) throw new Error(data.error);
+  return data.wallets;
+}
+
+export async function followWallet(
+  wallet: string,
+  label: string,
+  token: string,
+): Promise<void> {
+  const res = await fetch("/api/wallets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    body: JSON.stringify({ wallet, label }),
+  });
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as { error: string | null };
+  if (data.error) throw new Error(data.error);
+}
+
+export async function unfollowWallet(wallet: string, token: string): Promise<void> {
+  const res = await fetch(`/api/wallets?wallet=${encodeURIComponent(wallet)}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as { error: string | null };
+  if (data.error) throw new Error(data.error);
+}
+
+export async function importWallets(
+  wallets: unknown[],
+  token: string,
+): Promise<{ imported: number; skipped: number }> {
+  const res = await fetch("/api/wallets/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    body: JSON.stringify({ wallets }),
+  });
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as {
+    imported: number;
+    skipped: number;
+    error: string | null;
+  };
+  if (data.error) throw new Error(data.error);
+  return { imported: data.imported, skipped: data.skipped };
 }
 
 export async function fetchMarketDetail(slug: string): Promise<MarketState> {

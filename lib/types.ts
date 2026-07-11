@@ -186,6 +186,11 @@ export interface WalletPosition {
   current_price: number;
 }
 
+export interface FollowedWallet {
+  wallet: string;
+  label: string;
+}
+
 export interface WatchItem {
   market_id: string;
   question: string;
