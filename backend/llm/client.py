@@ -113,6 +113,8 @@ class RunContext:
         return parsed
 
 
+@lru_cache(maxsize=32)
 def load_prompt(name: str) -> str:
-    """Read a prompt file (single source of truth, also served by agent_info)."""
+    """Read a prompt file (single source of truth, also served by agent_info).
+    Cached: prompts only change on deploy."""
     return (config.PROMPTS_DIR / f"{name}.txt").read_text(encoding="utf-8")

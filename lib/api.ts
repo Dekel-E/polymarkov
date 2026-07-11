@@ -246,6 +246,27 @@ export async function executeArbitrage(
   return data.reports;
 }
 
+export interface ActivityEvent {
+  type: "analysis" | "trade" | "settle";
+  at: string;
+  market_id: string | null;
+  verdict?: string | null;
+  latency_ms?: number | null;
+  side?: string;
+  size_usd?: number;
+  strategy?: string | null;
+  outcome?: string | null;
+  pnl?: number | null;
+}
+
+export async function fetchActivity(): Promise<ActivityEvent[]> {
+  const res = await fetch("/api/activity");
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as { events: ActivityEvent[]; error: string | null };
+  if (data.error) throw new Error(data.error);
+  return data.events;
+}
+
 export async function fetchNews(): Promise<NewsArticle[]> {
   const res = await fetch("/api/news");
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);

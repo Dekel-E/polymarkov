@@ -68,12 +68,25 @@ export default function MarketCard({
           <div className="text-[11px] uppercase tracking-wider text-desk-dim">
             Market probability
           </div>
-          <div
-            className={`text-3xl font-bold tabular-nums tracking-tight ${
-              prob >= 50 ? "text-emerald-400" : "text-desk-ink"
-            }`}
-          >
-            {prob < 1 ? prob.toFixed(1) : prob.toFixed(0)}%
+          <div className="flex items-baseline gap-2">
+            <span
+              className={`text-3xl font-bold tabular-nums tracking-tight ${
+                prob >= 50 ? "text-emerald-400" : "text-desk-ink"
+              }`}
+            >
+              {prob < 1 ? prob.toFixed(1) : prob.toFixed(0)}%
+            </span>
+            {market.one_day_change != null && Math.abs(market.one_day_change) >= 0.005 && (
+              <span
+                className={`font-mono text-xs font-semibold tabular-nums ${
+                  market.one_day_change > 0 ? "text-emerald-400" : "text-red-400"
+                }`}
+                title="24h price change"
+              >
+                {market.one_day_change > 0 ? "▲" : "▼"}
+                {Math.abs(market.one_day_change * 100).toFixed(0)}
+              </span>
+            )}
           </div>
         </div>
         <div className="text-right text-xs text-desk-dim">

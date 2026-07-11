@@ -169,7 +169,7 @@ export default function LeaguePage() {
 
   function requireLogin(): boolean {
     if (!token) {
-      window.location.href = "/login";
+      setNote("Following wallets needs an account — log in from the sidebar, then come back.");
       return true;
     }
     return false;

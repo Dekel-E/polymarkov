@@ -1,14 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import DossierView from "@/components/DossierView";
 import MarketGrid from "@/components/MarketGrid";
 import NewsWire from "@/components/NewsWire";
+import PipelineProgress from "@/components/PipelineProgress";
 import { useAgentRun } from "@/lib/useAgentRun";
 
 export default function Home() {
   const [prompt, setPrompt] = useState("");
   const { running, elapsed, result, fetchError, run } = useAgentRun();
+  const resultsRef = useRef<HTMLDivElement | null>(null);
+
+  // bring the progress/results into view when a run starts
+  useEffect(() => {
+    if (running) resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [running]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-10 px-4 py-8 md:px-8">
@@ -39,22 +46,26 @@ export default function Home() {
           >
             {running ? "Running…" : "Run Agent"}
           </button>
-          {running ? (
-            <span className="flex items-center gap-2 font-mono text-xs text-desk-dim">
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-desk-line border-t-instrument" />
-              {elapsed}s — gathering evidence, convening the council…
+          {!running && (
+            <span className="font-mono text-[11px] text-desk-faint">
+              typical run ~1 min · repeat runs are cached
             </span>
-          ) : (
-            <span className="font-mono text-[11px] text-desk-faint">typical run ~1 min · repeat runs are cached</span>
           )}
         </div>
       </section>
 
-      {(result || fetchError) && (
-        <section className="max-w-4xl">
-          <DossierView result={result} fetchError={fetchError} />
-        </section>
-      )}
+      <div ref={resultsRef} className="scroll-mt-4">
+        {running && (
+          <section className="max-w-3xl">
+            <PipelineProgress elapsed={elapsed} />
+          </section>
+        )}
+        {(result || fetchError) && !running && (
+          <section className="max-w-4xl">
+            <DossierView result={result} fetchError={fetchError} appendixOpen />
+          </section>
+        )}
+      </div>
 
       <NewsWire />
 

@@ -6,6 +6,15 @@ import { fetchWatchlist, setWatched } from "@/lib/api";
 import { authConfigured, useAuth } from "@/lib/auth";
 import type { WatchItem } from "@/lib/types";
 
+function ageLabel(iso: string | null): string | null {
+  if (!iso) return null;
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  return hours < 24 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`;
+}
+
 function VerdictChip({ verdict }: { verdict: string | null }) {
   if (!verdict) return <span className="font-mono text-[11px] text-desk-faint">not analyzed yet</span>;
   const cls =
@@ -122,6 +131,11 @@ export default function WatchlistPage() {
                   {item.verdict && item.fair_probability != null && (
                     <span className="font-mono text-[11px] text-desk-dim">
                       fair {(item.fair_probability * 100).toFixed(1)}%
+                    </span>
+                  )}
+                  {item.analyzed_at && (
+                    <span className="font-mono text-[10px] text-desk-faint">
+                      {ageLabel(item.analyzed_at)}
                     </span>
                   )}
                   <button

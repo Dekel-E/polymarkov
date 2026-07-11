@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MarketCard from "@/components/MarketCard";
 import { fetchMarkets, fetchWatchlist, searchMarkets, setWatched } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -42,6 +42,20 @@ export default function MarketGrid() {
   const [results, setResults] = useState<MarketSummary[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [watchedSlugs, setWatchedSlugs] = useState<Set<string>>(new Set());
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
+  // press "/" anywhere to jump to search
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (e.key === "/" && target?.tagName !== "INPUT" && target?.tagName !== "TEXTAREA") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // debounced text search — replaces the grid while a query is active
   useEffect(() => {
@@ -126,18 +140,20 @@ export default function MarketGrid() {
     [markets, category],
   );
 
+  // stars only render for logged-in users — no bait-and-redirect
   const cardProps = user
     ? (m: MarketSummary) => ({ watched: watchedSlugs.has(m.slug), onToggleWatch: toggleWatch })
-    : () => ({ onToggleWatch: toggleWatch });
+    : () => ({});
 
   return (
     <section>
       <div className="mb-4">
         <input
+          ref={searchRef}
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search any market — team, candidate, event…"
+          placeholder="Search any market — team, candidate, event…  ( / )"
           className="w-full max-w-md rounded-xl border border-desk-line bg-desk-deep/80 px-4 py-2 text-sm text-desk-ink placeholder-desk-faint focus:border-instrument/60 focus:outline-none"
         />
       </div>

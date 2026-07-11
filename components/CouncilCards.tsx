@@ -10,16 +10,27 @@ const PERSONAS: { key: keyof NonNullable<DossierUi["council"]>; name: string; ac
 ];
 
 function Card({ name, accent, opinion }: { name: string; accent: string; opinion: PersonaOpinion }) {
+  const prob = Math.min(99, Math.max(1, opinion.estimated_probability * 100));
   return (
-    <div className="rounded-lg border border-desk-line bg-desk-panel p-4">
+    <div className="rounded-2xl border border-desk-line bg-desk-panel p-4">
       <div className="flex items-center justify-between">
         <span className={`font-mono text-sm font-semibold ${accent}`}>{name}</span>
         <span className="text-sm font-bold text-desk-ink">
-          {(opinion.estimated_probability * 100).toFixed(0)}%
+          P(YES) {(opinion.estimated_probability * 100).toFixed(0)}%
           <span className="ml-1 text-xs font-normal text-desk-dim">({opinion.confidence})</span>
         </span>
       </div>
-      <p className="mt-2 text-xs leading-relaxed text-desk-soft">{opinion.thesis}</p>
+      {/* the analyst's own dial on the same 0-100 axis as the page gauge */}
+      <div className="relative mt-2.5 h-1 rounded-full bg-desk-line">
+        <div className="absolute top-0 h-full w-px bg-desk-edge" style={{ left: "50%" }} />
+        <div
+          className="absolute -top-[3px] h-2.5 w-[3px] rounded-sm bg-current text-desk-soft"
+          style={{ left: `${prob}%` }}
+        >
+          <span className={`absolute inset-0 rounded-sm ${accent.replace("text-", "bg-")}`} />
+        </div>
+      </div>
+      <p className="mt-3 text-xs leading-relaxed text-desk-soft">{opinion.thesis}</p>
       {opinion.red_flags?.length > 0 && (
         <ul className="mt-2 list-inside list-disc text-xs text-amber-400/80">
           {opinion.red_flags.map((f, i) => (

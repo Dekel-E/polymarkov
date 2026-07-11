@@ -29,6 +29,7 @@ export interface MarketSummary {
   best_ask: number | null;
   spread: number | null;
   volume24h: number;
+  one_day_change: number | null;
   image: string;
   event_title: string;
 }

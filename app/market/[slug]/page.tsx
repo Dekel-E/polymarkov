@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import DossierView from "@/components/DossierView";
+import Markdown from "@/components/Markdown";
+import PipelineProgress from "@/components/PipelineProgress";
 import ProbabilityGauge from "@/components/ProbabilityGauge";
 import Sparkline from "@/components/Sparkline";
 import TradePanel from "@/components/TradePanel";
@@ -170,18 +172,13 @@ export default function MarketPage() {
           <summary className="cursor-pointer select-none px-4 py-3 font-mono text-xs font-semibold uppercase tracking-wider text-desk-dim transition hover:text-desk-ink">
             resolution terms
           </summary>
-          <p className="whitespace-pre-wrap border-t border-desk-line px-4 py-3 text-sm leading-relaxed text-desk-dim">
-            {market.resolution_criteria}
-          </p>
+          <div className="border-t border-desk-line px-4 py-3">
+            <Markdown>{market.resolution_criteria}</Markdown>
+          </div>
         </details>
       )}
 
-      {running && (
-        <div className="flex items-center gap-3 rounded-xl border border-desk-line bg-desk-panel/60 p-4 font-mono text-xs text-desk-dim">
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-desk-line border-t-instrument" />
-          {elapsed}s — resolving market, reading news &amp; socials, convening the council…
-        </div>
-      )}
+      {running && <PipelineProgress elapsed={elapsed} />}
 
       <DossierView result={result} fetchError={fetchError} liveMarket={market} />
 

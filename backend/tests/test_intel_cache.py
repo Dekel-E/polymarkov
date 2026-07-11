@@ -54,6 +54,29 @@ def test_miss_returns_none():
     assert intel_cache.get("never-analyzed") is None
 
 
+def test_steps_slimmed_in_storage_and_rehydrated_on_read():
+    from backend.llm.client import TOOL_SYSTEM_PROMPT, load_prompt
+
+    judge_prompt = load_prompt("judge")
+    steps = [
+        {"module": "Judge", "prompt": {"system_prompt": judge_prompt, "user_prompt": "u1"}, "response": {}},
+        {"module": "MarketResolver", "prompt": {"system_prompt": TOOL_SYSTEM_PROMPT, "user_prompt": "u2"}, "response": {}},
+        {"module": "Unknown", "prompt": {"system_prompt": "custom", "user_prompt": "u3"}, "response": {}},
+    ]
+    intel_cache.put("slim-market", "resp", steps, {})
+
+    stored = intel_cache._MEM["slim-market"][1]["steps"]
+    assert stored[0]["prompt"]["system_prompt"] == "@prompt:judge"  # deduplicated
+    assert stored[1]["prompt"]["system_prompt"] == "@tool"
+    assert stored[2]["prompt"]["system_prompt"] == "custom"  # unknown kept verbatim
+    assert len(str(stored)) < len(str(steps)) / 2  # the bloat actually went away
+
+    restored = intel_cache.get("slim-market")["steps"]
+    assert restored[0]["prompt"]["system_prompt"] == judge_prompt  # byte-identical
+    assert restored[1]["prompt"]["system_prompt"] == TOOL_SYSTEM_PROMPT
+    assert restored[0]["prompt"]["user_prompt"] == "u1"
+
+
 # ---------------------------------------------------------------------------
 # category inference
 # ---------------------------------------------------------------------------

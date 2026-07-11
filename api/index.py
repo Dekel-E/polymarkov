@@ -152,6 +152,49 @@ async def league_wallet(address: str) -> dict:
         return {"positions": [], "error": str(exc)}
 
 
+@app.get("/api/activity")
+async def activity(limit: int = 25) -> dict:
+    """Chronological feed of what the agent did: analyses, trades, settles."""
+    try:
+        if not supabase_client.is_configured():
+            return {"events": [], "error": None}
+
+        def _collect() -> list[dict]:
+            client = supabase_client.get_client()
+            events: list[dict] = []
+            for r in (
+                client.table("runs").select("market_id,verdict,latency_ms,created_at")
+                .order("created_at", desc=True).limit(15).execute().data or []
+            ):
+                events.append(
+                    {"type": "analysis", "at": r["created_at"], "market_id": r.get("market_id"),
+                     "verdict": r.get("verdict"), "latency_ms": r.get("latency_ms")}
+                )
+            for p in (
+                client.table("positions").select("market_id,side,size_usd,strategy,opened_at")
+                .order("opened_at", desc=True).limit(15).execute().data or []
+            ):
+                events.append(
+                    {"type": "trade", "at": p["opened_at"], "market_id": p["market_id"],
+                     "side": p["side"], "size_usd": p["size_usd"], "strategy": p.get("strategy")}
+                )
+            for p in (
+                client.table("positions").select("market_id,resolved_outcome,pnl,resolved_at")
+                .eq("status", "resolved").not_.is_("resolved_at", "null")
+                .order("resolved_at", desc=True).limit(10).execute().data or []
+            ):
+                events.append(
+                    {"type": "settle", "at": p["resolved_at"], "market_id": p["market_id"],
+                     "outcome": p.get("resolved_outcome"), "pnl": p.get("pnl")}
+                )
+            events.sort(key=lambda e: e["at"] or "", reverse=True)
+            return events[: min(limit, 50)]
+
+        return {"events": await asyncio.to_thread(_collect), "error": None}
+    except Exception as exc:
+        return {"events": [], "error": str(exc)}
+
+
 @app.get("/api/agent/stats")
 async def agent_stats() -> dict:
     """Run history + calibration for the agent report card."""

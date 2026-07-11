@@ -162,6 +162,9 @@ def normalize_market(raw: dict) -> dict:
         "best_ask": best_ask,
         "spread": (best_ask - best_bid) if (best_bid is not None and best_ask is not None) else None,
         "volume24h": _to_float(raw.get("volume24hr")),
+        "one_day_change": (
+            _to_float(raw.get("oneDayPriceChange")) if raw.get("oneDayPriceChange") is not None else None
+        ),
         "liquidity": _to_float(raw.get("liquidityNum") or raw.get("liquidity")),
         "image": raw.get("image") or raw.get("icon") or "",
         "active": bool(raw.get("active", True)),

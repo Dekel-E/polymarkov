@@ -20,6 +20,55 @@ _MEM: dict[str, tuple[float, dict]] = {}  # slug -> (unix_ts, payload)
 _PROMPT_SLUG_RE = re.compile(r"market:\s*([a-z0-9][a-z0-9-]{5,})\s*$", re.IGNORECASE | re.MULTILINE)
 _WANTS_TRADE_RE = re.compile(r"trade:\s*yes", re.IGNORECASE)
 
+# System prompts are static files — storing them verbatim in every cached
+# step bloats rows ~10x. Store a marker, rehydrate on read.
+_PROMPT_FILE_BY_MODULE = {
+    "QueryPlanner": "query_planner",
+    "SentimentScorer": "sentiment_scorer",
+    "BullAnalyst": "council_bull",
+    "BearAnalyst": "council_bear",
+    "QuantAnalyst": "council_quant",
+    "ResolutionSkeptic": "council_resolution_skeptic",
+    "Judge": "judge",
+}
+_TOOL_MARKER = "@tool"
+_PROMPT_MARKER_RE = re.compile(r"^@prompt:([a-z_]+)$")
+
+
+def _slim_steps(steps: list[dict]) -> list[dict]:
+    from backend.llm.client import TOOL_SYSTEM_PROMPT
+
+    slimmed = []
+    for step in steps:
+        prompt = dict(step.get("prompt") or {})
+        module = step.get("module", "")
+        if prompt.get("system_prompt") == TOOL_SYSTEM_PROMPT:
+            prompt["system_prompt"] = _TOOL_MARKER
+        elif module in _PROMPT_FILE_BY_MODULE:
+            prompt["system_prompt"] = f"@prompt:{_PROMPT_FILE_BY_MODULE[module]}"
+        slimmed.append({**step, "prompt": prompt})
+    return slimmed
+
+
+def _rehydrate_steps(steps: list[dict]) -> list[dict]:
+    from backend.llm.client import TOOL_SYSTEM_PROMPT, load_prompt
+
+    restored = []
+    for step in steps:
+        prompt = dict(step.get("prompt") or {})
+        sp = prompt.get("system_prompt", "")
+        if sp == _TOOL_MARKER:
+            prompt["system_prompt"] = TOOL_SYSTEM_PROMPT
+        else:
+            match = _PROMPT_MARKER_RE.match(sp)
+            if match:
+                try:
+                    prompt["system_prompt"] = load_prompt(match.group(1))
+                except OSError:
+                    prompt["system_prompt"] = "(prompt file unavailable)"
+        restored.append({**step, "prompt": prompt})
+    return restored
+
 
 def slug_from_prompt(prompt: str) -> Optional[str]:
     """Extract the slug from the GUI's templated prompt ('Market: <slug>').
@@ -43,38 +92,38 @@ def _age_s(created_at: str) -> float:
 
 
 def get(slug: str) -> Optional[dict]:
-    """Fresh cached payload for a market, or None."""
+    """Fresh cached payload for a market (steps rehydrated), or None."""
+    payload = None
     hit = _MEM.get(slug)
     if hit and time.time() - hit[0] < config.INTEL_CACHE_TTL_S:
-        return hit[1]
-
-    if not supabase_client.is_configured():
+        payload = hit[1]
+    elif supabase_client.is_configured():
+        try:
+            rows = (
+                supabase_client.get_client()
+                .table("intel_cache")
+                .select("payload,created_at")
+                .eq("market_id", slug)
+                .limit(1)
+                .execute()
+                .data
+            )
+        except Exception:
+            return None
+        if rows:
+            candidate = rows[0]["payload"]
+            if _age_s(candidate.get("created_at") or rows[0]["created_at"]) < config.INTEL_CACHE_TTL_S:
+                payload = candidate
+                _MEM[slug] = (time.time(), payload)
+    if payload is None:
         return None
-    try:
-        rows = (
-            supabase_client.get_client()
-            .table("intel_cache")
-            .select("payload,created_at")
-            .eq("market_id", slug)
-            .limit(1)
-            .execute()
-            .data
-        )
-    except Exception:
-        return None
-    if not rows:
-        return None
-    payload = rows[0]["payload"]
-    if _age_s(payload.get("created_at") or rows[0]["created_at"]) >= config.INTEL_CACHE_TTL_S:
-        return None
-    _MEM[slug] = (time.time(), payload)
-    return payload
+    return {**payload, "steps": _rehydrate_steps(payload.get("steps") or [])}
 
 
 def put(slug: str, response: str, steps: list[Any], ui: dict) -> None:
     payload = {
         "response": response,
-        "steps": steps,
+        "steps": _slim_steps(steps),
         "ui": ui,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }

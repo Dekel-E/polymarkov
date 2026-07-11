@@ -66,6 +66,7 @@ export default function PortfolioPage() {
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState<string | null>(null);
   const [closeNote, setCloseNote] = useState<string | null>(null);
+  const [strategyFilter, setStrategyFilter] = useState<string>("all");
 
   const load = useCallback(() => {
     setLoading(true);
@@ -97,6 +98,13 @@ export default function PortfolioPage() {
   }
 
   const stats = portfolio?.stats;
+  const byStrategy = (rows: Position[]) =>
+    strategyFilter === "all" ? rows : rows.filter((p) => (p.strategy ?? "manual") === strategyFilter);
+  const presentStrategies = portfolio
+    ? Array.from(
+        new Set([...portfolio.open, ...portfolio.resolved].map((p) => p.strategy ?? "manual")),
+      )
+    : [];
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 md:px-8">
@@ -194,9 +202,32 @@ export default function PortfolioPage() {
             <>
               <EquityChart portfolio={portfolio} />
 
+              {presentStrategies.length > 1 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {["all", ...presentStrategies].map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setStrategyFilter(s)}
+                      className={`rounded-full px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-wider transition ${
+                        strategyFilter === s
+                          ? "bg-instrument text-desk-deep"
+                          : "border border-desk-edge text-desk-dim hover:text-desk-ink"
+                      }`}
+                    >
+                      {s === "all" ? "all strategies" : s.replace("_", " ")}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <section>
-                <h2 className="mb-3 text-lg font-bold tracking-tight">Open positions</h2>
-                {portfolio.open.length === 0 ? (
+                <div className="mb-3 flex items-baseline justify-between gap-4">
+                  <h2 className="text-lg font-bold tracking-tight">Open positions</h2>
+                  <span className="font-mono text-[10px] text-desk-faint">
+                    current prices &amp; unrealized PnL from the last market index (refreshed every 2h)
+                  </span>
+                </div>
+                {byStrategy(portfolio.open).length === 0 ? (
                   <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-5 text-sm text-desk-dim">
                     No open positions. Run the agent with <code className="rounded bg-desk-deep px-1">Trade: yes</code>,
                     or execute a trade from any market&apos;s analysis.
@@ -217,7 +248,7 @@ export default function PortfolioPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {portfolio.open.map((p) => (
+                        {byStrategy(portfolio.open).map((p) => (
                           <tr key={p.id} className="border-b border-desk-line/60 last:border-0">
                             <td className="max-w-[260px] truncate px-4 py-3">
                               <Link href={`/market/${p.market_id}`} className="text-desk-ink hover:text-instrument">
@@ -258,7 +289,7 @@ export default function PortfolioPage() {
 
               <section>
                 <h2 className="mb-3 text-lg font-bold tracking-tight">History</h2>
-                {portfolio.resolved.length === 0 ? (
+                {byStrategy(portfolio.resolved).length === 0 ? (
                   <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-5 text-sm text-desk-dim">
                     No resolved trades yet.
                   </div>
@@ -276,7 +307,7 @@ export default function PortfolioPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {portfolio.resolved.map((p) => (
+                        {byStrategy(portfolio.resolved).map((p) => (
                           <tr key={p.id} className="border-b border-desk-line/60 last:border-0">
                             <td className="max-w-[260px] truncate px-4 py-3">
                               <Link href={`/market/${p.market_id}`} className="text-desk-ink hover:text-instrument">

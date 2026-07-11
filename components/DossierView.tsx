@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import CouncilCards from "@/components/CouncilCards";
-import MarketPanel from "@/components/MarketPanel";
+import Markdown from "@/components/Markdown";
 import NewsSentiment from "@/components/NewsSentiment";
 import SocialPulse from "@/components/SocialPulse";
 import StepsTrace from "@/components/StepsTrace";
@@ -12,10 +13,12 @@ export default function DossierView({
   result,
   fetchError,
   liveMarket,
+  appendixOpen = false,
 }: {
   result: ExecuteOut | null;
   fetchError: string | null;
-  liveMarket?: MarketState | null; // already shown by the page? then skip ui.market
+  liveMarket?: MarketState | null; // the page already shows this market's header
+  appendixOpen?: boolean; // root page keeps the graded artifacts visible
 }) {
   if (fetchError) {
     return (
@@ -24,7 +27,7 @@ export default function DossierView({
         {fetchError.includes("500") && (
           <div className="mt-1 text-xs text-red-400/80">
             In local dev this usually means the FastAPI backend is not running — start it
-            with <code className="rounded bg-desk-panel px-1">npm run dev:api</code>.
+            with <code className="rounded bg-desk-deep px-1">npm run dev:api</code>.
           </div>
         )}
       </div>
@@ -33,6 +36,8 @@ export default function DossierView({
   if (!result) return null;
 
   const ui = result.ui ?? null;
+  const hasSections = Boolean(ui?.verdict);
+
   return (
     <div className="space-y-8">
       {result.status === "error" && (
@@ -44,37 +49,77 @@ export default function DossierView({
       {ui?.verdict && (
         <Verdict data={ui.verdict} market={ui.market ?? liveMarket ?? undefined} />
       )}
-      {ui?.market && !liveMarket && <MarketPanel market={ui.market} />}
+
+      {/* home-page runs: link to the market's case file instead of repeating it */}
+      {ui?.market && !liveMarket && (
+        <Link
+          href={`/market/${ui.market.slug}`}
+          className="flex items-center justify-between gap-4 rounded-2xl border border-desk-line bg-desk-panel/60 px-5 py-3.5 transition hover:border-instrument/50"
+        >
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold text-desk-ink">
+              {ui.market.question}
+            </span>
+            <span className="font-mono text-[11px] text-desk-dim">
+              market {(ui.market.mid * 100).toFixed(1)}% · {ui.market.category}
+            </span>
+          </span>
+          <span className="shrink-0 font-mono text-xs uppercase tracking-wider text-instrument">
+            open case file →
+          </span>
+        </Link>
+      )}
+
       {ui?.news && ui.news.length > 0 && <NewsSentiment clusters={ui.news} />}
       {ui?.social && <SocialPulse data={ui.social} />}
       {ui?.council && <CouncilCards council={ui.council} />}
 
       {ui?.fill && (
-        <section className="rounded-xl border border-desk-line bg-desk-panel p-4 text-sm">
-          <h2 className="mb-2 text-lg font-semibold text-desk-ink">Paper-trade fill</h2>
-          <div className="grid grid-cols-2 gap-2 text-desk-soft sm:grid-cols-3">
-            <div>Side: {ui.fill.side}</div>
-            <div>Size: ${ui.fill.size_usd.toFixed(2)}</div>
-            <div>VWAP: {(ui.fill.vwap * 100).toFixed(1)}%</div>
-            <div>Slippage: {ui.fill.slippage_bps.toFixed(1)} bps</div>
-            <div>Fee: ${ui.fill.fee_paid.toFixed(2)}</div>
-            <div className="truncate">Position: {ui.fill.position_id}</div>
-          </div>
-        </section>
-      )}
-
-      {result.response && (
-        <section>
-          <h2 className="mb-3 font-display text-lg font-bold uppercase tracking-wide text-desk-ink">
-            Full report
+        <section className="rounded-2xl border border-desk-line bg-desk-panel/70 p-4 text-sm">
+          <h2 className="mb-2 font-display text-lg font-bold uppercase tracking-wide text-desk-ink">
+            Paper-trade fill
           </h2>
-          <div className="whitespace-pre-wrap rounded-xl border border-desk-line bg-desk-panel p-5 text-sm leading-relaxed text-desk-ink">
-            {result.response}
+          <div className="grid grid-cols-2 gap-2 font-mono text-xs text-desk-soft sm:grid-cols-3">
+            <div>side: {ui.fill.side.replace("_", " ")}</div>
+            <div>size: ${ui.fill.size_usd.toFixed(2)}</div>
+            <div>vwap: {(ui.fill.vwap * 100).toFixed(1)}%</div>
+            <div>slippage: {ui.fill.slippage_bps.toFixed(1)} bps</div>
+            <div>fee: ${ui.fill.fee_paid.toFixed(2)}</div>
+            <div className="truncate">position: {ui.fill.position_id}</div>
           </div>
         </section>
       )}
 
-      <StepsTrace steps={result.steps} />
+      {/* refusals / candidate lists / anything without structured sections
+          render the markdown response directly */}
+      {result.response && !hasSections && (
+        <div className="rounded-2xl border border-desk-line bg-desk-panel/60 p-5">
+          <Markdown>{result.response}</Markdown>
+        </div>
+      )}
+
+      {/* appendix: the graded artifacts, folded — humans read the sections above */}
+      {(result.response || result.steps.length > 0) && hasSections && (
+        <details open={appendixOpen} className="group rounded-2xl border border-desk-line bg-desk-panel/40">
+          <summary className="cursor-pointer select-none px-5 py-3.5 font-mono text-xs font-semibold uppercase tracking-wider text-desk-dim transition hover:text-desk-ink">
+            appendix — full report &amp; run log
+            <span className="ml-2 font-normal normal-case text-desk-faint">
+              the verbatim dossier and every model call
+            </span>
+          </summary>
+          <div className="space-y-6 border-t border-desk-line px-5 py-4">
+            {result.response && (
+              <div className="rounded-xl bg-desk-deep/40 p-4">
+                <Markdown>{result.response}</Markdown>
+              </div>
+            )}
+            <StepsTrace steps={result.steps} />
+          </div>
+        </details>
+      )}
+
+      {/* runs without sections still need the graded trace visible */}
+      {result.steps.length > 0 && !hasSections && <StepsTrace steps={result.steps} />}
     </div>
   );
 }
