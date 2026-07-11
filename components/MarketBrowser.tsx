@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchMarkets } from "@/lib/api";
 import type { MarketSummary } from "@/lib/types";
 
@@ -21,21 +21,36 @@ export default function MarketBrowser({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
     fetchMarkets(20)
       .then(setMarkets)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold text-slate-200">
-        Trending markets
-        <span className="ml-2 text-xs font-normal text-slate-500">
-          top by 24h volume — click one to inspect &amp; generate intel
-        </span>
-      </h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-slate-200">
+          Trending markets
+          <span className="ml-2 text-xs font-normal text-slate-500">
+            top by 24h volume — click one to inspect &amp; generate intel
+          </span>
+        </h2>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-slate-500 hover:text-slate-200 disabled:opacity-40"
+        >
+          {loading ? "Loading…" : "↻ Refresh"}
+        </button>
+      </div>
 
       {loading && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -45,16 +60,31 @@ export default function MarketBrowser({
         </div>
       )}
 
-      {error && (
+      {error && !loading && (
         <div className="rounded-lg border border-amber-800 bg-amber-950/40 p-3 text-sm text-amber-300">
           Could not load markets: {error}
           {error.includes("500") && (
             <div className="mt-1 text-xs text-amber-400/80">
               In local dev this usually means the FastAPI backend is not running —
               start it with <code className="rounded bg-slate-900 px-1">npm run dev:api</code>{" "}
-              in a second terminal, then reload.
+              in a second terminal.
             </div>
           )}
+          <button
+            onClick={load}
+            className="mt-2 block rounded bg-amber-900/60 px-3 py-1 text-xs font-semibold text-amber-200 transition hover:bg-amber-800/60"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && markets.length === 0 && (
+        <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 text-sm text-slate-400">
+          No markets returned from Polymarket right now.
+          <button onClick={load} className="ml-2 text-sky-400 hover:underline">
+            Retry
+          </button>
         </div>
       )}
 
