@@ -123,6 +123,7 @@ MAX_COUNCIL_DISAGREEMENT = 0.25  # PASS if persona estimates differ more
 
 KELLY_FRACTION = 0.25            # quarter Kelly
 MAX_SIZE_PCT_BANKROLL = 0.05     # hard cap: 5% of bankroll
+PAPER_BANKROLL_USD = 10_000      # simulated bankroll for PaperBroker sizing
 
 # ---------------------------------------------------------------------------
 # Pipeline

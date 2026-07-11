@@ -33,6 +33,7 @@ from backend.agent.types import (
 )
 from backend.data import supabase_client
 from backend.llm.client import RunContext
+from backend.sim import paper_broker
 
 DISCLAIMER = (
     "_Polymarkov is an educational tool doing paper trading only. "
@@ -106,13 +107,18 @@ async def _run(ctx: RunContext, user_prompt: str, started: float) -> ExecuteOut:
     priced = pricing.compute_pricing(market, council, risk, len(evidence.clusters))
     verdict = await judge.run_judge(ctx, market, council, priced)
 
-    # 8. PaperBroker — Phase 7; note intent for now
+    # 8. PaperBroker (tool) — only when the user asked to trade and verdict isn't PASS
+    fill = None
     trade_note = None
-    if plan.wants_trade and priced.verdict != "PASS":
-        trade_note = "Paper-trade execution (PaperBroker) ships in a later phase — no position was opened."
+    if plan.wants_trade:
+        if priced.verdict == "PASS":
+            trade_note = "No paper trade opened: the verdict is PASS."
+        else:
+            fill = await paper_broker.execute_paper_trade(ctx, market, priced)
+            trade_note = None if fill else "No paper trade opened: the order book had no fillable liquidity."
 
-    response = _dossier_markdown(market, verdict, priced, evidence.clusters, pulse, council, trade_note)
-    ui = _ui_payload(market, verdict, priced, evidence.clusters, pulse, council)
+    response = _dossier_markdown(market, verdict, priced, evidence.clusters, pulse, council, trade_note, fill)
+    ui = _ui_payload(market, verdict, priced, evidence.clusters, pulse, council, fill)
 
     latency_ms = int((time.monotonic() - started) * 1000)
     await asyncio.to_thread(
@@ -147,6 +153,7 @@ def _dossier_markdown(
     pulse: SocialPulse,
     council: dict[str, PersonaOpinion],
     trade_note: str | None,
+    fill=None,
 ) -> str:
     v = verdict.verdict.replace("_", " ")
     lines = [
@@ -189,6 +196,15 @@ def _dossier_markdown(
         lines += ["", "## Key risks"]
         lines += [f"- {r}" for r in verdict.key_risks]
 
+    if fill:
+        lines += [
+            "",
+            "## Paper-trade fill",
+            f"- **{fill.side.replace('_', ' ')}** ${fill.size_usd:,.2f} at VWAP {_pct(fill.vwap)}"
+            f" | slippage {fill.slippage_bps:.1f} bps vs mid | fee ${fill.fee_paid:,.2f}"
+            f" | {fill.levels_consumed} book level(s)",
+            f"- Position id: `{fill.position_id}`",
+        ]
     if trade_note:
         lines += ["", f"_{trade_note}_"]
 
@@ -203,6 +219,7 @@ def _ui_payload(
     clusters: list[EvidenceCluster],
     pulse: SocialPulse,
     council: dict[str, PersonaOpinion],
+    fill=None,
 ) -> dict:
     persona_key = {"BullAnalyst": "bull", "BearAnalyst": "bear", "QuantAnalyst": "quant", "ResolutionSkeptic": "skeptic"}
     return {
@@ -227,5 +244,5 @@ def _ui_payload(
             }
             for name, o in council.items()
         },
-        "fill": None,  # PaperBroker (Phase 7)
+        "fill": fill.model_dump() if fill else None,
     }

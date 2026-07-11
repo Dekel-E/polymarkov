@@ -8,6 +8,7 @@ flowing through, and the dossier/ui assembly.
 import pytest
 
 from backend import config
+from backend.data import supabase_client
 from backend.agent import orchestrator
 from backend.agent.types import MarketState, Step, StepPrompt
 from backend.data import gdelt, pinecone_client, polymarket, social
@@ -154,9 +155,11 @@ def mocked_pipeline(monkeypatch):
     monkeypatch.setattr(polymarket, "get_market_state", fake_state)
     monkeypatch.setattr(gdelt, "fetch_articles", fake_articles)
     monkeypatch.setattr(social, "gather_social", fake_social)
-    # hermetic: never touch live Pinecone/embeddings even when .env has creds
+    # hermetic: never touch live Pinecone/embeddings/Supabase even with .env creds
     monkeypatch.setattr(embeddings, "is_configured", lambda: False)
     monkeypatch.setattr(pinecone_client, "is_configured", lambda: False)
+    monkeypatch.setattr(supabase_client, "log_run", lambda run: None)
+    monkeypatch.setattr(supabase_client, "insert_position", lambda p: "pos-test")
 
 
 LLM_MODULES = {"QueryPlanner", "SentimentScorer", "BullAnalyst", "BearAnalyst", "QuantAnalyst", "ResolutionSkeptic", "Judge"}
@@ -225,6 +228,42 @@ async def test_failure_returns_error_envelope(monkeypatch):
     assert "LLM is down" in result.error
     assert result.response is None
     assert result.steps == []
+
+
+async def test_wants_trade_executes_paper_broker(mocked_pipeline, monkeypatch):
+    # user asks to trade + stronger bull evidence -> BUY_YES -> PaperBroker runs
+    monkeypatch.setitem(
+        CANNED, "QueryPlanner", dict(CANNED["QueryPlanner"], wants_trade=True)
+    )
+    strong_bull = dict(
+        CANNED["BullAnalyst"],
+        evidence_weights=[
+            {
+                "evidence_id": "c1",
+                "direction": "yes",
+                "strength": 1.0,
+                "reliability": 0.9,
+                "already_priced_in": 0.0,
+                "citation": "https://reuters.example/fed",
+            }
+        ],
+    )
+    monkeypatch.setitem(CANNED, "BullAnalyst", strong_bull)
+
+    async def fake_book(token_id):
+        return {"bids": [(0.49, 5000.0)], "asks": [(0.51, 5000.0)]}
+
+    monkeypatch.setattr(polymarket, "get_order_book", fake_book)
+
+    result = await orchestrator.run_pipeline("analyze and paper trade the fed market")
+    assert result.status == "ok"
+    assert result.ui["verdict"]["verdict"] == "BUY_YES"
+    fill = result.ui["fill"]
+    assert fill is not None
+    assert fill["side"] == "BUY_YES"
+    assert fill["vwap"] == pytest.approx(0.51)
+    assert "PaperBroker" in [s.module for s in result.steps]
+    assert "Paper-trade fill" in result.response
 
 
 async def test_ambiguous_market_returns_candidates(mocked_pipeline, monkeypatch):

@@ -79,6 +79,17 @@ async def markets(limit: int = 20) -> dict:
         return {"markets": [], "error": str(exc)}
 
 
+@app.get("/api/portfolio")
+async def portfolio() -> dict:
+    """Paper-trading positions + headline stats for the GUI."""
+    try:
+        from backend.sim.portfolio import get_portfolio
+
+        return {"portfolio": get_portfolio(), "error": None}
+    except Exception as exc:
+        return {"portfolio": None, "error": str(exc)}
+
+
 @app.get("/api/market")
 async def market_detail(slug: str) -> dict:
     """Live detail (order book, spread, depth, 7d history) for one market."""
