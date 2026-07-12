@@ -183,8 +183,14 @@ AGENDA_RUNS_PER_JOB = 3           # agenda items analyzed per worker run
 MAX_ANALYSES_PER_DAY = 40         # hard LLM budget: pipeline runs per UTC day
 TUNE_DISABLE_LOSS_USD = 50        # self-tuning: 7d realized loss that disables a strategy
 TUNE_MIN_TRADES = 5               # ...but only with enough evidence
-EXCERPT_CLUSTERS = 3              # top news clusters whose pages the agent reads
+EXCERPT_CLUSTERS = 4              # top news clusters whose pages the agent reads
 EXCERPT_MAX_CHARS = 500           # excerpt length carried into the council context
+
+# News intake + web fallback
+GNEWS_MAX_RECORDS = 15            # Google News results per query (2 queries/run)
+WEB_SEARCH_ENABLED = True         # DuckDuckGo fallback when news runs thin
+WEB_SEARCH_MIN_ARTICLES = 4       # below this article count, search the web
+WEB_SEARCH_RESULTS = 6
 
 # Market making (paper): quote both sides, settle fills against what the
 # market actually traded through. Inventory risk is the binding constraint.

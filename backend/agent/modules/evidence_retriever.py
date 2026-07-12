@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 from backend import config
 from backend.agent.types import EvidenceCluster, Precedent, QueryPlan
-from backend.data import gdelt, google_news, pinecone_client
+from backend.data import gdelt, google_news, pinecone_client, web_search
 from backend.llm import embeddings
 from backend.llm.client import RunContext
 
@@ -135,19 +135,34 @@ async def _precedents(question: str) -> list[Precedent]:
 async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> EvidencePack:
     news_query = " ".join(plan.entities[:3]) or market.question
 
-    gdelt_live, gnews_live, cached, precedents = await asyncio.gather(
+    # two Google News angles: the planner's entities AND the literal question
+    gnews_queries = [news_query]
+    if market.question and market.question.lower() != news_query.lower():
+        gnews_queries.append(market.question)
+
+    gdelt_live, cached, precedents, *gnews_batches = await asyncio.gather(
         gdelt.fetch_articles(news_query),
-        google_news.fetch_articles(news_query, max_records=10),
         _pinecone_news(market.question),
         _precedents(market.question),
+        *(google_news.fetch_articles(q, max_records=config.GNEWS_MAX_RECORDS) for q in gnews_queries),
     )
+    gnews_live = [a for batch in gnews_batches for a in batch]
 
     # merge, dedup by url (live wins: it's fresher)
     by_url = {a["url"]: a for a in cached}
     by_url.update({a["url"]: a for a in gdelt_live})
     by_url.update({a["url"]: a for a in gnews_live})
+
+    # web fallback: when the news feeds run thin, the agent searches the
+    # open web itself (the top clusters get crawled for excerpts below)
+    web_results: list[dict] = []
+    if config.WEB_SEARCH_ENABLED and len(by_url) < config.WEB_SEARCH_MIN_ARTICLES:
+        web_results = await web_search.search(news_query)
+        for a in web_results:
+            by_url.setdefault(a["url"], a)
+
     articles = list(by_url.values())
-    live = gdelt_live + gnews_live
+    live = gdelt_live + gnews_live + web_results
 
     vectors: list[list[float]] | None = None
     if articles and embeddings.is_configured():
@@ -187,7 +202,7 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
     ctx.add_tool_step(
         MODULE,
         f"news_query={news_query!r}; gdelt={len(gdelt_live)} google_news={len(gnews_live)} "
-        f"cached={len(cached)} articles",
+        f"web_search={len(web_results)} cached={len(cached)} articles",
         {
             "clusters": [
                 {"id": c.id, "headline": c.headline, "source": c.source, "date": c.date}

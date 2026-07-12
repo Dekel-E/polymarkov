@@ -388,7 +388,7 @@ async def put_settings(body: SettingsIn, request: Request) -> dict:
 
 
 @app.get("/api/market/news")
-async def market_news(slug: str, limit: int = 8) -> dict:
+async def market_news(slug: str, limit: int = 10) -> dict:
     """Latest news relevant to ONE market: live Google News search on the
     market question, merged with indexer-tagged articles. Semantic matches
     only count above the relevance floor."""

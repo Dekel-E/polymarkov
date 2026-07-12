@@ -161,8 +161,14 @@ def mocked_pipeline(monkeypatch):
     async def fake_gnews(query, max_records=10, days=7):
         return []
 
+    async def fake_web(query, max_results=6):
+        return []
+
+    from backend.data import web_search
+
     monkeypatch.setattr(gdelt, "fetch_articles", fake_articles)
     monkeypatch.setattr(google_news, "fetch_articles", fake_gnews)
+    monkeypatch.setattr(web_search, "search", fake_web)
     monkeypatch.setattr(social, "gather_social", fake_social)
     # hermetic: never touch live Pinecone/embeddings/Supabase even with .env creds
     monkeypatch.setattr(embeddings, "is_configured", lambda: False)
