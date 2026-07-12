@@ -104,6 +104,22 @@ async def execute_paper_trade(
 # ---------------------------------------------------------------------------
 
 
+def close_permission(owner: Optional[str], user_id: Optional[str], allow_agent: bool) -> Optional[str]:
+    """Ownership rule for closing a position (pure). None = allowed.
+
+    Agent-book positions (owner is None) are managed exclusively by the
+    agent's own jobs (risk manager, thesis exits) — never from the GUI.
+    User positions can only be closed by their owner.
+    """
+    if owner is None:
+        return None if allow_agent else (
+            "the agent's book is managed by its own risk rules — only your own positions can be closed"
+        )
+    if owner != user_id:
+        return "this position belongs to another user"
+    return None
+
+
 def exit_pnl(position: dict, exit_price: float, exit_fee: float) -> float:
     """Realized PnL of closing a position at `exit_price` (the traded token)."""
     entry = float(position["entry_price"])
@@ -113,9 +129,12 @@ def exit_pnl(position: dict, exit_price: float, exit_fee: float) -> float:
     return round(proceeds - size_usd - float(position.get("fee_paid") or 0) - exit_fee, 4)
 
 
-async def close_position(position_id: str, user_id: Optional[str] = None) -> dict:
+async def close_position(
+    position_id: str, user_id: Optional[str] = None, allow_agent: bool = False
+) -> dict:
     """Close an open paper position at the current book. Returns a report dict
-    with an `error` key on failure (never raises for expected cases)."""
+    with an `error` key on failure (never raises for expected cases).
+    `allow_agent=True` is for the agent's own jobs only — never the API."""
     rows = (
         supabase_client.get_client()
         .table("positions")
@@ -132,8 +151,9 @@ async def close_position(position_id: str, user_id: Optional[str] = None) -> dic
     position = rows[0]
     if position.get("status") != "open":
         return {"error": "position is already resolved"}
-    if position.get("user_id") and position["user_id"] != user_id:
-        return {"error": "this position belongs to another user"}
+    denied = close_permission(position.get("user_id"), user_id, allow_agent)
+    if denied:
+        return {"error": denied}
 
     market = await polymarket.get_market_state(str(position["market_id"]))
     if market is None:

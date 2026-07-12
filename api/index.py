@@ -357,9 +357,12 @@ async def get_settings() -> dict:
 
 
 @app.put("/api/settings")
-async def put_settings(body: SettingsIn) -> dict:
-    """Partial update from the Strategy Desk (numbers clamped to sane bounds)."""
+async def put_settings(body: SettingsIn, request: Request) -> dict:
+    """Partial update from the Strategy Desk (login required — the agent's
+    controls are not anonymous; numbers clamped to sane bounds)."""
     try:
+        if await _user_id_from_request(request) is None:
+            return {"settings": None, "error": "login required to change the agent's settings"}
         patch: dict = {}
         if body.strategies is not None:
             patch["strategies"] = {
@@ -460,12 +463,14 @@ async def arbitrage_execute(body: ArbExecuteIn, request: Request) -> dict:
     try:
         from backend.sim import arbitrage
 
+        user_id = await _user_id_from_request(request)
+        if user_id is None:
+            return {"reports": [], "error": "login required — executed legs belong to your account"}
         legs = body.opportunity.get("legs") or []
         if not legs or len(legs) > 16:
             return {"reports": [], "error": "opportunity has no executable legs"}
         for leg in legs:
             leg["size_usd"] = max(1.0, min(float(leg.get("size_usd", 0)), config.ARB_MAX_SIZE_USD))
-        user_id = await _user_id_from_request(request)
         reports = await arbitrage.execute_legs(body.opportunity, user_id=user_id)
         return {"reports": reports, "error": None}
     except Exception as exc:
@@ -580,8 +585,10 @@ async def manual_trade(body: TradeIn, request: Request) -> dict:
         from backend.llm.client import RunContext
         from backend.sim import paper_broker
 
-        size_usd = max(1.0, min(body.size_usd, 1000.0))  # sane paper limits
         user_id = await _user_id_from_request(request)
+        if user_id is None:
+            return {"fill": None, "error": "login required — trades belong to your account"}
+        size_usd = max(1.0, min(body.size_usd, 1000.0))  # sane paper limits
         market = await polymarket.get_market_state(body.slug)
         if market is None:
             return {"fill": None, "error": f"no market found for {body.slug!r}"}
@@ -614,6 +621,8 @@ async def close_position(body: CloseIn, request: Request) -> dict:
         from backend.sim import paper_broker
 
         user_id = await _user_id_from_request(request)
+        if user_id is None:
+            return {"error": "login required — only your own positions can be closed"}
         return await paper_broker.close_position(body.position_id, user_id)
     except Exception as exc:
         return {"error": str(exc)}

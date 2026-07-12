@@ -154,6 +154,20 @@ async def test_thin_book_partial_fill_flagged(monkeypatch, captured_positions):
     assert ctx.steps[-1].response["exhausted"] is True
 
 
+def test_close_permission_defines_userspace():
+    from backend.sim.paper_broker import close_permission
+
+    # agent book: only the agent's own jobs may close
+    assert close_permission(None, None, allow_agent=False) is not None
+    assert close_permission(None, "user-1", allow_agent=False) is not None
+    assert close_permission(None, None, allow_agent=True) is None
+    # user positions: owner only — allow_agent never overrides ownership
+    assert close_permission("user-1", "user-1", allow_agent=False) is None
+    assert close_permission("user-1", "user-2", allow_agent=False) is not None
+    assert close_permission("user-1", None, allow_agent=False) is not None
+    assert close_permission("user-1", "user-2", allow_agent=True) is not None
+
+
 async def test_local_position_id_when_supabase_off(monkeypatch):
     mock_book(monkeypatch, asks=[(0.50, 1000.0)])
     monkeypatch.setattr(supabase_client, "insert_position", lambda p: None)

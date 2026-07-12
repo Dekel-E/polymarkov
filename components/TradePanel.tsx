@@ -22,6 +22,24 @@ export default function TradePanel({ slug, ui }: { slug: string; ui: DossierUi }
 
   if (ui.fill || !verdict) return null; // agent already traded, or no verdict
 
+  if (!user) {
+    return (
+      <section className="rounded-2xl border border-desk-line bg-desk-panel/60 p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-desk-dim">
+          {recommended ? "Execute the agent's trade" : "Trade this market"}
+        </h2>
+        <p className="mt-1 text-xs text-desk-dim">
+          Paper trades belong to an account —{" "}
+          <Link href="/login" className="text-instrument hover:underline">
+            log in or register
+          </Link>{" "}
+          to trade this verdict into your own book. The agent&apos;s book only trades
+          through its own strategies.
+        </p>
+      </section>
+    );
+  }
+
   async function submit() {
     setBusy(true);
     setError(null);
@@ -63,8 +81,8 @@ export default function TradePanel({ slug, ui }: { slug: string; ui: DossierUi }
       <p className="mt-1 text-xs text-desk-dim">
         {recommended
           ? `The verdict is ${recommended.replace("_", " ")} with a suggested ${verdict.suggested_size_pct_bankroll.toFixed(1)}% of the $10k paper bankroll.`
-          : "The agent says PASS — you can still direct a paper trade at your own discretion."}
-        {!user && " Trades made while logged out land in the agent's shared book."}
+          : "The agent says PASS — you can still direct a paper trade at your own discretion."}{" "}
+        Fills land in your book on the portfolio page.
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">

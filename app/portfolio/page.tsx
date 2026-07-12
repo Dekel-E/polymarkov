@@ -271,6 +271,14 @@ export default function PortfolioPage() {
                               {new Date(p.opened_at).toLocaleDateString()}
                             </td>
                             <td className="px-4 py-3 text-right">
+                              {scope === "agent" ? (
+                                <span
+                                  className="font-mono text-[10px] uppercase tracking-wider text-desk-faint"
+                                  title="The agent's book is closed by its own risk rules and thesis checks"
+                                >
+                                  agent-managed
+                                </span>
+                              ) : (
                               <button
                                 onClick={() => onClose(p)}
                                 disabled={closing === p.id}
@@ -278,6 +286,7 @@ export default function PortfolioPage() {
                               >
                                 {closing === p.id ? "Closing…" : "Close"}
                               </button>
+                              )}
                             </td>
                           </tr>
                         ))}
