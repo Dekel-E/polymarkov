@@ -159,6 +159,8 @@ DEFAULT_AGENT_SETTINGS = {
         "ai_signal": True,       # the intel pipeline auto-trade loop
         "arbitrage": True,       # spread + dutch-book scanner
         "copy_trading": False,   # mirror followed wallets (opt-in)
+        "market_making": False,  # quote both sides, capture the spread (opt-in)
+        "correlation": True,     # logical-consistency violations across markets
     },
     "risk": {
         "stop_loss_pct": 50,         # close when a position loses this % of its stake
@@ -183,6 +185,22 @@ TUNE_DISABLE_LOSS_USD = 50        # self-tuning: 7d realized loss that disables 
 TUNE_MIN_TRADES = 5               # ...but only with enough evidence
 EXCERPT_CLUSTERS = 3              # top news clusters whose pages the agent reads
 EXCERPT_MAX_CHARS = 500           # excerpt length carried into the council context
+
+# Market making (paper): quote both sides, settle fills against what the
+# market actually traded through. Inventory risk is the binding constraint.
+MM_HALF_SPREAD = 0.02            # quote at mid +/- this
+MM_QUOTE_SIZE_USD = 25           # per side, per market
+MM_MARKETS = 2                   # markets quoted simultaneously
+MM_MAX_INVENTORY_USD = 100       # per-market cap on net inventory
+MM_MIN_HOURS_TO_RESOLUTION = 72  # never quote near expiry (total-loss zone)
+MM_MIN_MID = 0.15                # avoid the extreme-odds inventory traps
+MM_MAX_MID = 0.85
+MM_INVENTORY_SKEW = 0.015        # shift quotes against a full inventory
+
+# Correlation graph
+RELATION_SIMILARITY_MIN = 0.72   # embedding cosine gate for candidate pairs
+RELATION_MAX_PAIRS = 40          # pairs classified per (single) LLM call
+RELATION_MIN_CONFIDENCE = 0.7    # keep only confident relations
 
 # Arbitrage scanner (no LLM involved — pure book math)
 ARB_MIN_EDGE = 0.01              # min guaranteed profit per share AFTER fees ($)

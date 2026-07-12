@@ -158,6 +158,34 @@ async def scan(
         if opp:
             opportunities.append(opp)
 
+    # 3. correlation-graph violations (relations built by jobs/build_relations)
+    from backend.data import supabase_client
+    from backend.sim import correlation
+
+    settings = supabase_client.get_agent_settings()
+    if settings["strategies"].get("correlation") and supabase_client.is_configured():
+        try:
+            relations = (
+                supabase_client.get_client()
+                .table("market_relations")
+                .select("*")
+                .limit(40)
+                .execute()
+                .data
+                or []
+            )
+        except Exception:
+            relations = []
+        for rel in relations:
+            if rel["relation"] == "implies":
+                b_yes, a_no = await asyncio.gather(_asks(rel["b_yes_token"]), _asks(rel["a_no_token"]))
+                opp = correlation.implies_opportunity(rel, b_yes, a_no)
+            else:
+                a_no, b_no = await asyncio.gather(_asks(rel["a_no_token"]), _asks(rel["b_no_token"]))
+                opp = correlation.excludes_opportunity(rel, a_no, b_no)
+            if opp:
+                opportunities.append(opp)
+
     opportunities.sort(key=lambda o: o["guaranteed_profit_usd"], reverse=True)
     return opportunities
 

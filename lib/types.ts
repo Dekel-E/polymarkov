@@ -193,7 +193,13 @@ export interface WalletPosition {
 // ---------------------------------------------------------------------------
 
 export interface AgentSettings {
-  strategies: { ai_signal: boolean; arbitrage: boolean; copy_trading: boolean };
+  strategies: {
+    ai_signal: boolean;
+    arbitrage: boolean;
+    copy_trading: boolean;
+    market_making: boolean;
+    correlation: boolean;
+  };
   risk: {
     stop_loss_pct: number;
     take_profit_pct: number;

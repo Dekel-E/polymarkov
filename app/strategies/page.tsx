@@ -12,7 +12,7 @@ const usd = (v: number) =>
   v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
 const STRATEGY_CARDS: {
-  key: keyof AgentSettings["strategies"] | "market_making" | "correlation";
+  key: keyof AgentSettings["strategies"];
   name: string;
   how: string;
   risk: string;
@@ -42,16 +42,16 @@ const STRATEGY_CARDS: {
   {
     key: "market_making",
     name: "Market making",
-    how: "Quoting both sides of the book to capture the spread. Needs a resting-limit-order fill simulator to paper-trade honestly — in development.",
-    risk: "Inventory risk near resolution.",
-    available: false,
+    how: "Quotes both sides of eligible markets (mid ±2¢, $25/side, 2 markets); a quote fills only when the market actually trades through it. Inventory capped at $100/market, quotes skew against inventory, and it never quotes within 72h of resolution.",
+    risk: "Inventory risk — filled longs can decay; the risk manager still applies.",
+    available: true,
   },
   {
     key: "correlation",
     name: "Correlation graph",
-    how: "Semantic dependencies across markets (candidate ⊂ party). The intra-event form ships inside Arbitrage as dutch books; the full knowledge graph is in development.",
-    risk: "Model risk on inferred relationships.",
-    available: false,
+    how: "A daily LLM pass classifies strict logical relations between similar markets (implies / excludes); every arb scan then checks the graph for pricing violations and executes the risk-free basket.",
+    risk: "Model risk on inferred relations — only high-confidence links are stored.",
+    available: true,
   },
 ];
 
