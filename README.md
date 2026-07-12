@@ -63,6 +63,12 @@ Once the repo is on GitHub with secrets set, two workflows run on schedule:
 
 All jobs support `--dry-run` locally, e.g. `.venv\Scripts\python -m jobs.auto_trade --dry-run`.
 
+**Real-time mode:** `python -m jobs.watch_live` is a persistent WebSocket watcher
+(needs your PC or a VPS — not GitHub Actions). It sees live book updates on
+tracked + trending markets and reacts in seconds: price jumps and YES+NO
+spread violations go straight onto the agent's agenda, and drifting mids
+trigger immediate market-maker requotes.
+
 ## Notes
 
 - The taker-fee table in [backend/config.py](backend/config.py) is a config default — re-check against Polymarket fee docs at deploy time.

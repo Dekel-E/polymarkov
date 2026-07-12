@@ -180,6 +180,14 @@ SENTINEL_POSITION_MOVE = 0.10     # adverse move on a held position -> re-analyz
 SENTINEL_RESOLUTION_HOURS = 48    # held/watched market resolving soon -> re-analyze
 SENTINEL_NEWS_BURST = 3           # fresh headlines in 24h on a held/watched market
 AGENDA_RUNS_PER_JOB = 3           # agenda items analyzed per worker run
+NEWS_LAG_MAX_MOVE = 0.03          # news burst + price move under this = lag window
+SENTINEL_NEW_LISTING_HOURS = 24   # markets younger than this get an early look
+SENTINEL_NEW_LISTING_MIN_LIFE_H = 24  # ...but must LIVE at least this long
+SENTINEL_NEW_LISTING_MAX = 3      # early looks per scan (don't flood the agenda)
+WHALE_PRINT_USD = 10_000          # single fill this big on a tracked market -> agenda
+WHALE_LOOKBACK_MIN = 90           # how far back the whale-print check looks
+LIVE_MOVE_PTS = 0.03              # live watcher: instant price jump threshold
+LIVE_REFRESH_MIN = 15             # live watcher: re-pick watched assets this often
 MAX_ANALYSES_PER_DAY = 40         # hard LLM budget: pipeline runs per UTC day
 TUNE_DISABLE_LOSS_USD = 50        # self-tuning: 7d realized loss that disables a strategy
 TUNE_MIN_TRADES = 5               # ...but only with enough evidence
@@ -202,6 +210,10 @@ MM_MIN_HOURS_TO_RESOLUTION = 72  # never quote near expiry (total-loss zone)
 MM_MIN_MID = 0.15                # avoid the extreme-odds inventory traps
 MM_MAX_MID = 0.85
 MM_INVENTORY_SKEW = 0.015        # shift quotes against a full inventory
+MM_REQUOTE_DRIFT = 0.01          # live watcher requotes when mid drifts this far
+MM_REWARD_MAX_SPREAD = 0.03      # Polymarket liquidity rewards: qualifying distance
+COPY_MIN_USD = 5                 # proportional copy sizing bounds
+COPY_MAX_USD = 100
 
 # Correlation graph
 RELATION_SIMILARITY_MIN = 0.72   # embedding cosine gate for candidate pairs

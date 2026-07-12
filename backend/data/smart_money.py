@@ -126,6 +126,39 @@ def parse_positions(rows: list[dict], limit: int = 8) -> list[dict]:
     return out[:limit]
 
 
+async def fetch_market_trades(condition_id: str, limit: int = 50) -> list[dict]:
+    """Recent fills on one market (on-chain flow). [] on failure.
+    Rows: {side, size, price, notional_usd, timestamp, wallet, outcome}."""
+    if not condition_id:
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=config.HTTP_TIMEOUT_S, headers=_HEADERS) as client:
+            resp = await client.get(
+                f"{DATA_API}/trades", params={"market": condition_id, "limit": min(limit, 100)}
+            )
+            resp.raise_for_status()
+            body = resp.json()
+            rows = body if isinstance(body, list) else body.get("data") or []
+    except (httpx.HTTPError, ValueError):
+        return []
+    trades = []
+    for r in rows:
+        size = _to_float(r.get("size"))
+        price = _to_float(r.get("price"))
+        trades.append(
+            {
+                "side": r.get("side", ""),
+                "size": size,
+                "price": price,
+                "notional_usd": round(size * price, 2),
+                "timestamp": int(_to_float(r.get("timestamp"))),
+                "wallet": r.get("proxyWallet", ""),
+                "outcome": r.get("outcome", ""),
+            }
+        )
+    return trades
+
+
 async def fetch_wallet_positions(wallet: str, limit: int = 8) -> list[dict]:
     """A wallet's current open positions, largest first. [] on failure."""
     try:

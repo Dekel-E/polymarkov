@@ -23,7 +23,24 @@ from backend.sim import paper_broker
 from backend.sim.risk import strategies_allowed
 
 
-async def mirror_position(wallet: str, pos: dict) -> bool:
+def proportional_size(position_usd: float, whale_total_usd: float, bankroll: float) -> float:
+    """Mirror the whale's CONVICTION, not their dollars (pure): the position's
+    share of their book, applied to our bankroll, clamped to sane bounds."""
+    if whale_total_usd <= 0:
+        return config.COPY_MIN_USD
+    fraction = position_usd / whale_total_usd
+    return round(max(config.COPY_MIN_USD, min(config.COPY_MAX_USD, fraction * bankroll)), 2)
+
+
+def wallet_gate(positions: list[dict]) -> bool:
+    """Only mirror wallets whose current book is in profit (pure). A whale
+    bleeding across their open positions is not a signal worth copying."""
+    if not positions:
+        return False
+    return sum(p.get("pnl") or 0 for p in positions) >= 0
+
+
+async def mirror_position(wallet: str, pos: dict, size_usd: float) -> bool:
     market = await polymarket.get_market_state(pos["slug"])
     if market is None:
         return False
@@ -36,7 +53,7 @@ async def mirror_position(wallet: str, pos: dict) -> bool:
     )
     fill = await paper_broker.execute_paper_trade(
         RunContext(), market, priced,
-        size_usd=config.COPY_TRADE_SIZE_USD, strategy="copy",
+        size_usd=size_usd, strategy="copy",
     )
     supabase_client.record_mirrored(
         wallet, pos["slug"], pos["outcome"], fill.position_id if fill else None
@@ -63,19 +80,28 @@ async def main_async(dry_run: bool) -> None:
     for wallet in wallets:
         if copied >= config.COPY_TRADES_PER_JOB:
             break
-        for pos in await smart_money.fetch_wallet_positions(wallet, limit=10):
+        positions = await smart_money.fetch_wallet_positions(wallet, limit=10)
+        if not wallet_gate(positions):
+            print(f"  {wallet[:10]}… gated: current book not in profit — not mirroring")
+            continue
+        whale_total = sum(p["size_usd"] for p in positions)
+        for pos in positions:
             if copied >= config.COPY_TRADES_PER_JOB:
                 break
             if not pos["slug"] or pos["size_usd"] < 100:
                 continue  # ignore dust — only mirror meaningful convictions
             if supabase_client.already_mirrored(wallet, pos["slug"], pos["outcome"]):
                 continue
-            print(f"  new: {wallet[:8]}… {pos['outcome']} on {pos['slug'][:50]} (${pos['size_usd']:,.0f})")
+            size = proportional_size(pos["size_usd"], whale_total, config.PAPER_BANKROLL_USD)
+            print(
+                f"  new: {wallet[:8]}… {pos['outcome']} on {pos['slug'][:50]} "
+                f"(their ${pos['size_usd']:,.0f} = {pos['size_usd'] / whale_total:.0%} of book -> our ${size})"
+            )
             if dry_run:
                 copied += 1
                 continue
-            ok = await mirror_position(wallet, pos)
-            print(f"    mirrored ${config.COPY_TRADE_SIZE_USD} paper: {'filled' if ok else 'NO FILL'}")
+            ok = await mirror_position(wallet, pos, size)
+            print(f"    mirrored ${size} paper: {'filled' if ok else 'NO FILL'}")
             copied += 1
     print(f"done — {copied} position(s) {'found' if dry_run else 'mirrored'}")
 

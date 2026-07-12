@@ -49,6 +49,28 @@ def tune_strategies(pnl_7d: dict[str, dict], strategies: dict) -> list[str]:
     return actions
 
 
+def _mm_rewards_7d() -> float:
+    """Simulated liquidity-rewards points earned by resting quotes (7d)."""
+    if not supabase_client.is_configured():
+        return 0.0
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    try:
+        rows = (
+            supabase_client.get_client()
+            .table("mm_quotes")
+            .select("reward_score")
+            .gte("placed_at", cutoff)
+            .execute()
+            .data
+            or []
+        )
+        return round(sum(float(r.get("reward_score") or 0) for r in rows), 2)
+    except Exception:
+        return 0.0
+
+
 async def main_async(dry_run: bool) -> None:
     if not llm_client.is_configured():
         print("LLM is not configured — aborting")
@@ -77,6 +99,7 @@ async def main_async(dry_run: bool) -> None:
             for a in supabase_client.get_pending_agenda(limit=8)
         ],
         "strategies_enabled": strategies,
+        "mm_reward_points_7d": _mm_rewards_7d(),
         "circuit_breaker": settings["halt"],
         "self_tuning_actions": actions,
         "analyses_used_today": supabase_client.analyses_today(),

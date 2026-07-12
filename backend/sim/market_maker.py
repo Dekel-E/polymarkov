@@ -47,6 +47,27 @@ def make_quote(mid: float, inventory_usd: float) -> Optional[tuple[float, float]
     return bid, ask
 
 
+def reward_score(mid: float, bid: float, ask: float, size_usd: float) -> float:
+    """Simulated Polymarket liquidity-rewards score for one resting period.
+
+    Their program scores quotes quadratically by closeness to the midpoint:
+    being 1c away earns far more than 3c. Per side within the qualifying
+    band S: ((S - d) / S)^2 * size (pure)."""
+    S = config.MM_REWARD_MAX_SPREAD
+    score = 0.0
+    for distance in (mid - bid, ask - mid):
+        if 0 <= distance < S:
+            score += ((S - distance) / S) ** 2 * size_usd
+    return round(score, 2)
+
+
+def needs_requote(mid_now: float, mid_at_placement: Optional[float]) -> bool:
+    """Live-watcher rule: the mid drifted away from our quotes (pure)."""
+    if mid_at_placement is None:
+        return False
+    return abs(mid_now - mid_at_placement) >= config.MM_REQUOTE_DRIFT
+
+
 def quote_fills(bid: float, ask: float, prices_after: list[float]) -> list[str]:
     """Which sides the market traded through (pure). Conservative: touching
     the price counts; no partial fills."""

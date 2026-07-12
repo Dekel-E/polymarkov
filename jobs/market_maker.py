@@ -64,8 +64,16 @@ async def settle_pending(dry_run: bool) -> None:
                     )
                     print(f"    filled ask with no inventory: short via BUY_NO @ {1 - float(quote['ask']):.3f}")
 
+        mid_at_placement = float(quote.get("mid_at_placement") or (float(quote["bid"]) + float(quote["ask"])) / 2)
         supabase_client.get_client().table("mm_quotes").update(
-            {"status": "settled", "fills": "+".join(fills) if fills else "none", "settled_at": mm._now()}
+            {
+                "status": "settled",
+                "fills": "+".join(fills) if fills else "none",
+                "settled_at": mm._now(),
+                "reward_score": mm.reward_score(
+                    mid_at_placement, float(quote["bid"]), float(quote["ask"]), float(quote["size_usd"])
+                ),
+            }
         ).eq("id", quote["id"]).execute()
 
 
@@ -112,6 +120,7 @@ async def place_quotes(dry_run: bool) -> None:
                     "bid": bid,
                     "ask": ask,
                     "size_usd": config.MM_QUOTE_SIZE_USD,
+                    "mid_at_placement": m["mid"],
                 }
             ).execute()
         placed += 1
@@ -119,15 +128,21 @@ async def place_quotes(dry_run: bool) -> None:
         print("no eligible markets to quote")
 
 
+async def cycle(dry_run: bool = False) -> None:
+    """One settle-then-requote pass — also called by the live watcher when
+    the mid drifts away from resting quotes."""
+    print("settling…")
+    await settle_pending(dry_run)
+    print("quoting…")
+    await place_quotes(dry_run)
+
+
 async def main_async(dry_run: bool) -> None:
     if not dry_run:
         from jobs._preflight import require
 
         require("SUPABASE_URL", "SUPABASE_SERVICE_KEY")
-    print("settling…")
-    await settle_pending(dry_run)
-    print("quoting…")
-    await place_quotes(dry_run)
+    await cycle(dry_run)
 
 
 def main() -> None:

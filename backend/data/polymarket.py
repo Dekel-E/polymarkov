@@ -167,6 +167,8 @@ def normalize_market(raw: dict) -> dict:
         ),
         "liquidity": _to_float(raw.get("liquidityNum") or raw.get("liquidity")),
         "image": raw.get("image") or raw.get("icon") or "",
+        "created_at": raw.get("createdAt"),
+        "condition_id": raw.get("conditionId") or "",
         "active": bool(raw.get("active", True)),
         "event_id": str(events[0].get("id", "")) if events else "",
         "event_title": events[0].get("title", "") if events else "",
@@ -214,6 +216,11 @@ async def get_trending_markets(limit: int = 20) -> list[dict]:
                 seen.add(m["id"])
                 markets.append(m)
     return markets
+
+
+async def list_new_markets(limit: int = 30) -> list[dict]:
+    """Most recently created active markets (early-look candidates)."""
+    return await list_markets(limit=limit, order="createdAt")
 
 
 async def list_events(limit: int = 20, neg_risk_only: bool = False) -> list[dict]:
