@@ -58,6 +58,8 @@ def build_shared_context(
                 f"{c.id} | {c.date or 'undated'} | {c.source or 'unknown'} | sentiment {sent}"
                 f" | {c.headline}" + (f" | {c.summary}" if c.summary else "")
             )
+            if c.excerpt:
+                lines.append(f"    excerpt: {c.excerpt[:300]}")
     else:
         lines.append("(no news evidence available)")
 

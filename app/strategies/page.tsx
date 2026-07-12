@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import ActivityFeed from "@/components/ActivityFeed";
+import DeskBriefing from "@/components/DeskBriefing";
 import { executeArbitrage, fetchArbitrage, fetchSettings, updateSettings } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { AgentSettings, ArbOpportunity } from "@/lib/types";
@@ -223,6 +224,8 @@ export default function StrategiesPage() {
           {note}
         </div>
       )}
+
+      <DeskBriefing />
 
       {/* strategies */}
       <section>

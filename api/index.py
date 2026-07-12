@@ -44,10 +44,27 @@ def team_info() -> dict:
     return config.TEAM_INFO
 
 
+_EXAMPLES_FILE = config.ASSETS_DIR / "agent_examples.json"
+_examples_cache: Optional[list] = None
+
+
+def _load_examples() -> list:
+    """Frozen real runs recorded by scripts/record_examples.py."""
+    global _examples_cache
+    if _examples_cache is None:
+        try:
+            import json
+
+            _examples_cache = json.loads(_EXAMPLES_FILE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            _examples_cache = []
+    return _examples_cache
+
+
 @app.get("/api/agent_info")
 def agent_info() -> dict:
-    # Examples are frozen from real runs in Phase 8; prompts are read from
-    # backend/prompts at runtime so docs never drift from behavior.
+    # Prompts are read from backend/prompts at runtime so docs never drift
+    # from behavior; prompt_examples are frozen real runs (course schema).
     prompt_files = sorted(config.PROMPTS_DIR.glob("*.txt"))
     prompts = {p.stem: p.read_text(encoding="utf-8") for p in prompt_files}
     return {
@@ -67,14 +84,19 @@ def agent_info() -> dict:
             "Pre-trade research assistant and paper-trading simulator for "
             "Polymarket prediction markets. Educational tool, not financial advice."
         ),
-        "prompt_template": (
-            "Market: <slug | url | free-text question>\n"
-            "Focus: <news | socials | resolution | all>\n"
-            "Trade: <yes | no>"
-        ),
+        "prompt_template": {
+            "template": (
+                "Market: <slug | url | free-text question>\n"
+                "Focus: <news | socials | resolution | all>\n"
+                "Trade: <yes | no>"
+            ),
+            "example": (
+                "Market: fed-decision-in-september\nFocus: all\nTrade: no"
+            ),
+        },
+        "prompt_examples": _load_examples(),
         "modules": config.CANONICAL_MODULES,
         "prompts": prompts,
-        "examples": [],  # TODO(Phase 8): freeze 2 real recorded runs here
     }
 
 
@@ -160,6 +182,26 @@ async def league_wallet(address: str) -> dict:
         return {"positions": await smart_money.fetch_wallet_positions(address), "error": None}
     except Exception as exc:
         return {"positions": [], "error": str(exc)}
+
+
+@app.get("/api/agenda")
+async def agenda() -> dict:
+    """The agent's pending to-do list (filed by the sentinel)."""
+    try:
+        items = await asyncio.to_thread(supabase_client.get_pending_agenda, 12)
+        return {"items": items, "error": None}
+    except Exception as exc:
+        return {"items": [], "error": str(exc)}
+
+
+@app.get("/api/briefing")
+async def briefing() -> dict:
+    """The agent's latest morning briefing."""
+    try:
+        row = await asyncio.to_thread(supabase_client.latest_briefing)
+        return {"briefing": row, "error": None}
+    except Exception as exc:
+        return {"briefing": None, "error": str(exc)}
 
 
 @app.get("/api/activity")

@@ -247,6 +247,128 @@ def get_watchlist(user_id: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# agenda (autonomy): the agent's own prioritized to-do list
+# ---------------------------------------------------------------------------
+
+
+def add_agenda_items(items: list[dict]) -> int:
+    """Insert pending items [{market_id, reason, priority}]. A market with a
+    pending item is skipped (partial unique index), so re-triggers don't pile up."""
+    if not is_configured() or not items:
+        return 0
+    written = 0
+    for item in items:
+        try:
+            get_client().table("agenda").insert(
+                {
+                    "market_id": item["market_id"],
+                    "reason": item["reason"][:300],
+                    "priority": item.get("priority", 0),
+                }
+            ).execute()
+            written += 1
+        except Exception:
+            continue  # duplicate pending item — fine
+    return written
+
+
+def get_pending_agenda(limit: int = 10) -> list[dict]:
+    if not is_configured():
+        return []
+    return (
+        get_client()
+        .table("agenda")
+        .select("*")
+        .eq("status", "pending")
+        .order("priority", desc=True)
+        .limit(limit)
+        .execute()
+        .data
+        or []
+    )
+
+
+def resolve_agenda_item(item_id: str, status: str, outcome: str) -> None:
+    if not is_configured():
+        return
+    get_client().table("agenda").update(
+        {"status": status, "outcome": outcome[:300], "handled_at": _now()}
+    ).eq("id", item_id).execute()
+
+
+def analyses_today() -> int:
+    """Pipeline runs so far this UTC day — the daily LLM budget counter."""
+    if not is_configured():
+        return 0
+    from datetime import datetime, timezone
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00+00:00")
+    resp = (
+        get_client()
+        .table("runs")
+        .select("id", count="exact")
+        .gte("created_at", today)
+        .limit(1)
+        .execute()
+    )
+    return resp.count or 0
+
+
+# ---------------------------------------------------------------------------
+# briefings (autonomy): the agent's own morning reports
+# ---------------------------------------------------------------------------
+
+
+def save_briefing(content: str, facts: dict) -> None:
+    if not is_configured():
+        return
+    get_client().table("briefings").insert({"content": content, "facts": facts}).execute()
+
+
+def latest_briefing() -> Optional[dict]:
+    if not is_configured():
+        return None
+    rows = (
+        get_client()
+        .table("briefings")
+        .select("content,created_at")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+        .data
+    )
+    return rows[0] if rows else None
+
+
+def strategy_pnl_7d() -> dict[str, dict]:
+    """strategy -> {pnl, trades} over positions resolved in the last 7 days."""
+    if not is_configured():
+        return {}
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    rows = (
+        get_client()
+        .table("positions")
+        .select("strategy,pnl")
+        .eq("status", "resolved")
+        .gte("resolved_at", cutoff)
+        .execute()
+        .data
+        or []
+    )
+    out: dict[str, dict] = {}
+    for r in rows:
+        s = r.get("strategy") or "manual"
+        entry = out.setdefault(s, {"pnl": 0.0, "trades": 0})
+        entry["pnl"] += float(r.get("pnl") or 0)
+        entry["trades"] += 1
+    for entry in out.values():
+        entry["pnl"] = round(entry["pnl"], 2)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # agent settings (Strategy Desk) — GUI writes, jobs read
 # ---------------------------------------------------------------------------
 

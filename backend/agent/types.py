@@ -100,6 +100,7 @@ class EvidenceCluster(BaseModel):
     source: str = ""
     url: str = ""
     summary: str = ""
+    excerpt: str = ""                             # readable text fetched from the page
     sentiment: Optional[float] = None
     stance: Optional[Literal["yes", "no", "neutral"]] = None
     article_ids: list[str] = Field(default_factory=list)

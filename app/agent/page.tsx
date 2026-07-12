@@ -9,7 +9,8 @@ interface AgentInfo {
   name: string;
   description: string;
   purpose: string;
-  prompt_template: string;
+  prompt_template: { template: string; example?: string };
+  prompt_examples: { prompt: string }[];
   modules: string[];
   prompts: Record<string, string>;
 }
@@ -158,8 +159,13 @@ export default function AgentPage() {
               How to ask
             </h2>
             <pre className="mt-2 overflow-x-auto rounded-xl bg-desk-deep p-4 font-mono text-xs leading-relaxed text-instrument">
-              {info.prompt_template}
+              {info.prompt_template.template}
             </pre>
+            {info.prompt_template.example && (
+              <pre className="mt-2 overflow-x-auto rounded-xl bg-desk-deep/60 p-4 font-mono text-xs leading-relaxed text-desk-dim">
+                {info.prompt_template.example}
+              </pre>
+            )}
           </section>
 
           <section>

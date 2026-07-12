@@ -172,6 +172,18 @@ DEFAULT_AGENT_SETTINGS = {
 COPY_TRADE_SIZE_USD = 25         # paper size per mirrored whale position
 COPY_TRADES_PER_JOB = 5
 
+# Autonomy: sentinel triggers + agenda worker + daily self-accounting
+SENTINEL_MOVE_PTS = 0.08          # 24h price move that makes a market interesting
+SENTINEL_POSITION_MOVE = 0.10     # adverse move on a held position -> re-analyze
+SENTINEL_RESOLUTION_HOURS = 48    # held/watched market resolving soon -> re-analyze
+SENTINEL_NEWS_BURST = 3           # fresh headlines in 24h on a held/watched market
+AGENDA_RUNS_PER_JOB = 3           # agenda items analyzed per worker run
+MAX_ANALYSES_PER_DAY = 40         # hard LLM budget: pipeline runs per UTC day
+TUNE_DISABLE_LOSS_USD = 50        # self-tuning: 7d realized loss that disables a strategy
+TUNE_MIN_TRADES = 5               # ...but only with enough evidence
+EXCERPT_CLUSTERS = 3              # top news clusters whose pages the agent reads
+EXCERPT_MAX_CHARS = 500           # excerpt length carried into the council context
+
 # Arbitrage scanner (no LLM involved — pure book math)
 ARB_MIN_EDGE = 0.01              # min guaranteed profit per share AFTER fees ($)
 ARB_MAX_SIZE_USD = 100           # paper cap per leg

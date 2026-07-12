@@ -174,6 +174,16 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
         for i, group in enumerate(grouped)
     ]
 
+    # read the actual pages of the top clusters so the council argues over
+    # substance, not headlines (bounded: N pages, short excerpts)
+    to_read = clusters[: config.EXCERPT_CLUSTERS]
+    if to_read:
+        texts = await asyncio.gather(
+            *(gdelt.fetch_article_text(c.url, max_chars=config.EXCERPT_MAX_CHARS) for c in to_read)
+        )
+        for cluster, text in zip(to_read, texts):
+            cluster.excerpt = text
+
     ctx.add_tool_step(
         MODULE,
         f"news_query={news_query!r}; gdelt={len(gdelt_live)} google_news={len(gnews_live)} "
