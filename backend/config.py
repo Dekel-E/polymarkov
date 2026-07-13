@@ -172,6 +172,8 @@ DEFAULT_AGENT_SETTINGS = {
         "daily_loss_halt_usd": 300,  # circuit breaker: halt all strategies for the day
     },
     "halt": {"active": False, "reason": "", "at": ""},
+    # paper funds are adjustable from the terminal (deposits/withdrawals)
+    "funds": {"bankroll_usd": PAPER_BANKROLL_USD},
 }
 COPY_TRADE_SIZE_USD = 25         # paper size per mirrored whale position
 COPY_TRADES_PER_JOB = 5

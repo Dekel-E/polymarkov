@@ -40,7 +40,8 @@ async def execute_paper_trade(
     if size_usd is None:
         if priced.suggested_size_pct_bankroll <= 0:
             return None
-        size_usd = round(config.PAPER_BANKROLL_USD * priced.suggested_size_pct_bankroll / 100, 2)
+        bankroll = supabase_client.current_bankroll()
+        size_usd = round(bankroll * priced.suggested_size_pct_bankroll / 100, 2)
     if size_usd <= 0:
         return None
     book = await polymarket.get_order_book(market.yes_token_id)
@@ -120,6 +121,26 @@ def close_permission(owner: Optional[str], user_id: Optional[str], allow_agent: 
     return None
 
 
+def split_position(position: dict, fraction: float) -> tuple[dict, dict]:
+    """Split a position for a partial close (pure).
+
+    Returns (closed_part, remaining_updates): sizes and entry fees divide
+    proportionally; entry price and side are unchanged."""
+    fraction = max(0.01, min(1.0, fraction))
+    size = float(position["size_usd"])
+    fee = float(position.get("fee_paid") or 0)
+    closed = {
+        **{k: position[k] for k in ("market_id", "side", "entry_price") if k in position},
+        "size_usd": round(size * fraction, 2),
+        "fee_paid": round(fee * fraction, 4),
+    }
+    remaining = {
+        "size_usd": round(size * (1 - fraction), 2),
+        "fee_paid": round(fee * (1 - fraction), 4),
+    }
+    return closed, remaining
+
+
 def exit_pnl(position: dict, exit_price: float, exit_fee: float) -> float:
     """Realized PnL of closing a position at `exit_price` (the traded token)."""
     entry = float(position["entry_price"])
@@ -130,11 +151,14 @@ def exit_pnl(position: dict, exit_price: float, exit_fee: float) -> float:
 
 
 async def close_position(
-    position_id: str, user_id: Optional[str] = None, allow_agent: bool = False
+    position_id: str,
+    user_id: Optional[str] = None,
+    allow_agent: bool = False,
+    fraction: float = 1.0,
 ) -> dict:
-    """Close an open paper position at the current book. Returns a report dict
-    with an `error` key on failure (never raises for expected cases).
-    `allow_agent=True` is for the agent's own jobs only — never the API."""
+    """Close all (or `fraction`) of an open paper position at the current
+    book. Returns a report dict with an `error` key on failure (never raises
+    for expected cases). `allow_agent=True` is for the agent's own jobs only."""
     rows = (
         supabase_client.get_client()
         .table("positions")
@@ -166,16 +190,45 @@ async def close_position(
     if not exit_price or exit_price <= 0:
         return {"error": "no live quote to close against"}
 
-    shares = float(position["size_usd"]) / float(position["entry_price"])
+    fraction = max(0.01, min(1.0, fraction))
+    if fraction >= 0.999:  # full close
+        shares = float(position["size_usd"]) / float(position["entry_price"])
+        exit_fee = round(pricing_mod.taker_fee(market.category, exit_price) * shares, 4)
+        pnl = exit_pnl(position, exit_price, exit_fee)
+        supabase_client.resolve_position(position_id, "CLOSED", pnl)
+        return {
+            "error": None, "position_id": position_id, "closed_fraction": 1.0,
+            "exit_price": exit_price, "exit_fee": exit_fee, "pnl": pnl,
+        }
+
+    # partial close: realize the closed part as its own resolved row,
+    # shrink the original in place
+    closed_part, remaining = split_position(position, fraction)
+    shares = closed_part["size_usd"] / float(position["entry_price"])
     exit_fee = round(pricing_mod.taker_fee(market.category, exit_price) * shares, 4)
-    pnl = exit_pnl(position, exit_price, exit_fee)
+    pnl = exit_pnl(closed_part, exit_price, exit_fee)
 
-    supabase_client.resolve_position(position_id, "CLOSED", pnl)
-
+    client = supabase_client.get_client()
+    client.table("positions").insert(
+        {
+            "market_id": position["market_id"],
+            "side": position["side"],
+            "entry_price": position["entry_price"],
+            "size_usd": closed_part["size_usd"],
+            "fee_paid": closed_part["fee_paid"],
+            "slippage_bps": position.get("slippage_bps") or 0,
+            "fair_prob_at_entry": position.get("fair_prob_at_entry"),
+            "user_id": position.get("user_id"),
+            "strategy": position.get("strategy") or "manual",
+            "opened_at": position.get("opened_at"),
+            "status": "resolved",
+            "resolved_outcome": "CLOSED_PARTIAL",
+            "resolved_at": _now(),
+            "pnl": pnl,
+        }
+    ).execute()
+    client.table("positions").update(remaining).eq("id", position_id).execute()
     return {
-        "error": None,
-        "position_id": position_id,
-        "exit_price": exit_price,
-        "exit_fee": exit_fee,
-        "pnl": pnl,
+        "error": None, "position_id": position_id, "closed_fraction": fraction,
+        "exit_price": exit_price, "exit_fee": exit_fee, "pnl": pnl,
     }

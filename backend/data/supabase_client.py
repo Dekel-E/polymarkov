@@ -402,6 +402,16 @@ def get_agent_settings() -> dict:
     return _merge_settings(config.DEFAULT_AGENT_SETTINGS, stored)
 
 
+def current_bankroll() -> float:
+    """Paper bankroll — adjustable from the terminal, config as fallback."""
+    from backend import config
+
+    try:
+        return float(get_agent_settings()["funds"]["bankroll_usd"])
+    except (KeyError, TypeError, ValueError):
+        return float(config.PAPER_BANKROLL_USD)
+
+
 def update_agent_settings(patch: dict) -> dict:
     """Apply a partial update ({strategies?, risk?, halt?}) and persist."""
     current = get_agent_settings()

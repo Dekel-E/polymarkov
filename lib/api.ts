@@ -69,16 +69,60 @@ export async function executeTrade(
 export async function closePosition(
   positionId: string,
   token?: string | null,
-): Promise<{ exit_price: number; pnl: number }> {
+  fraction = 1.0,
+): Promise<{ exit_price: number; pnl: number; closed_fraction: number }> {
   const res = await fetch("/api/position/close", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders(token) },
-    body: JSON.stringify({ position_id: positionId }),
+    body: JSON.stringify({ position_id: positionId, fraction }),
   });
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
-  const data = (await res.json()) as { error: string | null; exit_price?: number; pnl?: number };
+  const data = (await res.json()) as {
+    error: string | null;
+    exit_price?: number;
+    pnl?: number;
+    closed_fraction?: number;
+  };
   if (data.error) throw new Error(data.error);
-  return { exit_price: data.exit_price!, pnl: data.pnl! };
+  return { exit_price: data.exit_price!, pnl: data.pnl!, closed_fraction: data.closed_fraction ?? 1 };
+}
+
+export async function setPositionLimits(
+  positionId: string,
+  slPrice: number | null,
+  tpPrice: number | null,
+  token?: string | null,
+): Promise<void> {
+  const res = await fetch("/api/position/limits", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    body: JSON.stringify({ position_id: positionId, sl_price: slPrice, tp_price: tpPrice }),
+  });
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as { error: string | null };
+  if (data.error) throw new Error(data.error);
+}
+
+export async function fetchWorkingQuotes(): Promise<import("./types").WorkingQuote[]> {
+  const res = await fetch("/api/quotes");
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as {
+    quotes: import("./types").WorkingQuote[];
+    error: string | null;
+  };
+  if (data.error) throw new Error(data.error);
+  return data.quotes;
+}
+
+export async function cancelQuote(quoteId: string, token?: string | null): Promise<void> {
+  const res = await fetch("/api/quotes/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    body: JSON.stringify({ quote_id: quoteId }),
+  });
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as { error: string | null };
+  if (data.error) throw new Error(data.error);
 }
 
 export async function searchMarkets(query: string): Promise<MarketSummary[]> {
@@ -207,6 +251,7 @@ export async function updateSettings(patch: {
   strategies?: Partial<AgentSettings["strategies"]>;
   risk?: Partial<AgentSettings["risk"]>;
   halt?: { active: boolean };
+  funds?: { bankroll_usd: number };
 }): Promise<AgentSettings> {
   const res = await fetch("/api/settings", {
     method: "PUT",

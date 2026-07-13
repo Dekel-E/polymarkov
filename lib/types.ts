@@ -140,14 +140,18 @@ export interface Position {
   pnl: number | null;
   user_id: string | null;
   strategy: string | null;
+  sl_price: number | null;
+  tp_price: number | null;
   // enrichment on open rows
   current_price?: number | null;
   unrealized_pnl?: number | null;
+  category?: string;
 }
 
 export interface PortfolioStats {
   bankroll_usd: number;
   balance_usd: number;
+  available_usd: number;
   equity_usd: number;
   open_positions: number;
   open_exposure_usd: number;
@@ -155,6 +159,19 @@ export interface PortfolioStats {
   resolved_positions: number;
   realized_pnl_usd: number;
   win_rate: number | null;
+  largest_position_pct: number;
+  exposure_by_strategy: Record<string, number>;
+  exposure_by_category: Record<string, number>;
+}
+
+export interface WorkingQuote {
+  id: string;
+  market_id: string;
+  bid: number;
+  ask: number;
+  size_usd: number;
+  mid_at_placement: number | null;
+  placed_at: string;
 }
 
 export interface Portfolio {

@@ -92,7 +92,7 @@ async def main_async(dry_run: bool) -> None:
                 continue  # ignore dust — only mirror meaningful convictions
             if supabase_client.already_mirrored(wallet, pos["slug"], pos["outcome"]):
                 continue
-            size = proportional_size(pos["size_usd"], whale_total, config.PAPER_BANKROLL_USD)
+            size = proportional_size(pos["size_usd"], whale_total, supabase_client.current_bankroll())
             print(
                 f"  new: {wallet[:8]}… {pos['outcome']} on {pos['slug'][:50]} "
                 f"(their ${pos['size_usd']:,.0f} = {pos['size_usd'] / whale_total:.0%} of book -> our ${size})"

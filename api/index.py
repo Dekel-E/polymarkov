@@ -332,6 +332,7 @@ class SettingsIn(BaseModel):
     strategies: Optional[dict] = None
     risk: Optional[dict] = None
     halt: Optional[dict] = None
+    funds: Optional[dict] = None
 
 
 _RISK_BOUNDS = {
@@ -381,6 +382,13 @@ async def put_settings(body: SettingsIn, request: Request) -> dict:
             patch["risk"] = cleaned
         if body.halt is not None and body.halt.get("active") is False:
             patch["halt"] = {"active": False, "reason": "", "at": ""}  # manual resume
+        if body.funds is not None and "bankroll_usd" in body.funds:
+            try:
+                patch["funds"] = {
+                    "bankroll_usd": max(100.0, min(1_000_000.0, float(body.funds["bankroll_usd"])))
+                }
+            except (TypeError, ValueError):
+                pass
         settings = await asyncio.to_thread(supabase_client.update_agent_settings, patch)
         return {"settings": settings, "error": None}
     except Exception as exc:
@@ -612,18 +620,104 @@ async def manual_trade(body: TradeIn, request: Request) -> dict:
 
 class CloseIn(BaseModel):
     position_id: str
+    fraction: float = 1.0  # 0.25 = close a quarter
 
 
 @app.post("/api/position/close")
 async def close_position(body: CloseIn, request: Request) -> dict:
-    """Close an open paper position at the current book."""
+    """Close all or part of an open paper position at the current book."""
     try:
         from backend.sim import paper_broker
 
         user_id = await _user_id_from_request(request)
         if user_id is None:
             return {"error": "login required — only your own positions can be closed"}
-        return await paper_broker.close_position(body.position_id, user_id)
+        fraction = max(0.01, min(1.0, body.fraction))
+        return await paper_broker.close_position(body.position_id, user_id, fraction=fraction)
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+class LimitsIn(BaseModel):
+    position_id: str
+    sl_price: Optional[float] = None  # None clears the level
+    tp_price: Optional[float] = None
+
+
+@app.put("/api/position/limits")
+async def set_position_limits(body: LimitsIn, request: Request) -> dict:
+    """Set/clear per-position stop-loss / take-profit price levels. The risk
+    manager enforces them on its next pass. Works on your positions and on
+    the agent book (that's directing the agent's risk rules, not closing)."""
+    try:
+        user_id = await _user_id_from_request(request)
+        if user_id is None:
+            return {"error": "login required"}
+        for level in (body.sl_price, body.tp_price):
+            if level is not None and not (0 < level < 1):
+                return {"error": "price levels must be between 0 and 1"}
+
+        def _update():
+            client = supabase_client.get_client()
+            rows = client.table("positions").select("user_id,status").eq("id", body.position_id).limit(1).execute().data
+            if not rows:
+                return "position not found"
+            if rows[0].get("status") != "open":
+                return "position is already resolved"
+            owner = rows[0].get("user_id")
+            if owner is not None and owner != user_id:
+                return "this position belongs to another user"
+            client.table("positions").update(
+                {"sl_price": body.sl_price, "tp_price": body.tp_price}
+            ).eq("id", body.position_id).execute()
+            return None
+
+        error = await asyncio.to_thread(_update)
+        return {"error": error}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@app.get("/api/quotes")
+async def working_quotes() -> dict:
+    """Resting market-maker quotes (the terminal's working-orders panel)."""
+    try:
+        if not supabase_client.is_configured():
+            return {"quotes": [], "error": None}
+        rows = await asyncio.to_thread(
+            lambda: supabase_client.get_client()
+            .table("mm_quotes")
+            .select("id,market_id,bid,ask,size_usd,mid_at_placement,placed_at")
+            .eq("status", "pending")
+            .order("placed_at", desc=True)
+            .execute()
+            .data
+            or []
+        )
+        return {"quotes": rows, "error": None}
+    except Exception as exc:
+        return {"quotes": [], "error": str(exc)}
+
+
+class CancelQuoteIn(BaseModel):
+    quote_id: str
+
+
+@app.post("/api/quotes/cancel")
+async def cancel_quote(body: CancelQuoteIn, request: Request) -> dict:
+    """Pull a resting MM quote (it can no longer fill)."""
+    try:
+        user_id = await _user_id_from_request(request)
+        if user_id is None:
+            return {"error": "login required"}
+
+        def _cancel():
+            supabase_client.get_client().table("mm_quotes").update(
+                {"status": "settled", "fills": "cancelled"}
+            ).eq("id", body.quote_id).eq("status", "pending").execute()
+
+        await asyncio.to_thread(_cancel)
+        return {"error": None}
     except Exception as exc:
         return {"error": str(exc)}
 

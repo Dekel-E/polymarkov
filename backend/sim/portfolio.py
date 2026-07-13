@@ -33,20 +33,23 @@ def get_portfolio(scope: str = "agent", user_id: Optional[str] = None) -> dict:
 
 
 def _enrich_open(client, open_rows: list[dict]) -> None:
-    """Attach current_price + unrealized_pnl from the cached markets table."""
+    """Attach current_price, unrealized_pnl and category from the markets cache."""
     slugs = sorted({r["market_id"] for r in open_rows})
     if not slugs:
         return
     try:
         markets = (
-            client.table("markets").select("slug,last_mid").in_("slug", slugs).execute().data or []
+            client.table("markets").select("slug,last_mid,category").in_("slug", slugs).execute().data
+            or []
         )
     except Exception:
         markets = []
-    mid_by_slug = {m["slug"]: float(m["last_mid"]) for m in markets if m.get("last_mid") is not None}
+    by_slug = {m["slug"]: m for m in markets}
 
     for r in open_rows:
-        mid = mid_by_slug.get(r["market_id"])
+        m = by_slug.get(r["market_id"], {})
+        r["category"] = m.get("category") or "other"
+        mid = float(m["last_mid"]) if m.get("last_mid") is not None else None
         if mid is None:
             r["current_price"] = None
             r["unrealized_pnl"] = None
@@ -58,19 +61,34 @@ def _enrich_open(client, open_rows: list[dict]) -> None:
         r["unrealized_pnl"] = round(shares * (current - entry), 2)
 
 
+def _exposure(open_rows: list[dict], key: str) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for r in open_rows:
+        k = r.get(key) or ("manual" if key == "strategy" else "other")
+        out[k] = round(out.get(k, 0) + float(r.get("size_usd") or 0), 2)
+    return dict(sorted(out.items(), key=lambda kv: kv[1], reverse=True))
+
+
 def _stats(open_rows: list[dict], resolved: list[dict]) -> dict:
+    bankroll = supabase_client.current_bankroll()
     realized = sum(float(r.get("pnl") or 0) for r in resolved)
     unrealized = sum(float(r.get("unrealized_pnl") or 0) for r in open_rows)
     open_exposure = sum(float(r.get("size_usd") or 0) for r in open_rows)
+    balance = bankroll + realized
     wins = sum(1 for r in resolved if float(r.get("pnl") or 0) > 0)
+    largest = max((float(r.get("size_usd") or 0) for r in open_rows), default=0.0)
     return {
-        "bankroll_usd": config.PAPER_BANKROLL_USD,
-        "balance_usd": round(config.PAPER_BANKROLL_USD + realized, 2),
-        "equity_usd": round(config.PAPER_BANKROLL_USD + realized + unrealized, 2),
+        "bankroll_usd": round(bankroll, 2),
+        "balance_usd": round(balance, 2),
+        "available_usd": round(balance - open_exposure, 2),
+        "equity_usd": round(balance + unrealized, 2),
         "open_positions": len(open_rows),
         "open_exposure_usd": round(open_exposure, 2),
         "unrealized_pnl_usd": round(unrealized, 2),
         "resolved_positions": len(resolved),
         "realized_pnl_usd": round(realized, 2),
         "win_rate": round(wins / len(resolved), 3) if resolved else None,
+        "largest_position_pct": round(largest / bankroll * 100, 2) if bankroll else 0,
+        "exposure_by_strategy": _exposure(open_rows, "strategy"),
+        "exposure_by_category": _exposure(open_rows, "category"),
     }

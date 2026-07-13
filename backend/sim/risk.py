@@ -15,13 +15,26 @@ from backend.sim import paper_broker, portfolio
 
 
 def evaluate_position(position: dict, current_price: Optional[float], risk: dict) -> Optional[str]:
-    """'stop_loss' | 'take_profit' | None for one open position (pure)."""
+    """'stop_loss' | 'take_profit' | None for one open position (pure).
+
+    Per-position price levels (sl_price / tp_price, set from the terminal)
+    take precedence; the global % rules are the fallback."""
     if current_price is None or current_price <= 0:
         return None
     entry = float(position["entry_price"])
     size_usd = float(position["size_usd"])
     if entry <= 0 or size_usd <= 0:
         return None
+
+    sl_price = position.get("sl_price")
+    tp_price = position.get("tp_price")
+    if sl_price is not None and current_price <= float(sl_price):
+        return "stop_loss"
+    if tp_price is not None and current_price >= float(tp_price):
+        return "take_profit"
+    if sl_price is not None or tp_price is not None:
+        return None  # explicit levels replace the % rules entirely
+
     shares = size_usd / entry
     pnl_pct = (shares * (current_price - entry)) / size_usd * 100
     if pnl_pct <= -float(risk["stop_loss_pct"]):

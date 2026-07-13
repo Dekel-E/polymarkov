@@ -154,6 +154,35 @@ async def test_thin_book_partial_fill_flagged(monkeypatch, captured_positions):
     assert ctx.steps[-1].response["exhausted"] is True
 
 
+def test_split_position_proportional():
+    from backend.sim.paper_broker import split_position
+
+    position = {"market_id": "m", "side": "BUY_YES", "entry_price": 0.4, "size_usd": 100.0, "fee_paid": 2.0}
+    closed, remaining = split_position(position, 0.25)
+    assert closed["size_usd"] == 25.0
+    assert closed["fee_paid"] == 0.5
+    assert closed["entry_price"] == 0.4
+    assert remaining == {"size_usd": 75.0, "fee_paid": 1.5}
+    # bounds are clamped
+    closed_all, rem_all = split_position(position, 5.0)
+    assert closed_all["size_usd"] == 100.0 and rem_all["size_usd"] == 0.0
+
+
+def test_per_position_levels_override_percent_rules():
+    from backend.sim.risk import evaluate_position
+
+    risk = {"stop_loss_pct": 50, "take_profit_pct": 100}
+    base = {"entry_price": 0.50, "size_usd": 100.0}
+    # explicit SL level triggers even when % rule would not
+    assert evaluate_position({**base, "sl_price": 0.45}, 0.44, risk) == "stop_loss"
+    # explicit TP level
+    assert evaluate_position({**base, "tp_price": 0.60}, 0.61, risk) == "take_profit"
+    # explicit levels REPLACE the % rules: -52% but SL set lower -> hold
+    assert evaluate_position({**base, "sl_price": 0.10}, 0.24, risk) is None
+    # no explicit levels -> % rules still apply
+    assert evaluate_position(base, 0.24, risk) == "stop_loss"
+
+
 def test_close_permission_defines_userspace():
     from backend.sim.paper_broker import close_permission
 
