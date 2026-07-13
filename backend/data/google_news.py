@@ -59,7 +59,10 @@ def parse_rss(xml_text: str, max_records: int) -> list[dict]:
 
 
 async def fetch_articles(query: str, max_records: int = 10, days: int = 7) -> list[dict]:
-    """Recent articles matching `query`, newest first. [] on failure."""
+    """Recent articles matching `query`, NEWEST FIRST. [] on failure.
+
+    Google orders the feed by relevance, which surfaces day-old items over
+    fresh ones — so we parse a wide window and re-sort by publish time."""
     params = {
         "q": f"{query} when:{days}d",
         "hl": "en-US",
@@ -72,6 +75,8 @@ async def fetch_articles(query: str, max_records: int = 10, days: int = 7) -> li
         ) as client:
             resp = await client.get(RSS_URL, params=params)
             resp.raise_for_status()
-            return parse_rss(resp.text, max_records)
+            articles = parse_rss(resp.text, max_records=60)
+            articles.sort(key=lambda a: a["published_at"] or "", reverse=True)
+            return articles[:max_records]
     except (httpx.HTTPError, ValueError):
         return []

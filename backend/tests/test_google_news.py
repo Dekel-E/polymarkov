@@ -43,6 +43,21 @@ async def test_fetch_articles_queries_with_recency():
     assert "when%3A7d" in str(route.calls[0].request.url)  # recency operator, url-encoded
 
 
+RSS_RELEVANCE_ORDERED = RSS.replace(
+    "<pubDate>Fri, 10 Jul 2026 14:00:00 GMT</pubDate>",
+    "<pubDate>Mon, 06 Jul 2026 14:00:00 GMT</pubDate>",
+)
+
+
+@respx.mock
+async def test_fetch_articles_resorts_newest_first():
+    # Google puts a stale-but-relevant item first; we must not
+    respx.get(google_news.RSS_URL).mock(return_value=Response(200, text=RSS_RELEVANCE_ORDERED))
+    articles = await google_news.fetch_articles("q", max_records=5)
+    assert articles[0]["published_at"].startswith("2026-07-09")  # the fresher one leads
+    assert articles[1]["published_at"].startswith("2026-07-06")
+
+
 @respx.mock
 async def test_fetch_articles_degrades():
     respx.get(google_news.RSS_URL).mock(return_value=Response(503))

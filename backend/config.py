@@ -94,8 +94,10 @@ DEDUP_COSINE_THRESHOLD = 0.92   # near-duplicates: keep highest-authority domain
 CLUSTER_COSINE_THRESHOLD = 0.80  # same-day + cosine>0.80 -> one cluster
 # Semantic matches BELOW these scores are noise, not evidence — without the
 # floor, an off-topic market pulls in whatever happens to be nearest.
-NEWS_MIN_MATCH_SCORE = 0.55
-PRECEDENT_MIN_MATCH_SCORE = 0.50
+# NOTE: gemini/llmod embeddings run "hot" — unrelated texts often score
+# 0.5+ — so these floors are deliberately strict.
+NEWS_MIN_MATCH_SCORE = 0.62
+PRECEDENT_MIN_MATCH_SCORE = 0.55
 MAX_EVIDENCE_CLUSTERS = 8
 MAX_PRECEDENTS = 5
 MAX_SOCIAL_POSTS = 20
