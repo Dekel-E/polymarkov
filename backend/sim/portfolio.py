@@ -1,30 +1,25 @@
 """Portfolio views over the paper-trading positions table.
 
-Scopes: "agent" = the agent's own book (user_id IS NULL);
-"mine" = positions belonging to a specific logged-in user.
+Single-user install: one book holds every position — the agent's strategy
+trades and manual GUI trades — distinguished by the `strategy` column.
 Open rows are enriched with the cached market mid so the GUI can show
 current price and unrealized PnL without hammering Gamma.
 """
 
 from __future__ import annotations
 
-from typing import Optional
-
-from backend import config
 from backend.data import supabase_client
 
 
-def get_portfolio(scope: str = "agent", user_id: Optional[str] = None) -> dict:
+def get_portfolio() -> dict:
     if not supabase_client.is_configured():
         return {"open": [], "resolved": [], "stats": _stats([], [])}
 
     client = supabase_client.get_client()
-    q = client.table("positions").select("*").order("opened_at", desc=True).limit(200)
-    if scope == "mine" and user_id:
-        q = q.eq("user_id", user_id)
-    else:
-        q = q.is_("user_id", "null")
-    rows = q.execute().data or []
+    rows = (
+        client.table("positions").select("*").order("opened_at", desc=True).limit(200)
+        .execute().data or []
+    )
 
     open_rows = [r for r in rows if r.get("status") == "open"]
     resolved = [r for r in rows if r.get("status") == "resolved"]

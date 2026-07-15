@@ -138,7 +138,6 @@ export interface Position {
   resolved_outcome: string | null;
   resolved_at: string | null;
   pnl: number | null;
-  user_id: string | null;
   strategy: string | null;
   sl_price: number | null;
   tp_price: number | null;

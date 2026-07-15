@@ -81,27 +81,36 @@ def parse_leaderboard(rows: list[dict]) -> list[dict]:
     return out
 
 
+# /v1/leaderboard takes timePeriod=DAY|WEEK|MONTH|ALL (docs.polymarket.com,
+# "Get trader leaderboard rankings"). It silently IGNORES unknown params, so
+# the old window=7d style returned the same default board for every window.
+_TIME_PERIOD = {"1d": "DAY", "7d": "WEEK", "30d": "MONTH", "all": "ALL"}
+
+
 async def fetch_leaderboard(window: str = "30d", limit: int = 20) -> list[dict]:
-    """Top wallets by profit. Cached 10 min. [] on failure."""
+    """Top wallets by profit for a time window. Cached 10 min. [] on failure."""
     cache_key = f"{window}:{limit}"
     hit = _league_cache.get(cache_key)
     if hit and time.time() - hit[0] < LEAGUE_CACHE_TTL_S:
         return hit[1]
 
-    params = {"window": window, "limit": limit, "rankType": "profit"}
-    async with httpx.AsyncClient(timeout=config.HTTP_TIMEOUT_S, headers=_HEADERS) as client:
-        for path in ("/v1/leaderboard", "/leaderboard"):
-            try:
-                resp = await client.get(f"{DATA_API}{path}", params=params)
-                resp.raise_for_status()
-                body = resp.json()
-                rows = body if isinstance(body, list) else body.get("leaderboard") or body.get("data") or []
-                parsed = parse_leaderboard(rows)
-                if parsed:
-                    _league_cache[cache_key] = (time.time(), parsed)
-                    return parsed
-            except (httpx.HTTPError, ValueError):
-                continue
+    params = {
+        "timePeriod": _TIME_PERIOD.get(window, "MONTH"),
+        "orderBy": "PNL",
+        "limit": min(limit, 50),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=config.HTTP_TIMEOUT_S, headers=_HEADERS) as client:
+            resp = await client.get(f"{DATA_API}/v1/leaderboard", params=params)
+            resp.raise_for_status()
+            body = resp.json()
+            rows = body if isinstance(body, list) else body.get("leaderboard") or body.get("data") or []
+            parsed = parse_leaderboard(rows)
+            if parsed:
+                _league_cache[cache_key] = (time.time(), parsed)
+                return parsed
+    except (httpx.HTTPError, ValueError):
+        pass
     return []
 
 

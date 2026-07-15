@@ -60,6 +60,7 @@ async def test_polymarket_comments_degrade_on_error():
 
 async def test_gather_social_no_sources(monkeypatch):
     monkeypatch.setattr(social.config, "ENABLE_POLYMARKET_COMMENTS", False)
+    monkeypatch.setattr(social.config, "ENABLE_BLUESKY", False)
     monkeypatch.setattr(social.config, "ENABLE_REDDIT", False)
     result = await social.gather_social("", "fed rate cut")
     assert result["posts"] == []

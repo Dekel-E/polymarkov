@@ -29,6 +29,9 @@ What to analyze:
 - Precedents: do similar resolved markets suggest a base rate materially
   different from the current price? Weight them via evidence_weights (they
   are usually weak evidence: strength 0.1-0.3, reliability ~0.6).
+- Time: use the "Days to resolution" line. With little time left, a large
+  move needs a concrete scheduled catalyst; a mid far from 0 or 1 close to
+  expiry is itself information about unresolved uncertainty.
 - The efficient-market default: absent microstructure problems, the market
   mid IS your best estimate — deviate from it only with a stated reason.
 

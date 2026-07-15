@@ -12,7 +12,11 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 BACKEND_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BACKEND_DIR.parent
-PROMPTS_DIR = BACKEND_DIR / "prompts"
+# The agent registry (backend/agent/registry/) is the single home for what
+# the agent can do: tools.py declares every module/tool, prompts/ holds the
+# system prompts (one .txt per LLM module).
+REGISTRY_DIR = BACKEND_DIR / "agent" / "registry"
+PROMPTS_DIR = REGISTRY_DIR / "prompts"
 ASSETS_DIR = BACKEND_DIR / "assets"
 ARCHITECTURE_PNG = ASSETS_DIR / "architecture.png"
 
@@ -65,8 +69,13 @@ REDDIT_CLIENT_SECRET = _env("REDDIT_CLIENT_SECRET")
 # Social sources are best-effort and feature-flagged (§2).
 ENABLE_POLYMARKET_COMMENTS = True
 ENABLE_REDDIT = bool(REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET)
-ENABLE_BLUESKY = False
-ENABLE_X = False
+ENABLE_BLUESKY = True   # public AppView search — keyless
+ENABLE_X = False        # paid API — off
+
+# Single-user install (course requirement: no auth). The watchlist and
+# followed_wallets tables require a non-null uuid, so rows carry this fixed
+# id; it has no per-user meaning. Positions are one book, no ownership.
+DESK_USER_ID = "00000000-0000-0000-0000-000000000000"
 
 # ---------------------------------------------------------------------------
 # Team info (course requirement) — TODO: fill in real values before submission
@@ -198,6 +207,11 @@ TUNE_MIN_TRADES = 5               # ...but only with enough evidence
 EXCERPT_CLUSTERS = 4              # top news clusters whose pages the agent reads
 EXCERPT_MAX_CHARS = 500           # excerpt length carried into the council context
 
+# Cross-venue (Kalshi): a second market-consensus prior for the council.
+# Matching is conservative — no match beats a wrong match.
+KALSHI_MATCH_MIN = 0.5           # min fraction of question tokens matched
+KALSHI_MAX_MARKETS = 4           # outcomes carried into the council context
+
 # News intake + web fallback
 GNEWS_MAX_RECORDS = 15            # Google News results per query (2 queries/run)
 WEB_SEARCH_ENABLED = True         # DuckDuckGo fallback when news runs thin
@@ -231,21 +245,17 @@ ARB_SCAN_MARKETS = 25            # binary markets checked per scan
 ARB_SCAN_EVENTS = 12             # mutually-exclusive events checked per scan
 
 # ---------------------------------------------------------------------------
-# Pipeline
+# Pipeline — module names come from the registry (single source of truth)
 # ---------------------------------------------------------------------------
-CANONICAL_MODULES = [
-    "QueryPlanner",
-    "MarketResolver",
-    "EvidenceRetriever",
-    "SocialScanner",
-    "SentimentScorer",
-    "BullAnalyst",
-    "BearAnalyst",
-    "QuantAnalyst",
-    "ResolutionSkeptic",
-    "Judge",
-    "PaperBroker",
-    # background jobs (diagram only, never called from /api/execute)
-    "MarketIndexer",
-    "NewsIndexer",
-]
+from backend.agent.registry.tools import CANONICAL_MODULES  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# MarketChat (grounded per-market Q&A with on-demand intel gathering)
+# ---------------------------------------------------------------------------
+CHAT_MAX_QUESTION_CHARS = 600
+CHAT_MAX_HISTORY_TURNS = 8        # prior turns carried into the answer call
+CHAT_MAX_HISTORY_CHARS = 500      # per carried turn
+CHAT_NEWS_RESULTS = 6             # Google News articles fetched per query
+CHAT_WEB_RESULTS = 5              # DuckDuckGo results per query
+CHAT_SOCIAL_POSTS = 12            # social posts carried into the answer
+CHAT_DOSSIER_MAX_AGE_S = 24 * 3600  # a stale dossier is still usable context

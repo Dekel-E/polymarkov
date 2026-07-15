@@ -33,6 +33,9 @@ Rules:
 - summary must include the strongest OPPOSING argument to the verdict, not
   just the supporting case, and must cite evidence ids for factual claims.
   If you cannot cite it, do not claim it.
+- summary must also name the single STRONGEST DISAGREEMENT inside the council
+  (which analysts diverge, on what) and say in one clause how the computed
+  decision resolves or sidesteps it. If the council is unanimous, say so.
 - key_risks: specific and falsifiable ("CPI print on Aug 12 could reverse the
   cut narrative (c3)"), not generic ("markets are uncertain").
 - This is an educational tool doing paper trading only — never present the

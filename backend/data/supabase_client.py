@@ -119,22 +119,6 @@ def mark_articles_embedded(article_ids: list[str]) -> None:
     get_client().table("articles").update({"embedded": True}).in_("id", article_ids).execute()
 
 
-def latest_article_date() -> Optional[str]:
-    """Cache watermark for EvidenceRetriever live top-up."""
-    if not is_configured():
-        return None
-    rows = (
-        get_client()
-        .table("articles")
-        .select("published_at")
-        .order("published_at", desc=True)
-        .limit(1)
-        .execute()
-        .data
-    )
-    return rows[0]["published_at"] if rows else None
-
-
 # ---------------------------------------------------------------------------
 # precedents
 # ---------------------------------------------------------------------------
@@ -145,13 +129,6 @@ def upsert_precedents(precedents: list[dict]) -> int:
         return 0
     get_client().table("precedents").upsert(precedents).execute()
     return len(precedents)
-
-
-def count_precedents() -> int:
-    if not is_configured():
-        return 0
-    resp = get_client().table("precedents").select("market_id", count="exact").limit(1).execute()
-    return resp.count or 0
 
 
 # ---------------------------------------------------------------------------
@@ -210,40 +187,45 @@ def get_recent_runs(limit: int = 200) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# watchlist
+# watchlist (single-user: rows carry the fixed DESK_USER_ID because the
+# schema requires a non-null uuid; no per-user semantics remain)
 # ---------------------------------------------------------------------------
 
 
-def add_watch(user_id: str, market_id: str) -> None:
+def add_watch(market_id: str) -> None:
     if not is_configured():
         return
     get_client().table("watchlist").upsert(
-        {"user_id": user_id, "market_id": market_id}, on_conflict="user_id,market_id"
+        {"user_id": config.DESK_USER_ID, "market_id": market_id},
+        on_conflict="user_id,market_id",
     ).execute()
 
 
-def remove_watch(user_id: str, market_id: str) -> None:
+def remove_watch(market_id: str) -> None:
     if not is_configured():
         return
-    get_client().table("watchlist").delete().eq("user_id", user_id).eq(
-        "market_id", market_id
-    ).execute()
+    get_client().table("watchlist").delete().eq("market_id", market_id).execute()
 
 
-def get_watchlist(user_id: str) -> list[str]:
+def get_watchlist() -> list[str]:
     if not is_configured():
         return []
     rows = (
         get_client()
         .table("watchlist")
         .select("market_id")
-        .eq("user_id", user_id)
         .order("created_at", desc=True)
         .execute()
         .data
         or []
     )
-    return [r["market_id"] for r in rows]
+    seen: set[str] = set()
+    out: list[str] = []
+    for r in rows:  # newest first; dedupe rows left over from the auth era
+        if r["market_id"] not in seen:
+            seen.add(r["market_id"])
+            out.append(r["market_id"])
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -462,44 +444,48 @@ def distinct_followed_wallets() -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# followed wallets (Smart Money League)
+# followed wallets (Smart Money League; single-user — same DESK_USER_ID rule
+# as the watchlist)
 # ---------------------------------------------------------------------------
 
 
-def follow_wallets(user_id: str, wallets: list[dict]) -> int:
-    """Upsert [{wallet, label}] for a user. Returns rows written."""
+def follow_wallets(wallets: list[dict]) -> int:
+    """Upsert [{wallet, label}]. Returns rows written."""
     if not is_configured() or not wallets:
         return 0
     rows = [
-        {"user_id": user_id, "wallet": w["wallet"], "label": w.get("label", "")}
+        {"user_id": config.DESK_USER_ID, "wallet": w["wallet"], "label": w.get("label", "")}
         for w in wallets
     ]
     get_client().table("followed_wallets").upsert(rows, on_conflict="user_id,wallet").execute()
     return len(rows)
 
 
-def unfollow_wallet(user_id: str, wallet: str) -> None:
+def unfollow_wallet(wallet: str) -> None:
     if not is_configured():
         return
-    get_client().table("followed_wallets").delete().eq("user_id", user_id).eq(
-        "wallet", wallet
-    ).execute()
+    get_client().table("followed_wallets").delete().eq("wallet", wallet).execute()
 
 
-def get_followed_wallets(user_id: str) -> list[dict]:
+def get_followed_wallets() -> list[dict]:
     if not is_configured():
         return []
     rows = (
         get_client()
         .table("followed_wallets")
         .select("wallet,label")
-        .eq("user_id", user_id)
         .order("created_at", desc=True)
         .execute()
         .data
         or []
     )
-    return rows
+    seen: set[str] = set()
+    out: list[dict] = []
+    for r in rows:
+        if r["wallet"] not in seen:
+            seen.add(r["wallet"])
+            out.append(r)
+    return out
 
 
 def distinct_watched_market_ids() -> list[str]:

@@ -8,6 +8,10 @@ An AI agent that produces a **pre-trade intelligence dossier** for a Polymarket 
 
 `QueryPlanner → MarketResolver → EvidenceRetriever + SocialScanner → SentimentScorer → Council (BullAnalyst, BearAnalyst, QuantAnalyst, ResolutionSkeptic) → Judge → PaperBroker`, with background jobs `MarketIndexer` / `NewsIndexer` keeping Supabase + Pinecone warm. Exactly **7 LLM calls per execute**; all price/fee/edge/Kelly arithmetic is deterministic code ([backend/agent/pricing.py](backend/agent/pricing.py)).
 
+`MarketChat` adds grounded per-market Q&A outside the execute pipeline (≤2 LLM calls per question): it plans whether the question needs fresh intel, searches the web/news and scrapes socials when it does, indexes what it finds, and answers with citations. `DeskChat` (`POST /api/chat`, on the home page) is the global conversational entry point: it routes any question to the right market, to the desk's own portfolio/state, or to the agent's self-description — and out-of-scope asks get related Polymarket markets suggested instead of a dead-end refusal. `CrossVenueScanner` gives the council same-event odds from Kalshi as a second market-consensus prior. `/api/execute` accepts an optional `history` for follow-up prompts.
+
+**Agent registry:** everything the agent can do — formal tool/module specs and every system prompt — lives in [backend/agent/registry/](backend/agent/registry/) (`tools.py` + `prompts/*.txt`), served verbatim by `/api/agent_info`.
+
 ## Stack
 
 - **Frontend:** Next.js (App Router) + TypeScript + Tailwind, served at `/`
@@ -23,6 +27,8 @@ An AI agent that produces a **pre-trade intelligence dossier** for a Polymarket 
 | `GET /api/agent_info` | Agent description, prompt template, recorded examples |
 | `GET /api/model_architecture` | Architecture diagram (PNG) |
 | `POST /api/execute` | Run the agent: `{"prompt": "..."}` → `{status, error, response, steps}` |
+| `POST /api/market/chat` | Grounded Q&A on one market: `{"slug", "question", "history"}` → answer + citations (searches & indexes fresh intel when needed) |
+| `POST /api/chat` | Global desk chat: routes any question to a market / the portfolio / the agent's self-description |
 
 ## Local development
 

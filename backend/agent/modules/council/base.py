@@ -5,6 +5,8 @@ pricing.py does all arithmetic.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from pydantic import ValidationError
 
 from backend.agent.types import (
@@ -23,6 +25,22 @@ def _fmt(v: float | None, pct: bool = True) -> str:
     return f"{v * 100:.1f}%" if pct else f"{v:,.0f}"
 
 
+def time_context(end_date: str | None, now: datetime | None = None) -> str:
+    """'Today: … | Days to resolution: …' — the model does NOT know the
+    current date, so time-to-resolution must be computed for it."""
+    now = now or datetime.now(timezone.utc)
+    line = f"Today: {now.date().isoformat()}"
+    if end_date:
+        try:
+            end = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+            end = end if end.tzinfo else end.replace(tzinfo=timezone.utc)
+            days = max(0.0, (end - now).total_seconds() / 86400)
+            line += f" | Days to resolution: {days:.1f}"
+        except ValueError:
+            pass
+    return line
+
+
 def _trend(history: list[tuple[float, float]]) -> str:
     if len(history) < 2:
         return "no history"
@@ -37,17 +55,37 @@ def build_shared_context(
     clusters: list[EvidenceCluster],
     pulse: SocialPulse,
     precedents: list[Precedent],
+    cross_venue: dict | None = None,
 ) -> str:
     """Identical input for all four personas — built once (§3.6)."""
     lines = [
         "== MARKET ==",
         f"Question: {market.question}",
         f"Category: {market.category} | Ends: {market.end_date or 'n/a'}",
+        time_context(market.end_date),
         f"Resolution criteria: {(market.resolution_criteria or 'not provided')[:900]}",
         f"Mid {_fmt(market.mid)} | Bid {_fmt(market.best_bid)} | Ask {_fmt(market.best_ask)}"
         f" | Spread {_fmt(market.spread)} | Ask depth ${market.depth_at_ask_usd:,.0f}"
         f" | 24h volume ${market.volume24h:,.0f}",
         f"7-day price: {_trend(market.price_history_7d)}",
+    ]
+    if cross_venue:
+        lines += [
+            "",
+            f"== CROSS-VENUE ({cross_venue.get('venue', 'Kalshi')}) ==",
+            f"Matched event: {cross_venue.get('event_title')} "
+            f"{cross_venue.get('event_subtitle') or ''} (match score {cross_venue.get('match_score')})",
+        ]
+        for m in cross_venue.get("markets") or []:
+            bid, ask, last = m.get("yes_bid"), m.get("yes_ask"), m.get("last_price")
+            lines.append(
+                f"- {m.get('outcome')}: yes {_fmt(bid)}/{_fmt(ask)} (last {_fmt(last)})"
+            )
+        lines.append(
+            "A second venue pricing the same event is a market-consensus prior; "
+            "note in your thesis if it diverges materially from the Polymarket mid."
+        )
+    lines += [
         "",
         "== EVIDENCE CLUSTERS (news) ==",
     ]

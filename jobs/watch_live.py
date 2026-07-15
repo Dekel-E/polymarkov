@@ -106,11 +106,7 @@ def spread_violation_item(market: dict, yes_ask: float, no_ask: float) -> Option
 async def build_watch_set(state: WatchState) -> list[str]:
     """Pick assets to watch: agent holdings + watchlist + top trending."""
     markets = await polymarket.get_trending_markets(60)
-    held = {
-        p["market_id"]
-        for p in supabase_client.get_open_positions()
-        if p.get("user_id") is None
-    }
+    held = {p["market_id"] for p in supabase_client.get_open_positions()}
     watched = set(supabase_client.distinct_watched_market_ids())
 
     picked: list[dict] = []

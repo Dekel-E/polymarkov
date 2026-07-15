@@ -3,11 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { executeTrade } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
 import type { DossierUi, FillReport } from "@/lib/types";
 
 export default function TradePanel({ slug, ui }: { slug: string; ui: DossierUi }) {
-  const { user, token } = useAuth();
   const verdict = ui.verdict;
   const recommended = verdict && verdict.verdict !== "PASS" ? verdict.verdict : null;
   const suggestedUsd = verdict
@@ -22,29 +20,11 @@ export default function TradePanel({ slug, ui }: { slug: string; ui: DossierUi }
 
   if (ui.fill || !verdict) return null; // agent already traded, or no verdict
 
-  if (!user) {
-    return (
-      <section className="rounded-2xl border border-desk-line bg-desk-panel/60 p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-desk-dim">
-          {recommended ? "Execute the agent's trade" : "Trade this market"}
-        </h2>
-        <p className="mt-1 text-xs text-desk-dim">
-          Paper trades belong to an account —{" "}
-          <Link href="/login" className="text-instrument hover:underline">
-            log in or register
-          </Link>{" "}
-          to trade this verdict into your own book. The agent&apos;s book only trades
-          through its own strategies.
-        </p>
-      </section>
-    );
-  }
-
   async function submit() {
     setBusy(true);
     setError(null);
     try {
-      setFill(await executeTrade(slug, side, amount, token));
+      setFill(await executeTrade(slug, side, amount));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -82,7 +62,7 @@ export default function TradePanel({ slug, ui }: { slug: string; ui: DossierUi }
         {recommended
           ? `The verdict is ${recommended.replace("_", " ")} with a suggested ${verdict.suggested_size_pct_bankroll.toFixed(1)}% of the $10k paper bankroll.`
           : "The agent says PASS — you can still direct a paper trade at your own discretion."}{" "}
-        Fills land in your book on the portfolio page.
+        Fills land in the desk book on the portfolio page.
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">

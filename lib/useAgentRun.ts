@@ -1,14 +1,29 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { executeAgent } from "./api";
+import { type ChatTurn, executeAgent } from "./api";
 import type { ExecuteOut } from "./types";
+
+export interface RunRecord {
+  prompt: string;
+  summary: string; // short assistant summary carried as follow-up context
+}
+
+function summarize(result: ExecuteOut): string {
+  const v = result.ui?.verdict;
+  const slug = result.ui?.market?.slug;
+  if (v && slug) {
+    return `analyzed market ${slug}: verdict ${v.verdict}, fair probability ${(v.fair_probability * 100).toFixed(1)}%`;
+  }
+  return (result.response ?? "").slice(0, 240);
+}
 
 export function useAgentRun() {
   const [running, setRunning] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<ExecuteOut | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [pastRuns, setPastRuns] = useState<RunRecord[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -29,8 +44,17 @@ export function useAgentRun() {
       () => setElapsed(Math.floor((Date.now() - started) / 1000)),
       1000,
     );
+    // back-and-forth support: prior turns let the planner resolve follow-ups
+    const history: ChatTurn[] = pastRuns.flatMap((r) => [
+      { role: "user" as const, content: r.prompt },
+      { role: "assistant" as const, content: r.summary },
+    ]);
     try {
-      setResult(await executeAgent(text));
+      const res = await executeAgent(text, history.slice(-8));
+      setResult(res);
+      if (res.status === "ok") {
+        setPastRuns((prev) => [...prev.slice(-5), { prompt: text, summary: summarize(res) }]);
+      }
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -39,5 +63,5 @@ export function useAgentRun() {
     }
   }
 
-  return { running, elapsed, result, fetchError, run };
+  return { running, elapsed, result, fetchError, run, pastRuns };
 }

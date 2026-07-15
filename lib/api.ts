@@ -14,15 +14,18 @@ import type {
   WatchItem,
 } from "./types";
 
-function authHeaders(token?: string | null): Record<string, string> {
-  return token ? { Authorization: `Bearer ${token}` } : {};
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
 }
 
-export async function executeAgent(prompt: string): Promise<ExecuteOut> {
-  const res = await fetch("/api/execute", {
+export async function executeAgent(prompt: string, history: ChatTurn[] = []): Promise<ExecuteOut> {
+  // ?ui=1: the graded envelope is exactly {status,error,response,steps};
+  // the GUI asks for the extra structured dossier payload on top.
+  const res = await fetch("/api/execute?ui=1", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, history }),
   });
   if (!res.ok) {
     throw new Error(`API returned HTTP ${res.status}`);
@@ -38,11 +41,8 @@ export async function fetchMarkets(limit = 20): Promise<MarketSummary[]> {
   return data.markets;
 }
 
-export async function fetchPortfolio(
-  scope: "agent" | "mine",
-  token?: string | null,
-): Promise<Portfolio> {
-  const res = await fetch(`/api/portfolio?scope=${scope}`, { headers: authHeaders(token) });
+export async function fetchPortfolio(): Promise<Portfolio> {
+  const res = await fetch("/api/portfolio");
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
   const data = (await res.json()) as { portfolio: Portfolio | null; error: string | null };
   if (!data.portfolio) throw new Error(data.error ?? "portfolio unavailable");
@@ -53,11 +53,10 @@ export async function executeTrade(
   slug: string,
   side: "BUY_YES" | "BUY_NO",
   sizeUsd: number,
-  token?: string | null,
 ): Promise<FillReport> {
   const res = await fetch("/api/trade", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ slug, side, size_usd: sizeUsd }),
   });
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
@@ -68,12 +67,11 @@ export async function executeTrade(
 
 export async function closePosition(
   positionId: string,
-  token?: string | null,
   fraction = 1.0,
 ): Promise<{ exit_price: number; pnl: number; closed_fraction: number }> {
   const res = await fetch("/api/position/close", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ position_id: positionId, fraction }),
   });
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
@@ -91,11 +89,10 @@ export async function setPositionLimits(
   positionId: string,
   slPrice: number | null,
   tpPrice: number | null,
-  token?: string | null,
 ): Promise<void> {
   const res = await fetch("/api/position/limits", {
     method: "PUT",
-    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ position_id: positionId, sl_price: slPrice, tp_price: tpPrice }),
   });
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
@@ -114,10 +111,10 @@ export async function fetchWorkingQuotes(): Promise<import("./types").WorkingQuo
   return data.quotes;
 }
 
-export async function cancelQuote(quoteId: string, token?: string | null): Promise<void> {
+export async function cancelQuote(quoteId: string): Promise<void> {
   const res = await fetch("/api/quotes/cancel", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ quote_id: quoteId }),
   });
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
@@ -157,24 +154,20 @@ export async function fetchAgentStats(): Promise<AgentStats> {
   return data.stats;
 }
 
-export async function fetchWatchlist(token: string): Promise<WatchItem[]> {
-  const res = await fetch("/api/watchlist", { headers: authHeaders(token) });
+export async function fetchWatchlist(): Promise<WatchItem[]> {
+  const res = await fetch("/api/watchlist");
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
   const data = (await res.json()) as { items: WatchItem[]; error: string | null };
   if (data.error) throw new Error(data.error);
   return data.items;
 }
 
-export async function setWatched(
-  marketId: string,
-  watched: boolean,
-  token: string,
-): Promise<void> {
+export async function setWatched(marketId: string, watched: boolean): Promise<void> {
   const res = await fetch(
     watched ? "/api/watchlist" : `/api/watchlist?market_id=${encodeURIComponent(marketId)}`,
     {
       method: watched ? "POST" : "DELETE",
-      headers: { "Content-Type": "application/json", ...authHeaders(token) },
+      headers: { "Content-Type": "application/json" },
       body: watched ? JSON.stringify({ market_id: marketId }) : undefined,
     },
   );
@@ -183,22 +176,18 @@ export async function setWatched(
   if (data.error) throw new Error(data.error);
 }
 
-export async function fetchFollowedWallets(token: string): Promise<FollowedWallet[]> {
-  const res = await fetch("/api/wallets", { headers: authHeaders(token) });
+export async function fetchFollowedWallets(): Promise<FollowedWallet[]> {
+  const res = await fetch("/api/wallets");
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
   const data = (await res.json()) as { wallets: FollowedWallet[]; error: string | null };
   if (data.error) throw new Error(data.error);
   return data.wallets;
 }
 
-export async function followWallet(
-  wallet: string,
-  label: string,
-  token: string,
-): Promise<void> {
+export async function followWallet(wallet: string, label: string): Promise<void> {
   const res = await fetch("/api/wallets", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ wallet, label }),
   });
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
@@ -206,10 +195,9 @@ export async function followWallet(
   if (data.error) throw new Error(data.error);
 }
 
-export async function unfollowWallet(wallet: string, token: string): Promise<void> {
+export async function unfollowWallet(wallet: string): Promise<void> {
   const res = await fetch(`/api/wallets?wallet=${encodeURIComponent(wallet)}`, {
     method: "DELETE",
-    headers: authHeaders(token),
   });
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
   const data = (await res.json()) as { error: string | null };
@@ -218,11 +206,10 @@ export async function unfollowWallet(wallet: string, token: string): Promise<voi
 
 export async function importWallets(
   wallets: unknown[],
-  token: string,
 ): Promise<{ imported: number; skipped: number }> {
   const res = await fetch("/api/wallets/import", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ wallets }),
   });
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
@@ -278,11 +265,10 @@ export async function fetchArbitrage(fresh = false): Promise<{ opportunities: Ar
 
 export async function executeArbitrage(
   opportunity: ArbOpportunity,
-  token?: string | null,
 ): Promise<{ slug: string; filled: boolean; vwap?: number }[]> {
   const res = await fetch("/api/arbitrage/execute", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders(token) },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ opportunity }),
   });
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
@@ -318,6 +304,52 @@ export async function fetchMarketNews(slug: string): Promise<NewsArticle[]> {
   const data = (await res.json()) as { articles: NewsArticle[]; error: string | null };
   if (data.error) throw new Error(data.error);
   return data.articles;
+}
+
+export interface MarketChatResult {
+  answer: string | null;
+  citations: { title: string; url: string }[];
+  gathered?: {
+    searched: boolean;
+    queries: string[];
+    articles: number;
+    articles_indexed: number;
+    social_posts: number;
+  };
+  dossier_age_min?: number | null;
+  error: string | null;
+}
+
+export async function marketChat(
+  slug: string,
+  question: string,
+  history: { role: "user" | "assistant"; content: string }[],
+): Promise<MarketChatResult> {
+  const res = await fetch("/api/market/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ slug, question, history }),
+  });
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as MarketChatResult;
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+export interface DeskChatResult extends MarketChatResult {
+  market?: { slug: string; question: string } | null;
+}
+
+export async function deskChat(question: string, history: ChatTurn[]): Promise<DeskChatResult> {
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, history }),
+  });
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as DeskChatResult;
+  if (data.error) throw new Error(data.error);
+  return data;
 }
 
 export async function fetchMarketDetail(slug: string): Promise<MarketState> {

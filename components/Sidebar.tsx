@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { authConfigured, useAuth } from "@/lib/auth";
 
 function IconGrid() {
   return (
@@ -69,32 +68,6 @@ const NAV = [
   { href: "/agent", label: "The Agent", icon: IconCpu },
 ];
 
-function AuthFooter() {
-  const { user, loading, signOut } = useAuth();
-  if (!authConfigured || loading) return null;
-  if (!user) {
-    return (
-      <Link
-        href="/login"
-        className="mb-3 flex items-center justify-center rounded-xl border border-instrument/50 px-3 py-2 text-sm font-semibold text-instrument transition hover:bg-instrument/10 md:mx-2"
-      >
-        Log in / Register
-      </Link>
-    );
-  }
-  return (
-    <div className="mb-3 rounded-xl border border-desk-line bg-desk-panel/70 px-3 py-2.5 md:mx-2">
-      <div className="truncate text-xs font-semibold text-desk-soft">{user.email}</div>
-      <button
-        onClick={() => signOut()}
-        className="mt-1 text-[11px] text-desk-dim transition hover:text-red-400"
-      >
-        Sign out
-      </button>
-    </div>
-  );
-}
-
 export default function Sidebar() {
   const pathname = usePathname();
   return (
@@ -130,7 +103,6 @@ export default function Sidebar() {
       </nav>
 
       <div className="hidden md:block">
-        <AuthFooter />
         <div className="text-[11px] leading-relaxed text-desk-faint md:px-2">
           Educational tool.
           <br />

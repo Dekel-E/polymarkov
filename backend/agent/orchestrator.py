@@ -14,6 +14,7 @@ import time
 from backend import config
 from backend.agent import intel_cache, pricing
 from backend.agent.modules import (
+    cross_venue,
     evidence_retriever,
     judge,
     market_resolver,
@@ -49,11 +50,62 @@ REFUSAL_DEFAULT = (
 )
 
 
-async def run_pipeline(user_prompt: str) -> ExecuteOut:
+def self_description() -> str:
+    """Answer 'who are you / what can you do' from the registry — the same
+    specs served by /api/agent_info, so this can never drift from the code.
+    Deterministic: costs zero LLM calls beyond the QueryPlanner."""
+    from backend.agent.registry import MODULES
+
+    llm = [m for m in MODULES if m["kind"] == "llm"]
+    tools = [m for m in MODULES if m["kind"] == "tool"]
+    sources = sorted({s for m in MODULES for s in m["data_sources"]})
+    lines = [
+        "# Polymarkov — what I am and what I can do",
+        "",
+        "I'm an educational pre-trade intelligence agent for **Polymarket** "
+        "prediction markets. Give me a market (URL, slug, or a description) and "
+        "I build a research dossier: recent news, social chatter, a four-analyst "
+        "AI council debate, a deterministic fair-value estimate, and a "
+        "**BUY YES / BUY NO / PASS** verdict with a suggested paper-trade size.",
+        "",
+        "## What I CAN do",
+        "- Analyze any active Polymarket market: `Market: <slug or question>`",
+        "- Gather and index evidence — news search, open-web search, and social "
+        "chatter — and score its sentiment and stance",
+        "- Estimate a fair probability and net edge after spread and fees "
+        "(computed by code, not by the model)",
+        "- Paper-trade a verdict against the live order book (`Trade: yes`)",
+        "- Answer follow-up questions about an analyzed market in the chat on "
+        "its page, fetching fresh sources when needed",
+        "",
+        "## What I CANNOT do",
+        "- Trade real money, hold funds, or give financial advice — every fill "
+        "here is simulated",
+        "- Analyze non-Polymarket assets (stocks, live crypto prices) or answer "
+        "questions unrelated to prediction markets",
+        "- Guarantee outcomes: my verdicts are calibrated estimates from cited "
+        "evidence, and PASS is a first-class answer",
+        "",
+        f"## How I work ({len(llm)} LLM modules, {len(tools)} deterministic tools)",
+    ]
+    for m in llm + tools:
+        lines.append(f"- **{m['name']}** ({m['kind']}): {m['description']}")
+    lines += [
+        "",
+        "**Data sources:** " + ", ".join(sources),
+        "",
+        "Full specs, prompt templates and worked examples: `GET /api/agent_info`.",
+        "",
+        DISCLAIMER,
+    ]
+    return "\n".join(lines)
+
+
+async def run_pipeline(user_prompt: str, history: list[dict] | None = None) -> ExecuteOut:
     ctx = RunContext()
     started = time.monotonic()
     try:
-        result = await _run(ctx, user_prompt, started)
+        result = await _run(ctx, user_prompt, started, history or [])
         return result
     except Exception as exc:  # noqa: BLE001 — envelope contract: never raise
         return ExecuteOut(
@@ -62,6 +114,43 @@ async def run_pipeline(user_prompt: str) -> ExecuteOut:
             response=None,
             steps=ctx.steps,
         )
+
+
+def _planner_input(user_prompt: str, history: list[dict]) -> str:
+    """Prepend recent turns so follow-ups ('what about the resolution risk?')
+    resolve against the market discussed before."""
+    if not history:
+        return user_prompt
+    lines = ["== PREVIOUS CONVERSATION (context for resolving follow-ups) =="]
+    for turn in history[-6:]:
+        role = "user" if str(turn.get("role")) == "user" else "assistant"
+        content = str(turn.get("content", "")).strip()
+        if content:
+            lines.append(f"{role}: {content[:300]}")
+    lines += ["", "== CURRENT REQUEST ==", user_prompt]
+    return "\n".join(lines)
+
+
+async def suggest_markets(entities: list[str], fallback_query: str = "") -> str:
+    """Helpful refusal: turn an out-of-scope topic into Polymarket markets the
+    agent CAN analyze (deterministic Gamma search, zero LLM calls)."""
+    from backend.data import polymarket
+
+    query = " ".join(entities[:3]).strip() or fallback_query.strip()
+    if not query:
+        return ""
+    try:
+        hits = await polymarket.search_markets(query, limit=3)
+    except Exception:
+        return ""
+    if not hits:
+        return ""
+    lines = ["", "", "Related Polymarket markets I CAN analyze — re-run with one of these:"]
+    for h in hits:
+        mid = h.get("mid")
+        mid_txt = f" — mid {float(mid) * 100:.0f}%" if mid is not None else ""
+        lines.append(f"- **{h.get('question', h.get('slug', ''))}**{mid_txt} (`Market: {h.get('slug', '')}`)")
+    return "\n".join(lines)
 
 
 def _serve_cached(payload: dict) -> ExecuteOut:
@@ -82,7 +171,7 @@ def _serve_cached(payload: dict) -> ExecuteOut:
     )
 
 
-async def _run(ctx: RunContext, user_prompt: str, started: float) -> ExecuteOut:
+async def _run(ctx: RunContext, user_prompt: str, started: float, history: list[dict]) -> ExecuteOut:
     # 0. Cache fast path: templated GUI prompts name the market outright,
     #    so a fresh dossier can be served with ZERO LLM calls.
     fast_slug = intel_cache.slug_from_prompt(user_prompt)
@@ -91,12 +180,17 @@ async def _run(ctx: RunContext, user_prompt: str, started: float) -> ExecuteOut:
         if cached:
             return _serve_cached(cached)
 
-    # 1. QueryPlanner (LLM #1)
-    plan = await query_planner.plan_query(ctx, user_prompt)
-    if not plan.in_scope:
-        return ExecuteOut(
-            status="ok", response=plan.reason or REFUSAL_DEFAULT, steps=ctx.steps
+    # 1. QueryPlanner (LLM #1) — sees recent turns so follow-ups resolve
+    plan = await query_planner.plan_query(ctx, _planner_input(user_prompt, history))
+    if plan.intent == "meta":  # "who are you / what can you do" — answered
+        return ExecuteOut(  # deterministically from the agent registry
+            status="ok", response=self_description(), steps=ctx.steps
         )
+    if not plan.in_scope:
+        refusal = (plan.reason or REFUSAL_DEFAULT) + await suggest_markets(
+            plan.entities, plan.market_query or ""
+        )
+        return ExecuteOut(status="ok", response=refusal, steps=ctx.steps)
 
     # 2. MarketResolver (tool)
     resolved = await market_resolver.resolve_market(ctx, plan)
@@ -117,17 +211,20 @@ async def _run(ctx: RunContext, user_prompt: str, started: float) -> ExecuteOut:
         if cached:
             return _serve_cached(cached)
 
-    # 3+4. EvidenceRetriever ∥ SocialScanner (tools, concurrent)
-    evidence, pulse = await asyncio.gather(
+    # 3+4. EvidenceRetriever ∥ SocialScanner ∥ CrossVenueScanner (tools, concurrent)
+    evidence, pulse, venue = await asyncio.gather(
         evidence_retriever.retrieve_evidence(ctx, plan, market),
         social_scanner.scan_social(ctx, plan, market),
+        cross_venue.scan(ctx, market),
     )
 
     # 5. SentimentScorer (LLM #2, one batched call)
     await sentiment_scorer.score_sentiment(ctx, market, evidence.clusters, pulse)
 
     # 6. Council (LLM #3-#6, concurrent, identical context)
-    shared_context = build_shared_context(market, evidence.clusters, pulse, evidence.precedents)
+    shared_context = build_shared_context(
+        market, evidence.clusters, pulse, evidence.precedents, cross_venue=venue
+    )
     opinions = await asyncio.gather(
         bull.run(ctx, shared_context),
         bear.run(ctx, shared_context),

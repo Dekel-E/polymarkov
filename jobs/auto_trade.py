@@ -64,7 +64,7 @@ async def main_async(runs: int, dry_run: bool) -> None:
     max_open = int(settings["risk"]["max_open_positions"])
 
     open_positions = supabase_client.get_open_positions()
-    agent_open = {p["market_id"] for p in open_positions if p.get("user_id") is None}
+    agent_open = {p["market_id"] for p in open_positions}
     at_cap = len(agent_open) >= max_open or not allowed
     if not allowed:
         print("circuit breaker active — analyzing without trading")

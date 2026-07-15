@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import DeskChat from "@/components/DeskChat";
 import DossierView from "@/components/DossierView";
 import MarketGrid from "@/components/MarketGrid";
 import PipelineProgress from "@/components/PipelineProgress";
@@ -8,7 +9,7 @@ import { useAgentRun } from "@/lib/useAgentRun";
 
 export default function Home() {
   const [prompt, setPrompt] = useState("");
-  const { running, elapsed, result, fetchError, run } = useAgentRun();
+  const { running, elapsed, result, fetchError, run, pastRuns } = useAgentRun();
   const resultsRef = useRef<HTMLDivElement | null>(null);
 
   // bring the progress/results into view when a run starts
@@ -47,11 +48,26 @@ export default function Home() {
           </button>
           {!running && (
             <span className="font-mono text-[11px] text-desk-faint">
-              typical run ~1 min · repeat runs are cached
+              typical run ~1 min · repeat runs are cached · follow-ups welcome
             </span>
           )}
         </div>
+
+        {pastRuns.length > 1 && (
+          <div className="mt-3 border-t border-desk-line/60 pt-2">
+            <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-desk-faint">
+              this session
+            </div>
+            {pastRuns.slice(0, -1).map((r, i) => (
+              <div key={i} className="truncate font-mono text-[11px] text-desk-dim">
+                <span className="text-desk-faint">›</span> {r.prompt} — {r.summary}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
+
+      <DeskChat />
 
       <div ref={resultsRef} className="scroll-mt-4">
         {running && (

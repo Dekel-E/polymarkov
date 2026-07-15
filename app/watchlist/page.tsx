@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { fetchWatchlist, setWatched } from "@/lib/api";
-import { authConfigured, useAuth } from "@/lib/auth";
 import type { WatchItem } from "@/lib/types";
 
 function ageLabel(iso: string | null): string | null {
@@ -31,31 +30,27 @@ function VerdictChip({ verdict }: { verdict: string | null }) {
 }
 
 export default function WatchlistPage() {
-  const { user, token, loading: authLoading } = useAuth();
   const [items, setItems] = useState<WatchItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    if (!token) return;
     setLoading(true);
     setError(null);
-    fetchWatchlist(token)
+    fetchWatchlist()
       .then(setItems)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, []);
 
   useEffect(() => {
-    if (!authLoading && token) load();
-    if (!authLoading && !token) setLoading(false);
-  }, [authLoading, token, load]);
+    load();
+  }, [load]);
 
   async function unwatch(marketId: string) {
-    if (!token) return;
     setItems((prev) => prev.filter((i) => i.market_id !== marketId));
     try {
-      await setWatched(marketId, false, token);
+      await setWatched(marketId, false);
     } catch {
       load();
     }
@@ -73,22 +68,7 @@ export default function WatchlistPage() {
         </p>
       </header>
 
-      {!user && !authLoading && (
-        <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-6 text-center">
-          <p className="text-sm text-desk-soft">Log in to build a watchlist.</p>
-          {authConfigured && (
-            <Link
-              href="/login"
-              className="mt-3 inline-block rounded-xl bg-instrument px-5 py-2 text-sm font-bold text-desk-deep transition hover:bg-instrument-bright"
-            >
-              Log in / Register
-            </Link>
-          )}
-        </div>
-      )}
-
-      {user && (
-        <>
+      <>
           {error && (
             <div className="rounded-xl border border-amber-900/60 bg-amber-950/30 p-4 text-sm text-amber-300">
               Could not load the watchlist: {error}
@@ -152,8 +132,7 @@ export default function WatchlistPage() {
               ))}
             </div>
           )}
-        </>
-      )}
+      </>
     </div>
   );
 }

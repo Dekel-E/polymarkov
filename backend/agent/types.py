@@ -28,6 +28,8 @@ class Step(BaseModel):
 
 class ExecuteIn(BaseModel):
     prompt: str
+    # optional back-and-forth support: [{role: user|assistant, content: str}]
+    history: list[dict] = Field(default_factory=list)
 
 
 class ExecuteOut(BaseModel):
@@ -46,6 +48,7 @@ class ExecuteOut(BaseModel):
 
 class QueryPlan(BaseModel):
     in_scope: bool
+    intent: Literal["market", "meta", "out_of_scope"] = "market"
     market_query: Optional[str] = None
     market_url: Optional[str] = None
     entities: list[str] = Field(default_factory=list)

@@ -91,11 +91,15 @@ def _age_s(created_at: str) -> float:
         return float("inf")
 
 
-def get(slug: str) -> Optional[dict]:
-    """Fresh cached payload for a market (steps rehydrated), or None."""
+def get(slug: str, max_age_s: Optional[float] = None) -> Optional[dict]:
+    """Fresh cached payload for a market (steps rehydrated), or None.
+
+    `max_age_s` overrides the default TTL — MarketChat accepts a much older
+    dossier as context than the execute pipeline would serve."""
+    ttl = max_age_s if max_age_s is not None else config.INTEL_CACHE_TTL_S
     payload = None
     hit = _MEM.get(slug)
-    if hit and time.time() - hit[0] < config.INTEL_CACHE_TTL_S:
+    if hit and time.time() - hit[0] < ttl:
         payload = hit[1]
     elif supabase_client.is_configured():
         try:
@@ -112,9 +116,10 @@ def get(slug: str) -> Optional[dict]:
             return None
         if rows:
             candidate = rows[0]["payload"]
-            if _age_s(candidate.get("created_at") or rows[0]["created_at"]) < config.INTEL_CACHE_TTL_S:
+            if _age_s(candidate.get("created_at") or rows[0]["created_at"]) < ttl:
                 payload = candidate
-                _MEM[slug] = (time.time(), payload)
+                if ttl <= config.INTEL_CACHE_TTL_S:  # don't let stale reads repopulate the fast path
+                    _MEM[slug] = (time.time(), payload)
     if payload is None:
         return None
     return {**payload, "steps": _rehydrate_steps(payload.get("steps") or [])}

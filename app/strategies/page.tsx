@@ -5,7 +5,6 @@ import { useCallback, useEffect, useState } from "react";
 import ActivityFeed from "@/components/ActivityFeed";
 import DeskBriefing from "@/components/DeskBriefing";
 import { executeArbitrage, fetchArbitrage, fetchSettings, updateSettings } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
 import type { AgentSettings, ArbOpportunity } from "@/lib/types";
 
 const usd = (v: number) =>
@@ -84,7 +83,6 @@ function Toggle({ on, onChange, disabled }: { on: boolean; onChange: () => void;
 }
 
 export default function StrategiesPage() {
-  const { token } = useAuth();
   const [settings, setSettings] = useState<AgentSettings | null>(null);
   const [realizedToday, setRealizedToday] = useState(0);
   const [riskDraft, setRiskDraft] = useState<AgentSettings["risk"] | null>(null);
@@ -165,7 +163,7 @@ export default function StrategiesPage() {
     setExecuting(opp.question);
     setNote(null);
     try {
-      const reports = await executeArbitrage(opp, token);
+      const reports = await executeArbitrage(opp);
       const filled = reports.filter((r) => r.filled).length;
       setNote(
         filled === reports.length

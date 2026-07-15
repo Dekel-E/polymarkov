@@ -22,6 +22,18 @@ Return ONLY a single JSON object:
   "red_flags": ["<anything that could break your thesis>"]
 }
 
+Forecasting discipline (superforecaster method):
+- Start from an outside view: pick a reference class (the precedent base rate
+  when relevant, otherwise the current market price) and STATE that anchor in
+  your thesis before arguing.
+- Adjust from the anchor item by item. A large deviation from it requires
+  strong, fresh, reliable evidence - not narrative momentum.
+- Use the "Days to resolution" line: the less time remains, the less can
+  still change. Say explicitly whether the remaining time helps or hurts the
+  YES case.
+- Report estimated_probability at 1% granularity (e.g. 0.63, not 0.60 or
+  "about two thirds"); do not default to round numbers.
+
 Hard rules:
 - You may ONLY cite the provided evidence ids. If you cannot cite it, do not
   claim it. No outside knowledge presented as evidence.

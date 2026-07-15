@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 
+from backend.agent.modules.council.base import time_context
 from backend.agent.types import JudgeOutput, MarketState, PersonaOpinion, PricingResult
 from backend.llm.client import RunContext, load_prompt
 
@@ -51,7 +52,8 @@ async def run_judge(
 ) -> JudgeOutput:
     user_prompt = (
         f"Market: {market.question}\n"
-        f"Current mid: {market.mid:.3f} | Ends: {market.end_date or 'n/a'}\n\n"
+        f"Current mid: {market.mid:.3f} | Ends: {market.end_date or 'n/a'}\n"
+        f"{time_context(market.end_date)}\n\n"
         f"== COUNCIL OPINIONS ==\n{_council_block(council)}\n\n"
         f"== COMPUTED DECISION (FINAL — copy these values exactly) ==\n"
         f"{_numbers_block(pricing)}"

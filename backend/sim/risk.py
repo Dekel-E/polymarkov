@@ -73,7 +73,7 @@ async def run_risk_checks() -> dict:
         reason = evaluate_position(position, position.get("current_price"), risk)
         if reason is None:
             continue
-        result = await paper_broker.close_position(str(position["id"]), allow_agent=True)
+        result = await paper_broker.close_position(str(position["id"]))
         report["closed"].append(
             {"market_id": position["market_id"], "reason": reason,
              "pnl": result.get("pnl"), "error": result.get("error")}

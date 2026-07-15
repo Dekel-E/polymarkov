@@ -26,14 +26,13 @@ async def execute_paper_trade(
     market: MarketState,
     priced: PricingResult,
     size_usd: Optional[float] = None,
-    user_id: Optional[str] = None,
     strategy: str = "manual",
 ) -> Optional[FillReport]:
     """Fill the suggested size against the live book. None if nothing to trade.
 
     `size_usd` overrides the Kelly sizing (manual trades from the GUI);
-    `user_id` tags the position to a logged-in user (None = agent book);
-    `strategy` attributes the trade (manual/ai_signal/arbitrage/copy).
+    `strategy` attributes the trade (manual/ai_signal/arbitrage/copy/...) —
+    single-user install, so there is one book and no ownership tagging.
     """
     if priced.verdict == "PASS":
         return None
@@ -74,7 +73,6 @@ async def execute_paper_trade(
         "fee_paid": fee_paid,
         "slippage_bps": slippage_bps,
         "fair_prob_at_entry": priced.fair_adj,
-        "user_id": user_id,
         "strategy": strategy,
     }
     position_id = await asyncio.to_thread(supabase_client.insert_position, position)
@@ -101,24 +99,9 @@ async def execute_paper_trade(
 
 
 # ---------------------------------------------------------------------------
-# Manual close (GUI "direct the agent" control)
+# Manual close (single-user desk: any open position can be closed from the
+# GUI; the agent's jobs use the same path for risk exits)
 # ---------------------------------------------------------------------------
-
-
-def close_permission(owner: Optional[str], user_id: Optional[str], allow_agent: bool) -> Optional[str]:
-    """Ownership rule for closing a position (pure). None = allowed.
-
-    Agent-book positions (owner is None) are managed exclusively by the
-    agent's own jobs (risk manager, thesis exits) — never from the GUI.
-    User positions can only be closed by their owner.
-    """
-    if owner is None:
-        return None if allow_agent else (
-            "the agent's book is managed by its own risk rules — only your own positions can be closed"
-        )
-    if owner != user_id:
-        return "this position belongs to another user"
-    return None
 
 
 def split_position(position: dict, fraction: float) -> tuple[dict, dict]:
@@ -150,15 +133,10 @@ def exit_pnl(position: dict, exit_price: float, exit_fee: float) -> float:
     return round(proceeds - size_usd - float(position.get("fee_paid") or 0) - exit_fee, 4)
 
 
-async def close_position(
-    position_id: str,
-    user_id: Optional[str] = None,
-    allow_agent: bool = False,
-    fraction: float = 1.0,
-) -> dict:
+async def close_position(position_id: str, fraction: float = 1.0) -> dict:
     """Close all (or `fraction`) of an open paper position at the current
     book. Returns a report dict with an `error` key on failure (never raises
-    for expected cases). `allow_agent=True` is for the agent's own jobs only."""
+    for expected cases)."""
     rows = (
         supabase_client.get_client()
         .table("positions")
@@ -175,9 +153,6 @@ async def close_position(
     position = rows[0]
     if position.get("status") != "open":
         return {"error": "position is already resolved"}
-    denied = close_permission(position.get("user_id"), user_id, allow_agent)
-    if denied:
-        return {"error": denied}
 
     market = await polymarket.get_market_state(str(position["market_id"]))
     if market is None:
@@ -218,12 +193,11 @@ async def close_position(
             "fee_paid": closed_part["fee_paid"],
             "slippage_bps": position.get("slippage_bps") or 0,
             "fair_prob_at_entry": position.get("fair_prob_at_entry"),
-            "user_id": position.get("user_id"),
             "strategy": position.get("strategy") or "manual",
             "opened_at": position.get("opened_at"),
             "status": "resolved",
             "resolved_outcome": "CLOSED_PARTIAL",
-            "resolved_at": _now(),
+            "resolved_at": supabase_client._now(),
             "pnl": pnl,
         }
     ).execute()

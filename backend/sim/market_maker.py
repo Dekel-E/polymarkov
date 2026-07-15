@@ -95,7 +95,6 @@ def open_mm_position(market_id: str, side: str, price: float, category: str) -> 
             "fee_paid": fee,
             "slippage_bps": 0,
             "fair_prob_at_entry": None,
-            "user_id": None,
             "strategy": "market_making",
         }
     )

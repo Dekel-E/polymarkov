@@ -1,7 +1,8 @@
 """Social signal clients — best-effort, feature-flagged per source (§2).
 
 Primary source: Polymarket's own market comments (on-topic, free, no auth).
-Secondary: Reddit search, only when REDDIT_CLIENT_ID/SECRET are configured.
+Secondary: Bluesky post search (public AppView, keyless) and Reddit search
+(only when REDDIT_CLIENT_ID/SECRET are configured).
 Every function degrades to [] instead of raising.
 """
 
@@ -141,6 +142,55 @@ async def fetch_reddit_posts(query: str, limit: int = config.MAX_SOCIAL_POSTS) -
 
 
 # ---------------------------------------------------------------------------
+# Bluesky (public AppView search — keyless)
+# ---------------------------------------------------------------------------
+
+# api.bsky.app serves searchPosts keyless; the public.api.bsky.app mirror
+# 403s some clients (verified 2026-07-15).
+BSKY_SEARCH_URL = "https://api.bsky.app/xrpc/app.bsky.feed.searchPosts"
+
+
+def parse_bluesky_posts(body: dict, limit: int) -> list[dict]:
+    """searchPosts response -> normalized posts (pure)."""
+    posts = []
+    for row in body.get("posts") or []:
+        record = row.get("record") or {}
+        text = (record.get("text") or "").strip()
+        uri = row.get("uri") or ""  # at://did:plc:xxx/app.bsky.feed.post/rkey
+        handle = (row.get("author") or {}).get("handle") or ""
+        if not text:
+            continue
+        rkey = uri.rsplit("/", 1)[-1] if "/" in uri else ""
+        posts.append(
+            {
+                "text": text[:500],
+                "source": "bluesky",
+                "url": f"https://bsky.app/profile/{handle}/post/{rkey}" if handle and rkey else "",
+                "created_at": record.get("createdAt") or row.get("indexedAt"),
+            }
+        )
+        if len(posts) >= limit:
+            break
+    return posts
+
+
+async def fetch_bluesky_posts(query: str, limit: int = config.MAX_SOCIAL_POSTS) -> list[dict]:
+    """Recent Bluesky posts matching `query`. [] unless Bluesky is enabled."""
+    if not config.ENABLE_BLUESKY or not query.strip():
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=config.HTTP_TIMEOUT_S, headers=_HEADERS) as client:
+            resp = await client.get(
+                BSKY_SEARCH_URL,
+                params={"q": query.strip()[:100], "limit": min(limit, 25), "sort": "latest"},
+            )
+            resp.raise_for_status()
+            return parse_bluesky_posts(resp.json() or {}, limit)
+    except (httpx.HTTPError, ValueError):
+        return []
+
+
+# ---------------------------------------------------------------------------
 # Aggregate
 # ---------------------------------------------------------------------------
 
@@ -148,6 +198,8 @@ async def fetch_reddit_posts(query: str, limit: int = config.MAX_SOCIAL_POSTS) -
 async def gather_social(event_id: str, query: str, limit: int = config.MAX_SOCIAL_POSTS) -> dict:
     """Collect posts from all enabled sources + compute mention velocity."""
     posts = await fetch_polymarket_comments(event_id, limit)
+    if len(posts) < limit:
+        posts += await fetch_bluesky_posts(query, limit - len(posts))
     if len(posts) < limit:
         posts += await fetch_reddit_posts(query, limit - len(posts))
 

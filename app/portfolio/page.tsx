@@ -12,7 +12,6 @@ import {
   setPositionLimits,
   updateSettings,
 } from "@/lib/api";
-import { authConfigured, useAuth } from "@/lib/auth";
 import type { Portfolio, Position, WorkingQuote } from "@/lib/types";
 
 const usd = (v: number) =>
@@ -110,8 +109,6 @@ function exportCsv(rows: Position[]) {
 }
 
 export default function PortfolioPage() {
-  const { user, token, loading: authLoading } = useAuth();
-  const [scope, setScope] = useState<"agent" | "mine">("agent");
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [quotes, setQuotes] = useState<WorkingQuote[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -127,18 +124,18 @@ export default function PortfolioPage() {
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    Promise.all([fetchPortfolio(scope, token), fetchWorkingQuotes().catch(() => [])])
+    Promise.all([fetchPortfolio(), fetchWorkingQuotes().catch(() => [])])
       .then(([p, q]) => {
         setPortfolio(p);
         setQuotes(q);
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, [scope, token]);
+  }, []);
 
   useEffect(() => {
-    if (!authLoading) load();
-  }, [authLoading, load]);
+    load();
+  }, [load]);
 
   async function act(label: string, fn: () => Promise<string>) {
     setBusy(label);
@@ -205,78 +202,47 @@ export default function PortfolioPage() {
             Paper <span className="text-instrument">Portfolio</span>
           </h1>
           <p className="mt-1 text-sm text-desk-dim">
-            Follow the agent&apos;s book, or manage your own — every fill is simulated against the live order book.
+            One book: the agent&apos;s strategy trades and your manual trades, every fill
+            simulated against the live order book. Filter by strategy below.
           </p>
-        </div>
-        <div className="flex rounded-xl border border-desk-line bg-desk-panel p-1">
-          {(["agent", "mine"] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => setScope(s)}
-              className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
-                scope === s ? "bg-instrument text-desk-deep" : "text-desk-dim hover:text-desk-ink"
-              }`}
-            >
-              {s === "agent" ? "Agent book" : "My trades"}
-            </button>
-          ))}
         </div>
       </header>
 
-      {scope === "mine" && !user && !authLoading && (
-        <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-6 text-center">
-          <p className="text-sm text-desk-soft">Log in to manage your personal trades.</p>
-          {authConfigured && (
-            <Link
-              href="/login"
-              className="mt-3 inline-block rounded-xl bg-instrument px-5 py-2 text-sm font-bold text-desk-deep transition hover:bg-instrument-bright"
-            >
-              Log in / Register
-            </Link>
-          )}
-        </div>
-      )}
-
-      {(scope === "agent" || user) && (
-        <>
+      <>
           {stats && (
             <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
               <StatCard
                 label="Balance"
                 value={usd(stats.balance_usd)}
                 sub={
-                  user ? (
-                    fundsDraft === null ? (
-                      <button onClick={() => setFundsDraft(String(stats.bankroll_usd))} className="text-instrument hover:underline">
-                        bankroll {usd(stats.bankroll_usd)} · adjust
-                      </button>
-                    ) : (
-                      <span className="flex items-center gap-1.5">
-                        $
-                        <input
-                          value={fundsDraft}
-                          onChange={(e) => setFundsDraft(e.target.value)}
-                          className="w-20 rounded border border-desk-line bg-desk-deep px-1.5 py-0.5 font-mono text-xs text-desk-ink"
-                        />
-                        <button
-                          onClick={() =>
-                            act("Adjust funds", async () => {
-                              await updateSettings({ funds: { bankroll_usd: Number(fundsDraft) } });
-                              setFundsDraft(null);
-                              return `Bankroll set to ${usd(Number(fundsDraft))}.`;
-                            })
-                          }
-                          className="text-instrument hover:underline"
-                        >
-                          set
-                        </button>
-                        <button onClick={() => setFundsDraft(null)} className="text-desk-faint hover:underline">
-                          ✕
-                        </button>
-                      </span>
-                    )
+                  fundsDraft === null ? (
+                    <button onClick={() => setFundsDraft(String(stats.bankroll_usd))} className="text-instrument hover:underline">
+                      bankroll {usd(stats.bankroll_usd)} · adjust
+                    </button>
                   ) : (
-                    `bankroll ${usd(stats.bankroll_usd)}`
+                    <span className="flex items-center gap-1.5">
+                      $
+                      <input
+                        value={fundsDraft}
+                        onChange={(e) => setFundsDraft(e.target.value)}
+                        className="w-20 rounded border border-desk-line bg-desk-deep px-1.5 py-0.5 font-mono text-xs text-desk-ink"
+                      />
+                      <button
+                        onClick={() =>
+                          act("Adjust funds", async () => {
+                            await updateSettings({ funds: { bankroll_usd: Number(fundsDraft) } });
+                            setFundsDraft(null);
+                            return `Bankroll set to ${usd(Number(fundsDraft))}.`;
+                          })
+                        }
+                        className="text-instrument hover:underline"
+                      >
+                        set
+                      </button>
+                      <button onClick={() => setFundsDraft(null)} className="text-desk-faint hover:underline">
+                        ✕
+                      </button>
+                    </span>
                   )
                 }
               />
@@ -367,28 +333,25 @@ export default function PortfolioPage() {
                           <PositionRow
                             key={p.id}
                             p={p}
-                            scope={scope}
                             expanded={expanded === p.id}
                             onToggle={() => setExpanded(expanded === p.id ? null : p.id)}
                             busy={busy}
-                            canClose={scope === "mine"}
-                            canDirect={Boolean(user)}
                             onClose={(fraction) =>
                               act("Close", async () => {
-                                const r = await closePosition(p.id, token, fraction);
+                                const r = await closePosition(p.id, fraction);
                                 return `Closed ${Math.round(r.closed_fraction * 100)}% of ${p.market_id} at ${(r.exit_price * 100).toFixed(1)}% for ${r.pnl >= 0 ? "+" : ""}${usd(r.pnl)}.`;
                               })
                             }
                             onLimits={(sl, tp) =>
                               act("Set limits", async () => {
-                                await setPositionLimits(p.id, sl, tp, token);
+                                await setPositionLimits(p.id, sl, tp);
                                 return `Levels saved — the risk manager enforces them on its next pass.`;
                               })
                             }
                             onAdd={(amount) =>
                               act("Add", async () => {
-                                const fill = await executeTrade(p.market_id, p.side, amount, token);
-                                return `Added ${usd(fill.size_usd)} at ${(fill.vwap * 100).toFixed(1)}% (separate lot in My trades).`;
+                                const fill = await executeTrade(p.market_id, p.side, amount);
+                                return `Added ${usd(fill.size_usd)} at ${(fill.vwap * 100).toFixed(1)}% (separate lot in Desk trades).`;
                               })
                             }
                           />
@@ -400,7 +363,7 @@ export default function PortfolioPage() {
               </section>
 
               {/* working quotes (market maker) */}
-              {scope === "agent" && quotes.length > 0 && (
+              {quotes.length > 0 && (
                 <section>
                   <h2 className="mb-3 text-lg font-bold tracking-tight">
                     Working quotes
@@ -417,19 +380,17 @@ export default function PortfolioPage() {
                         <span className="font-mono tabular-nums text-emerald-400">bid {pct(q.bid)}</span>
                         <span className="font-mono tabular-nums text-red-400">ask {pct(q.ask)}</span>
                         <span className="font-mono tabular-nums text-desk-dim">{usd(q.size_usd)}/side</span>
-                        {user && (
-                          <button
-                            onClick={() =>
-                              act("Cancel quote", async () => {
-                                await cancelQuote(q.id, token);
-                                return `Quote on ${q.market_id} pulled.`;
-                              })
-                            }
-                            className="rounded border border-red-500/50 px-2 py-0.5 font-semibold text-red-400 transition hover:bg-red-500/10"
-                          >
-                            Pull
-                          </button>
-                        )}
+                        <button
+                          onClick={() =>
+                            act("Cancel quote", async () => {
+                              await cancelQuote(q.id);
+                              return `Quote on ${q.market_id} pulled.`;
+                            })
+                          }
+                          className="rounded border border-red-500/50 px-2 py-0.5 font-semibold text-red-400 transition hover:bg-red-500/10"
+                        >
+                          Pull
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -493,31 +454,24 @@ export default function PortfolioPage() {
               </section>
             </>
           )}
-        </>
-      )}
+      </>
     </div>
   );
 }
 
 function PositionRow({
   p,
-  scope,
   expanded,
   onToggle,
   busy,
-  canClose,
-  canDirect,
   onClose,
   onLimits,
   onAdd,
 }: {
   p: Position;
-  scope: "agent" | "mine";
   expanded: boolean;
   onToggle: () => void;
   busy: string | null;
-  canClose: boolean;
-  canDirect: boolean;
   onClose: (fraction: number) => void;
   onLimits: (sl: number | null, tp: number | null) => void;
   onAdd: (amount: number) => void;
@@ -566,8 +520,7 @@ function PositionRow({
                 opened {new Date(p.opened_at).toLocaleString()}
               </div>
 
-              {canDirect && (
-                <div className="flex items-center gap-2 font-mono text-[11px] text-desk-dim">
+              <div className="flex items-center gap-2 font-mono text-[11px] text-desk-dim">
                   SL
                   <input
                     value={sl}
@@ -589,45 +542,38 @@ function PositionRow({
                   >
                     save levels
                   </button>
-                </div>
-              )}
+              </div>
 
-              {canClose ? (
-                <div className="flex items-center gap-2">
-                  {[0.25, 0.5, 1].map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => onClose(f)}
-                      disabled={busy !== null}
-                      className="rounded-lg border border-red-500/50 px-2.5 py-1 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 disabled:opacity-40"
-                    >
-                      Close {f === 1 ? "all" : `${f * 100}%`}
-                    </button>
-                  ))}
-                  <span className="ml-3 flex items-center gap-1.5 font-mono text-[11px] text-desk-dim">
-                    $
-                    <input
-                      type="number"
-                      min={1}
-                      max={1000}
-                      value={addAmount}
-                      onChange={(e) => setAddAmount(Number(e.target.value))}
-                      className="w-16 rounded border border-desk-line bg-desk-deep px-1.5 py-1 text-desk-ink"
-                    />
-                    <button
-                      onClick={() => onAdd(addAmount)}
-                      disabled={busy !== null || addAmount <= 0}
-                      className="rounded border border-emerald-500/50 px-2 py-1 font-semibold text-emerald-400 transition hover:bg-emerald-500/10 disabled:opacity-40"
-                    >
-                      add
-                    </button>
-                  </span>
-                </div>
-              ) : (
-                <span className="font-mono text-[10px] uppercase tracking-wider text-desk-faint" title="Closed by the agent's risk rules and thesis checks — set SL/TP to direct them">
-                  {scope === "agent" ? "agent-managed · direct via SL/TP" : ""}
+              <div className="flex items-center gap-2">
+                {[0.25, 0.5, 1].map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => onClose(f)}
+                    disabled={busy !== null}
+                    className="rounded-lg border border-red-500/50 px-2.5 py-1 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 disabled:opacity-40"
+                  >
+                    Close {f === 1 ? "all" : `${f * 100}%`}
+                  </button>
+                ))}
+                <span className="ml-3 flex items-center gap-1.5 font-mono text-[11px] text-desk-dim">
+                  $
+                  <input
+                    type="number"
+                    min={1}
+                    max={1000}
+                    value={addAmount}
+                    onChange={(e) => setAddAmount(Number(e.target.value))}
+                    className="w-16 rounded border border-desk-line bg-desk-deep px-1.5 py-1 text-desk-ink"
+                  />
+                  <button
+                    onClick={() => onAdd(addAmount)}
+                    disabled={busy !== null || addAmount <= 0}
+                    className="rounded border border-emerald-500/50 px-2 py-1 font-semibold text-emerald-400 transition hover:bg-emerald-500/10 disabled:opacity-40"
+                  >
+                    add
+                  </button>
                 </span>
-              )}
+              </div>
             </div>
           </td>
         </tr>

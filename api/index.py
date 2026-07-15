@@ -1,8 +1,9 @@
 """Vercel serverless entrypoint. Thin: all real logic lives in backend/.
 
-NOTE (course requirement): the root GUI and the four graded endpoints have
-NO auth. Login is purely additive — it only tags manual paper trades with a
-user id so the GUI can show a personal portfolio.
+NOTE (course requirement): NO auth anywhere — no login, no signup, no
+guards. GUI-directed actions (manual trades, watchlist, followed wallets)
+belong to one shared anonymous desk (config.DESK_USER_ID); user_id NULL
+remains the agent's own book.
 """
 
 import asyncio
@@ -14,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 
-from fastapi import FastAPI, Request  # noqa: E402
+from fastapi import FastAPI  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
@@ -24,19 +25,6 @@ from backend.agent.types import ExecuteIn, ExecuteOut, PricingResult  # noqa: E4
 from backend.data import polymarket, supabase_client  # noqa: E402
 
 app = FastAPI(title="Polymarkov", docs_url=None, redoc_url=None)
-
-
-async def _user_id_from_request(request: Request) -> Optional[str]:
-    """Resolve a Supabase Auth user from a Bearer token. None when absent/invalid."""
-    auth = request.headers.get("authorization", "")
-    if not auth.lower().startswith("bearer ") or not supabase_client.is_configured():
-        return None
-    token = auth[7:].strip()
-    try:
-        res = await asyncio.to_thread(supabase_client.get_client().auth.get_user, token)
-        return res.user.id if res and res.user else None
-    except Exception:
-        return None
 
 
 @app.get("/api/team_info")
@@ -63,8 +51,12 @@ def _load_examples() -> list:
 
 @app.get("/api/agent_info")
 def agent_info() -> dict:
-    # Prompts are read from backend/prompts at runtime so docs never drift
-    # from behavior; prompt_examples are frozen real runs (course schema).
+    # Everything the agent can do lives in backend/agent/registry/ — tools.py
+    # (formal module/tool specs) + prompts/*.txt (system prompts). Both are
+    # read at runtime so these docs can never drift from behavior;
+    # prompt_examples are frozen real runs (course schema).
+    from backend.agent.registry import MODULES
+
     prompt_files = sorted(config.PROMPTS_DIR.glob("*.txt"))
     prompts = {p.stem: p.read_text(encoding="utf-8") for p in prompt_files}
     return {
@@ -96,6 +88,7 @@ def agent_info() -> dict:
         },
         "prompt_examples": _load_examples(),
         "modules": config.CANONICAL_MODULES,
+        "tools": MODULES,
         "prompts": prompts,
     }
 
@@ -133,15 +126,12 @@ async def markets(limit: int = 20) -> dict:
 
 
 @app.get("/api/portfolio")
-async def portfolio(request: Request, scope: str = "agent") -> dict:
-    """Paper positions + stats. scope=agent (default) or scope=mine (needs login)."""
+async def portfolio() -> dict:
+    """Paper positions + stats — one book (filter by strategy in the GUI)."""
     try:
         from backend.sim.portfolio import get_portfolio
 
-        user_id = await _user_id_from_request(request) if scope == "mine" else None
-        if scope == "mine" and user_id is None:
-            return {"portfolio": None, "error": "login required for scope=mine"}
-        data = await asyncio.to_thread(get_portfolio, scope, user_id)
+        data = await asyncio.to_thread(get_portfolio)
         return {"portfolio": data, "error": None}
     except Exception as exc:
         return {"portfolio": None, "error": str(exc)}
@@ -263,15 +253,12 @@ class WatchIn(BaseModel):
 
 
 @app.get("/api/watchlist")
-async def watchlist(request: Request) -> dict:
-    """The logged-in user's watched markets, enriched from the cache."""
+async def watchlist() -> dict:
+    """The desk's watched markets, enriched from the cache."""
     try:
-        user_id = await _user_id_from_request(request)
-        if user_id is None:
-            return {"items": [], "error": "login required"}
         from backend.agent import intel_cache
 
-        slugs = await asyncio.to_thread(supabase_client.get_watchlist, user_id)
+        slugs = await asyncio.to_thread(supabase_client.get_watchlist)
         rows = []
         if slugs and supabase_client.is_configured():
             cached_markets = await asyncio.to_thread(
@@ -305,24 +292,18 @@ async def watchlist(request: Request) -> dict:
 
 
 @app.post("/api/watchlist")
-async def watch(body: WatchIn, request: Request) -> dict:
+async def watch(body: WatchIn) -> dict:
     try:
-        user_id = await _user_id_from_request(request)
-        if user_id is None:
-            return {"error": "login required"}
-        await asyncio.to_thread(supabase_client.add_watch, user_id, body.market_id)
+        await asyncio.to_thread(supabase_client.add_watch, body.market_id)
         return {"error": None}
     except Exception as exc:
         return {"error": str(exc)}
 
 
 @app.delete("/api/watchlist")
-async def unwatch(market_id: str, request: Request) -> dict:
+async def unwatch(market_id: str) -> dict:
     try:
-        user_id = await _user_id_from_request(request)
-        if user_id is None:
-            return {"error": "login required"}
-        await asyncio.to_thread(supabase_client.remove_watch, user_id, market_id)
+        await asyncio.to_thread(supabase_client.remove_watch, market_id)
         return {"error": None}
     except Exception as exc:
         return {"error": str(exc)}
@@ -358,12 +339,9 @@ async def get_settings() -> dict:
 
 
 @app.put("/api/settings")
-async def put_settings(body: SettingsIn, request: Request) -> dict:
-    """Partial update from the Strategy Desk (login required — the agent's
-    controls are not anonymous; numbers clamped to sane bounds)."""
+async def put_settings(body: SettingsIn) -> dict:
+    """Partial update from the Strategy Desk (numbers clamped to sane bounds)."""
     try:
-        if await _user_id_from_request(request) is None:
-            return {"settings": None, "error": "login required to change the agent's settings"}
         patch: dict = {}
         if body.strategies is not None:
             patch["strategies"] = {
@@ -466,20 +444,17 @@ class ArbExecuteIn(BaseModel):
 
 
 @app.post("/api/arbitrage/execute")
-async def arbitrage_execute(body: ArbExecuteIn, request: Request) -> dict:
-    """Paper-fill all legs of a scanned opportunity."""
+async def arbitrage_execute(body: ArbExecuteIn) -> dict:
+    """Paper-fill all legs of a scanned opportunity (desk book)."""
     try:
         from backend.sim import arbitrage
 
-        user_id = await _user_id_from_request(request)
-        if user_id is None:
-            return {"reports": [], "error": "login required — executed legs belong to your account"}
         legs = body.opportunity.get("legs") or []
         if not legs or len(legs) > 16:
             return {"reports": [], "error": "opportunity has no executable legs"}
         for leg in legs:
             leg["size_usd"] = max(1.0, min(float(leg.get("size_usd", 0)), config.ARB_MAX_SIZE_USD))
-        reports = await arbitrage.execute_legs(body.opportunity, user_id=user_id)
+        reports = await arbitrage.execute_legs(body.opportunity)
         return {"reports": reports, "error": None}
     except Exception as exc:
         return {"reports": [], "error": str(exc)}
@@ -495,89 +470,49 @@ class ImportWalletsIn(BaseModel):
 
 
 @app.get("/api/wallets")
-async def followed_wallets(request: Request) -> dict:
-    """Wallets the logged-in user follows."""
+async def followed_wallets() -> dict:
+    """Wallets the desk follows."""
     try:
-        user_id = await _user_id_from_request(request)
-        if user_id is None:
-            return {"wallets": [], "error": "login required"}
-        rows = await asyncio.to_thread(supabase_client.get_followed_wallets, user_id)
+        rows = await asyncio.to_thread(supabase_client.get_followed_wallets)
         return {"wallets": rows, "error": None}
     except Exception as exc:
         return {"wallets": [], "error": str(exc)}
 
 
 @app.post("/api/wallets")
-async def follow_wallet(body: FollowIn, request: Request) -> dict:
+async def follow_wallet(body: FollowIn) -> dict:
     try:
         from backend.data import smart_money
 
-        user_id = await _user_id_from_request(request)
-        if user_id is None:
-            return {"error": "login required"}
         valid, _ = smart_money.validate_wallet_import([{"wallet": body.wallet, "label": body.label}])
         if not valid:
             return {"error": "not a valid wallet address (expected 0x + 40 hex chars)"}
-        await asyncio.to_thread(supabase_client.follow_wallets, user_id, valid)
+        await asyncio.to_thread(supabase_client.follow_wallets, valid)
         return {"error": None}
     except Exception as exc:
         return {"error": str(exc)}
 
 
 @app.delete("/api/wallets")
-async def unfollow_wallet(wallet: str, request: Request) -> dict:
+async def unfollow_wallet(wallet: str) -> dict:
     try:
-        user_id = await _user_id_from_request(request)
-        if user_id is None:
-            return {"error": "login required"}
-        await asyncio.to_thread(supabase_client.unfollow_wallet, user_id, wallet.lower())
+        await asyncio.to_thread(supabase_client.unfollow_wallet, wallet.lower())
         return {"error": None}
     except Exception as exc:
         return {"error": str(exc)}
 
 
 @app.post("/api/wallets/import")
-async def import_wallets(body: ImportWalletsIn, request: Request) -> dict:
+async def import_wallets(body: ImportWalletsIn) -> dict:
     """Bulk-follow wallets from a user-supplied JSON list."""
     try:
         from backend.data import smart_money
 
-        user_id = await _user_id_from_request(request)
-        if user_id is None:
-            return {"imported": 0, "skipped": 0, "error": "login required"}
         valid, skipped = smart_money.validate_wallet_import(body.wallets)
-        written = await asyncio.to_thread(supabase_client.follow_wallets, user_id, valid)
+        written = await asyncio.to_thread(supabase_client.follow_wallets, valid)
         return {"imported": written, "skipped": skipped, "error": None}
     except Exception as exc:
         return {"imported": 0, "skipped": 0, "error": str(exc)}
-
-
-class RegisterIn(BaseModel):
-    email: str
-    password: str
-
-
-@app.post("/api/auth/register")
-async def register(body: RegisterIn) -> dict:
-    """Create a user pre-confirmed (no confirmation email round-trip)."""
-    try:
-        if not supabase_client.is_configured():
-            return {"error": "auth is not configured on the server"}
-        if len(body.password) < 6:
-            return {"error": "password must be at least 6 characters"}
-
-        def _create():
-            return supabase_client.get_client().auth.admin.create_user(
-                {"email": body.email, "password": body.password, "email_confirm": True}
-            )
-
-        await asyncio.to_thread(_create)
-        return {"error": None}
-    except Exception as exc:
-        msg = str(exc)
-        if "already been registered" in msg or "already registered" in msg:
-            return {"error": "this email is already registered — log in instead"}
-        return {"error": msg}
 
 
 class TradeIn(BaseModel):
@@ -587,15 +522,12 @@ class TradeIn(BaseModel):
 
 
 @app.post("/api/trade")
-async def manual_trade(body: TradeIn, request: Request) -> dict:
+async def manual_trade(body: TradeIn) -> dict:
     """GUI-directed paper trade: fill `size_usd` on the live book right now."""
     try:
         from backend.llm.client import RunContext
         from backend.sim import paper_broker
 
-        user_id = await _user_id_from_request(request)
-        if user_id is None:
-            return {"fill": None, "error": "login required — trades belong to your account"}
         size_usd = max(1.0, min(body.size_usd, 1000.0))  # sane paper limits
         market = await polymarket.get_market_state(body.slug)
         if market is None:
@@ -608,9 +540,7 @@ async def manual_trade(body: TradeIn, request: Request) -> dict:
             resolution_risk="medium",
         )
         ctx = RunContext()
-        fill = await paper_broker.execute_paper_trade(
-            ctx, market, priced, size_usd=size_usd, user_id=user_id
-        )
+        fill = await paper_broker.execute_paper_trade(ctx, market, priced, size_usd=size_usd)
         if fill is None:
             return {"fill": None, "error": "the order book had no fillable liquidity"}
         return {"fill": fill.model_dump(), "error": None}
@@ -624,16 +554,13 @@ class CloseIn(BaseModel):
 
 
 @app.post("/api/position/close")
-async def close_position(body: CloseIn, request: Request) -> dict:
-    """Close all or part of an open paper position at the current book."""
+async def close_position(body: CloseIn) -> dict:
+    """Close all or part of any open paper position at the current book."""
     try:
         from backend.sim import paper_broker
 
-        user_id = await _user_id_from_request(request)
-        if user_id is None:
-            return {"error": "login required — only your own positions can be closed"}
         fraction = max(0.01, min(1.0, body.fraction))
-        return await paper_broker.close_position(body.position_id, user_id, fraction=fraction)
+        return await paper_broker.close_position(body.position_id, fraction=fraction)
     except Exception as exc:
         return {"error": str(exc)}
 
@@ -645,28 +572,21 @@ class LimitsIn(BaseModel):
 
 
 @app.put("/api/position/limits")
-async def set_position_limits(body: LimitsIn, request: Request) -> dict:
+async def set_position_limits(body: LimitsIn) -> dict:
     """Set/clear per-position stop-loss / take-profit price levels. The risk
-    manager enforces them on its next pass. Works on your positions and on
-    the agent book (that's directing the agent's risk rules, not closing)."""
+    manager enforces them on its next pass."""
     try:
-        user_id = await _user_id_from_request(request)
-        if user_id is None:
-            return {"error": "login required"}
         for level in (body.sl_price, body.tp_price):
             if level is not None and not (0 < level < 1):
                 return {"error": "price levels must be between 0 and 1"}
 
         def _update():
             client = supabase_client.get_client()
-            rows = client.table("positions").select("user_id,status").eq("id", body.position_id).limit(1).execute().data
+            rows = client.table("positions").select("status").eq("id", body.position_id).limit(1).execute().data
             if not rows:
                 return "position not found"
             if rows[0].get("status") != "open":
                 return "position is already resolved"
-            owner = rows[0].get("user_id")
-            if owner is not None and owner != user_id:
-                return "this position belongs to another user"
             client.table("positions").update(
                 {"sl_price": body.sl_price, "tp_price": body.tp_price}
             ).eq("id", body.position_id).execute()
@@ -704,13 +624,9 @@ class CancelQuoteIn(BaseModel):
 
 
 @app.post("/api/quotes/cancel")
-async def cancel_quote(body: CancelQuoteIn, request: Request) -> dict:
+async def cancel_quote(body: CancelQuoteIn) -> dict:
     """Pull a resting MM quote (it can no longer fill)."""
     try:
-        user_id = await _user_id_from_request(request)
-        if user_id is None:
-            return {"error": "login required"}
-
         def _cancel():
             supabase_client.get_client().table("mm_quotes").update(
                 {"status": "settled", "fills": "cancelled"}
@@ -720,6 +636,43 @@ async def cancel_quote(body: CancelQuoteIn, request: Request) -> dict:
         return {"error": None}
     except Exception as exc:
         return {"error": str(exc)}
+
+
+class DeskChatIn(BaseModel):
+    question: str
+    history: list[dict] = []
+
+
+@app.post("/api/chat")
+async def desk_chat_endpoint(body: DeskChatIn) -> dict:
+    """Global chat (DeskChat module): routes a question to the right market
+    (via MarketChat), to the desk's own portfolio/state, to the agent's
+    self-description, or to a helpful refusal with market suggestions."""
+    try:
+        from backend.agent.modules import desk_chat
+
+        return await desk_chat.chat(body.question, body.history[:24])
+    except Exception as exc:
+        return {"answer": None, "citations": [], "market": None, "error": str(exc)}
+
+
+class MarketChatIn(BaseModel):
+    slug: str
+    question: str
+    history: list[dict] = []
+
+
+@app.post("/api/market/chat")
+async def market_chat_endpoint(body: MarketChatIn) -> dict:
+    """Grounded Q&A on one market (MarketChat module): plans whether the
+    question needs fresh intel, searches web/news and scrapes socials if so,
+    indexes what it finds, and answers with citations."""
+    try:
+        from backend.agent.modules import market_chat
+
+        return await market_chat.chat(body.slug, body.question, body.history[:24])
+    except Exception as exc:
+        return {"answer": None, "citations": [], "error": str(exc)}
 
 
 @app.get("/api/market")
@@ -735,8 +688,15 @@ async def market_detail(slug: str) -> dict:
 
 
 @app.post("/api/execute")
-async def execute(body: ExecuteIn) -> ExecuteOut:
+async def execute(body: ExecuteIn, ui: bool = False) -> JSONResponse:
+    """Course envelope: exactly {status, error, response, steps} at the top
+    level (the spec says "must match exactly these top-level fields"). The
+    GUI opts into the extra structured dossier payload with ?ui=1."""
     try:
-        return await run_pipeline(body.prompt)
+        out = await run_pipeline(body.prompt, history=body.history[:12])
     except Exception as exc:  # never leak a 500 — envelope is always HTTP 200
-        return ExecuteOut(status="error", error=str(exc), response=None, steps=[])
+        out = ExecuteOut(status="error", error=str(exc), response=None, steps=[])
+    data = out.model_dump(mode="json")
+    if not ui:
+        data.pop("ui", None)
+    return JSONResponse(data)

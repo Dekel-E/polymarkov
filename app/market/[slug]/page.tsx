@@ -5,13 +5,13 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import DossierView from "@/components/DossierView";
 import Markdown from "@/components/Markdown";
+import MarketChat from "@/components/MarketChat";
 import MarketNews from "@/components/MarketNews";
 import PipelineProgress from "@/components/PipelineProgress";
 import ProbabilityGauge from "@/components/ProbabilityGauge";
 import Sparkline from "@/components/Sparkline";
 import TradePanel from "@/components/TradePanel";
 import { fetchMarketDetail, fetchWatchlist, setWatched } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
 import type { MarketState } from "@/lib/types";
 import { useAgentRun } from "@/lib/useAgentRun";
 
@@ -36,7 +36,6 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 export default function MarketPage() {
   const { slug } = useParams<{ slug: string }>();
-  const { token } = useAuth();
   const [market, setMarket] = useState<MarketState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [watched, setWatchedState] = useState(false);
@@ -50,20 +49,16 @@ export default function MarketPage() {
   }, [slug]);
 
   useEffect(() => {
-    if (!token || !slug) return;
-    fetchWatchlist(token)
+    if (!slug) return;
+    fetchWatchlist()
       .then((items) => setWatchedState(items.some((i) => i.market_id === slug)))
       .catch(() => undefined);
-  }, [token, slug]);
+  }, [slug]);
 
   function toggleWatch() {
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
     const next = !watched;
     setWatchedState(next);
-    setWatched(slug, next, token).catch(() => setWatchedState(!next));
+    setWatched(slug, next).catch(() => setWatchedState(!next));
   }
 
   const ui = result?.status === "ok" ? result.ui : null;
@@ -187,6 +182,10 @@ export default function MarketPage() {
       <DossierView result={result} fetchError={fetchError} liveMarket={market} />
 
       {result?.status === "ok" && result.ui && <TradePanel slug={slug} ui={result.ui} />}
+
+      {/* grounded Q&A: the agent answers from its dossier and gathers +
+          indexes fresh news/social evidence when the question needs it */}
+      <MarketChat slug={slug} />
     </div>
   );
 }

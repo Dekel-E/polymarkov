@@ -166,10 +166,21 @@ def mocked_pipeline(monkeypatch):
 
     from backend.data import web_search
 
+    async def fake_kalshi(question):
+        return {
+            "venue": "Kalshi", "event_title": "Fed decision in September?",
+            "event_subtitle": "", "url": "https://kalshi.com/markets/kxfeddecision",
+            "match_score": 0.8,
+            "markets": [{"outcome": "Cut 25bps", "yes_bid": 0.3, "yes_ask": 0.32, "last_price": 0.31}],
+        }
+
+    from backend.data import kalshi
+
     monkeypatch.setattr(gdelt, "fetch_articles", fake_articles)
     monkeypatch.setattr(google_news, "fetch_articles", fake_gnews)
     monkeypatch.setattr(web_search, "search", fake_web)
     monkeypatch.setattr(social, "gather_social", fake_social)
+    monkeypatch.setattr(kalshi, "find_matching_event", fake_kalshi)
     # hermetic: never touch live Pinecone/embeddings/Supabase even with .env creds
     monkeypatch.setattr(embeddings, "is_configured", lambda: False)
     monkeypatch.setattr(pinecone_client, "is_configured", lambda: False)
@@ -180,7 +191,7 @@ def mocked_pipeline(monkeypatch):
 
 
 LLM_MODULES = {"QueryPlanner", "SentimentScorer", "BullAnalyst", "BearAnalyst", "QuantAnalyst", "ResolutionSkeptic", "Judge"}
-TOOL_MODULES = {"MarketResolver", "EvidenceRetriever", "SocialScanner"}
+TOOL_MODULES = {"MarketResolver", "EvidenceRetriever", "SocialScanner", "CrossVenueScanner"}
 
 
 async def test_full_run_envelope_and_steps(mocked_pipeline):

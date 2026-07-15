@@ -190,7 +190,7 @@ async def scan(
     return opportunities
 
 
-async def execute_legs(opportunity: dict, user_id: Optional[str] = None) -> list[dict]:
+async def execute_legs(opportunity: dict) -> list[dict]:
     """Paper-fill every leg of an opportunity. Sequential (paper world) —
     reports each leg so an unfilled one is visible, never hidden."""
     from backend.agent.types import PricingResult
@@ -210,8 +210,7 @@ async def execute_legs(opportunity: dict, user_id: Optional[str] = None) -> list
             resolution_risk="low",
         )
         fill = await paper_broker.execute_paper_trade(
-            RunContext(), market, priced, size_usd=leg["size_usd"], user_id=user_id,
-            strategy="arbitrage",
+            RunContext(), market, priced, size_usd=leg["size_usd"], strategy="arbitrage",
         )
         reports.append(
             {"slug": leg["slug"], "side": leg["side"], "filled": fill is not None,

@@ -12,6 +12,8 @@ MODULE = "QueryPlanner"
 
 async def plan_query(ctx: RunContext, user_prompt: str) -> QueryPlan:
     raw = await ctx.call_llm(MODULE, load_prompt("query_planner"), user_prompt)
+    if isinstance(raw, dict) and raw.get("intent") not in ("market", "meta", "out_of_scope"):
+        raw.pop("intent", None)  # fall back to the schema default
     try:
         return QueryPlan.model_validate(raw)
     except ValidationError as exc:

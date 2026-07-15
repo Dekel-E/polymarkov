@@ -81,7 +81,8 @@ def right(b):
 
 # ---- title ----------------------------------------------------------------
 ax.text(2, 97.5, "POLYMARKOV", fontsize=17, fontweight="bold", color=AMBER)
-ax.text(2, 95.2, "pre-trade intelligence agent for Polymarket — one /api/execute run",
+ax.text(2, 95.2, "pre-trade intelligence agent for Polymarket — one /api/execute run "
+        "+ conversational DeskChat (/api/chat) & MarketChat (/api/market/chat)",
         fontsize=9.5, color=DIM)
 # legend
 for i, (label, color) in enumerate([("LLM call", AMBER), ("deterministic tool", STEEL),
@@ -92,13 +93,16 @@ for i, (label, color) in enumerate([("LLM call", AMBER), ("deterministic tool", 
     ax.text(x0 + 2.3, 97, label, fontsize=8, color=DIM, va="center")
 
 # ---- main pipeline (center column) ----------------------------------------
-gui = box(28, 88, 20, 5, "Web GUI", kind="io", sub="POST /api/execute  {prompt}")
-qp = box(28, 79.5, 20, 5, "QueryPlanner", kind="llm", sub="LLM #1 · scope, market query, entities")
+gui = box(28, 88, 20, 5, "Web GUI", kind="io", sub="POST /api/execute  {prompt, history}")
+dc = box(3, 88, 22, 5, "DeskChat", kind="llm",
+         sub="global chat · POST /api/chat\nroutes → MarketChat / portfolio / meta")
+qp = box(28, 79.5, 20, 5, "QueryPlanner", kind="llm", sub="LLM #1 · intent, market query, entities")
 mr = box(28, 71, 20, 5, "MarketResolver", kind="tool", sub="URL / text search / vector match")
 
-er = box(16, 61, 21, 6, "EvidenceRetriever", kind="tool",
+er = box(14, 61, 20, 6, "EvidenceRetriever", kind="tool",
          sub="news search + web fallback,\ndedup · cluster ≤8 · read pages")
-ss = box(41, 61, 19, 6, "SocialScanner", kind="tool", sub="comments + mention velocity")
+ss = box(36.5, 61, 17, 6, "SocialScanner", kind="tool", sub="comments + mention\nvelocity")
+cvs = box(56, 61, 13.5, 6, "CrossVenueScanner", kind="tool", sub="same event on Kalshi", title_size=8.5)
 
 sc = box(28, 52.5, 20, 5, "SentimentScorer", kind="llm", sub="LLM #2 · ONE batched call")
 
@@ -122,11 +126,14 @@ pb = box(42, 17.5, 20, 6, "PaperBroker", kind="tool",
 
 # pipeline arrows
 arrow(bottom(gui), top(qp))
+arrow(right(dc), left(gui), color=DIM, dashed=True, style="-")
 arrow(bottom(qp), top(mr))
-arrow(bottom(mr), (26.5, 67.4), connection="arc3,rad=0.15")
-arrow(bottom(mr), (50.5, 67.4), connection="arc3,rad=-0.15")
-arrow((26.5, 61 - 0.4), top(sc), connection="arc3,rad=0.15")
-arrow((50.5, 61 - 0.4), top(sc), connection="arc3,rad=-0.15")
+arrow(bottom(mr), (24, 67.4), connection="arc3,rad=0.2")
+arrow(bottom(mr), (45, 67.4), connection="arc3,rad=-0.1")
+arrow(bottom(mr), (62.5, 67.4), connection="arc3,rad=-0.3")
+arrow((24, 61 - 0.4), top(sc), connection="arc3,rad=0.2")
+arrow((45, 61 - 0.4), top(sc), connection="arc3,rad=-0.1")
+arrow((62.5, 61 - 0.4), top(sc), connection="arc3,rad=-0.3")
 arrow(bottom(sc), (38, 49.6))
 arrow((38, 39 - 0.5), top(judge))
 arrow(bottom(judge), top(out), connection="arc3,rad=0.12")
@@ -137,17 +144,28 @@ gamma = box(72, 79, 24, 6, "Polymarket Gamma + CLOB", kind="ext", dashed=True,
             sub="markets · order books · price history")
 news = box(72, 69.5, 24, 6, "GDELT · Google News · Web", kind="ext", dashed=True,
            sub="live headlines + page crawling")
-soc = box(72, 60, 24, 6, "Polymarket Comments · Reddit", kind="ext", dashed=True,
+soc = box(72, 60, 24, 6, "Comments · Bluesky · Reddit", kind="ext", dashed=True,
           sub="social posts")
 llmod = box(72, 44, 24, 6, "LLMod.ai", kind="ext", dashed=True,
             sub="gpt-5.4-mini · text-embedding-3-small")
+kalshi = box(72, 34.5, 24, 6, "Kalshi", kind="ext", dashed=True,
+             sub="cross-venue odds (keyless search)")
+
+# MarketChat sits on the externals spine: it searches news + socials on
+# demand and indexes what it finds (sub text carries the endpoint).
+chat = box(72, 51.5, 24, 7, "MarketChat", kind="llm",
+           sub="grounded Q&A · POST /api/market/chat\nplans → searches news + socials →\nindexes finds → answers with citations")
 
 arrow(right(mr), left(gamma), color=GRAY, connection="arc3,rad=-0.15", dashed=True)
-arrow((37, 67.4), (72 - 0.4, 72.5), color=GRAY, connection="arc3,rad=-0.1", dashed=True)
-arrow(right(ss), left(soc), color=GRAY, dashed=True)
+arrow((34.4, 65.5), (72 - 0.4, 72.5), color=GRAY, connection="arc3,rad=-0.1", dashed=True)
+arrow(right(ss), left(soc), color=GRAY, connection="arc3,rad=-0.1", dashed=True)
 arrow((64, 43.2), (72 - 0.4, 46.2), color=GRAY, dashed=True)
+arrow((66.5, 60.6), (72 - 0.4, 38.5), color=GRAY, connection="arc3,rad=-0.15", dashed=True)
 arrow(right(pb), (84, 17.5 + 3), color=GRAY, connection="arc3,rad=0.0", dashed=True)
-arrow((84, 20.5), (84, 79 - 0.5), color=GRAY, dashed=True, style="-")
+# externals spine, split around the Kalshi + MarketChat boxes
+arrow((84, 20.5), (84, 34.5 - 0.5), color=GRAY, dashed=True, style="-")
+arrow((84, 40.5 + 0.5), (84, 51.5 - 0.5), color=GRAY, dashed=True, style="-")
+arrow((84, 58.5 + 0.5), (84, 79 - 0.5), color=GRAY, dashed=True, style="-")
 
 # ---- storage + background jobs (bottom left) -------------------------------
 store = box(4, 2.5, 38, 7, "Supabase + Pinecone", kind="store",

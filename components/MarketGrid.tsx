@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MarketCard from "@/components/MarketCard";
 import { fetchMarkets, fetchWatchlist, searchMarkets, setWatched } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
 import type { MarketSummary } from "@/lib/types";
 
 // How many trending markets the dashboard pulls (server caps at 300).
@@ -37,7 +36,6 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default function MarketGrid() {
-  const { user, token } = useAuth();
   const [markets, setMarkets] = useState<MarketSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,38 +78,27 @@ export default function MarketGrid() {
   }, [query]);
 
   useEffect(() => {
-    if (!token) {
-      setWatchedSlugs(new Set());
-      return;
-    }
-    fetchWatchlist(token)
+    fetchWatchlist()
       .then((items) => setWatchedSlugs(new Set(items.map((i) => i.market_id))))
       .catch(() => undefined);
-  }, [token]);
+  }, []);
 
-  const toggleWatch = useCallback(
-    (slug: string, watched: boolean) => {
-      if (!token) {
-        window.location.href = "/login";
-        return;
-      }
+  const toggleWatch = useCallback((slug: string, watched: boolean) => {
+    setWatchedSlugs((prev) => {
+      const next = new Set(prev);
+      if (watched) next.add(slug);
+      else next.delete(slug);
+      return next;
+    });
+    setWatched(slug, watched).catch(() =>
       setWatchedSlugs((prev) => {
         const next = new Set(prev);
-        if (watched) next.add(slug);
-        else next.delete(slug);
+        if (watched) next.delete(slug);
+        else next.add(slug);
         return next;
-      });
-      setWatched(slug, watched, token).catch(() =>
-        setWatchedSlugs((prev) => {
-          const next = new Set(prev);
-          if (watched) next.delete(slug);
-          else next.add(slug);
-          return next;
-        }),
-      );
-    },
-    [token],
-  );
+      }),
+    );
+  }, []);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -144,10 +131,10 @@ export default function MarketGrid() {
     [markets, category],
   );
 
-  // stars only render for logged-in users — no bait-and-redirect
-  const cardProps = user
-    ? (m: MarketSummary) => ({ watched: watchedSlugs.has(m.slug), onToggleWatch: toggleWatch })
-    : () => ({});
+  const cardProps = (m: MarketSummary) => ({
+    watched: watchedSlugs.has(m.slug),
+    onToggleWatch: toggleWatch,
+  });
 
   return (
     <section>

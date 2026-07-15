@@ -189,9 +189,7 @@ async def main_async(dry_run: bool) -> None:
     change_by_slug = {m["slug"]: m.get("one_day_change") for m in markets}
     condition_by_slug = {m["slug"]: m.get("condition_id", "") for m in markets}
 
-    open_positions = [
-        p for p in supabase_client.get_open_positions() if p.get("user_id") is None
-    ]
+    open_positions = supabase_client.get_open_positions()
     held = {p["market_id"] for p in open_positions}
     watched = set(supabase_client.distinct_watched_market_ids())
     tracked = held | watched

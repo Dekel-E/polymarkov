@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchFollowedWallets,
@@ -10,7 +9,6 @@ import {
   importWallets,
   unfollowWallet,
 } from "@/lib/api";
-import { authConfigured, useAuth } from "@/lib/auth";
 import type { FollowedWallet, LeaderRow, WalletPosition } from "@/lib/types";
 
 const WINDOWS = [
@@ -127,7 +125,6 @@ function ExpandableWalletRow({
 }
 
 export default function LeaguePage() {
-  const { user, token } = useAuth();
   const [window_, setWindow] = useState("30d");
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,14 +147,10 @@ export default function LeaguePage() {
   }, [window_]);
 
   const loadFollowed = useCallback(() => {
-    if (!token) {
-      setFollowed([]);
-      return;
-    }
-    fetchFollowedWallets(token)
+    fetchFollowedWallets()
       .then(setFollowed)
       .catch(() => undefined);
-  }, [token]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -167,29 +160,19 @@ export default function LeaguePage() {
     loadFollowed();
   }, [loadFollowed]);
 
-  function requireLogin(): boolean {
-    if (!token) {
-      setNote("Following wallets needs an account — log in from the sidebar, then come back.");
-      return true;
-    }
-    return false;
-  }
-
   async function toggleFollow(wallet: string, label: string) {
-    if (requireLogin()) return;
     const w = wallet.toLowerCase();
     setNote(null);
     if (followedSet.has(w)) {
       setFollowed((prev) => prev.filter((f) => f.wallet.toLowerCase() !== w));
-      unfollowWallet(w, token!).catch(loadFollowed);
+      unfollowWallet(w).catch(loadFollowed);
     } else {
       setFollowed((prev) => [{ wallet: w, label }, ...prev]);
-      followWallet(w, label, token!).catch(loadFollowed);
+      followWallet(w, label).catch(loadFollowed);
     }
   }
 
   async function onImportFile(file: File) {
-    if (requireLogin()) return;
     setNote(null);
     try {
       const parsed = JSON.parse(await file.text());
@@ -198,7 +181,7 @@ export default function LeaguePage() {
         setNote('Import failed: expected a JSON array (["0x…"] or [{"wallet": "0x…", "label": "…"}]).');
         return;
       }
-      const { imported, skipped } = await importWallets(list, token!);
+      const { imported, skipped } = await importWallets(list);
       setNote(`Imported ${imported} wallet${imported === 1 ? "" : "s"}${skipped ? `, skipped ${skipped} invalid/duplicate` : ""}.`);
       loadFollowed();
     } catch (e) {
@@ -220,7 +203,7 @@ export default function LeaguePage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => (requireLogin() ? undefined : fileRef.current?.click())}
+            onClick={() => fileRef.current?.click()}
             className="rounded-xl border border-desk-edge px-3.5 py-1.5 text-xs font-semibold text-desk-soft transition hover:border-instrument/60 hover:text-instrument"
           >
             Import wallets (JSON)
@@ -260,7 +243,7 @@ export default function LeaguePage() {
         </div>
       )}
 
-      {user && followed.length > 0 && (
+      {followed.length > 0 && (
         <section>
           <h2 className="mb-2 font-mono text-[11px] uppercase tracking-widest text-instrument">
             following · {followed.length}
@@ -379,14 +362,6 @@ export default function LeaguePage() {
         </div>
       )}
 
-      {!user && authConfigured && (
-        <p className="font-mono text-[11px] text-desk-faint">
-          <Link href="/login" className="text-instrument hover:underline">
-            Log in
-          </Link>{" "}
-          to follow wallets or import a list.
-        </p>
-      )}
     </div>
   );
 }

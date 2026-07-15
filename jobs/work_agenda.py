@@ -54,7 +54,7 @@ async def handle_item(item: dict, held_by_slug: dict[str, dict], may_trade: bool
         outcome += f" — traded ${result.ui['fill']['size_usd']:.0f}"
 
     if position is not None and thesis_broken(position, float(verdict["fair_probability"])):
-        closed = await paper_broker.close_position(str(position["id"]), allow_agent=True)
+        closed = await paper_broker.close_position(str(position["id"]))
         if closed.get("error"):
             outcome += f" — thesis broken but close failed: {closed['error']}"
         else:
@@ -88,11 +88,7 @@ async def main_async(max_items: int, dry_run: bool) -> None:
         return
     print(f"working {len(items)} agenda item(s), budget {used}/{config.MAX_ANALYSES_PER_DAY} used")
 
-    held_by_slug = {
-        p["market_id"]: p
-        for p in supabase_client.get_open_positions()
-        if p.get("user_id") is None
-    }
+    held_by_slug = {p["market_id"]: p for p in supabase_client.get_open_positions()}
 
     for item in items:
         print(f"  [{item['priority']}] {item['market_id'][:50]} — {item['reason']}")
