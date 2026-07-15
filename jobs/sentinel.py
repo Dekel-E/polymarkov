@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from backend import config
-from backend.data import google_news, polymarket, smart_money, supabase_client
+from backend.data import news, polymarket, smart_money, supabase_client
 
 
 def price_move_items(markets: list[dict]) -> list[dict]:
@@ -173,7 +173,7 @@ async def news_burst_items(
         question = question_by_slug.get(slug)
         if not question:
             continue
-        headlines = await google_news.fetch_articles(question, max_records=config.SENTINEL_NEWS_BURST + 2, days=1)
+        headlines = await news.google_news_articles(question, max_records=config.SENTINEL_NEWS_BURST + 2, days=1)
         if len(headlines) >= config.SENTINEL_NEWS_BURST:
             items.append(news_lag_item(slug, len(headlines), change_by_slug.get(slug)))
     return items

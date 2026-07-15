@@ -21,3 +21,5 @@ next-env.d.ts
 .DS_Store
 *.log
 .pytest_cache/
+
+tsconfig.tsbuildinfo

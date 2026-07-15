@@ -5,9 +5,8 @@ from __future__ import annotations
 import pytest
 
 from backend import config
-from backend.agent import orchestrator
-from backend.agent.modules import desk_chat, market_chat
-from backend.agent.modules.council.base import build_shared_context
+from backend.agent import chat, orchestrator
+from backend.agent.council import build_shared_context
 from backend.data import kalshi, polymarket
 from backend.llm.client import RunContext
 from backend.tests.test_market_chat import make_market
@@ -111,7 +110,7 @@ def test_planner_input_includes_recent_turns():
 @pytest.mark.asyncio
 async def test_desk_chat_routes_meta(monkeypatch):
     _stub_llm(monkeypatch, [{"route": "meta"}])
-    result = await desk_chat.chat("what can you do?", [])
+    result = await chat.desk_chat("what can you do?", [])
     assert "What I CAN do" in result["answer"]
     assert result["error"] is None
 
@@ -127,8 +126,8 @@ async def test_desk_chat_routes_market_to_market_chat(monkeypatch):
         return {"answer": f"about {slug}", "citations": [], "error": None}
 
     monkeypatch.setattr(polymarket, "search_markets", fake_search)
-    monkeypatch.setattr(market_chat, "chat", fake_market_chat)
-    result = await desk_chat.chat("latest on the fed?", [])
+    monkeypatch.setattr(chat, "market_chat", fake_market_chat)
+    result = await chat.desk_chat("latest on the fed?", [])
     assert result["answer"] == "about fed-cut"
     assert result["market"] == {"slug": "fed-cut", "question": "Fed cut?"}
 
@@ -140,10 +139,10 @@ async def test_desk_chat_routes_portfolio_with_facts(monkeypatch):
         [{"route": "portfolio"}, {"answer": "You are up $12.50 on paper."}],
     )
     monkeypatch.setattr(
-        desk_chat, "_portfolio_facts",
+        chat, "_portfolio_facts",
         lambda: {"stats": {"realized_pnl_usd": 12.5}, "open_positions": []},
     )
-    result = await desk_chat.chat("how is the portfolio doing?", [])
+    result = await chat.desk_chat("how is the portfolio doing?", [])
     assert result["answer"] == "You are up $12.50 on paper."
     assert "realized_pnl_usd" in calls[1]["user"]  # facts reached the answer call
 
@@ -160,14 +159,14 @@ async def test_desk_chat_out_of_scope_suggests_markets(monkeypatch):
         return [{"slug": "tesla-q3-delivery", "question": "Tesla Q3 deliveries above X?", "mid": 0.5}]
 
     monkeypatch.setattr(polymarket, "search_markets", fake_search)
-    result = await desk_chat.chat("should I buy tesla stock?", [])
+    result = await chat.desk_chat("should I buy tesla stock?", [])
     assert "I can't advise on stocks." in result["answer"]
     assert "tesla-q3-delivery" in result["answer"]
 
 
 @pytest.mark.asyncio
 async def test_desk_chat_rejects_empty_question():
-    result = await desk_chat.chat("  ", [])
+    result = await chat.desk_chat("  ", [])
     assert result["error"] == "empty question"
 
 

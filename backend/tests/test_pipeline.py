@@ -12,7 +12,7 @@ from backend.agent import intel_cache
 from backend.data import supabase_client
 from backend.agent import orchestrator
 from backend.agent.types import MarketState, Step, StepPrompt
-from backend.data import gdelt, google_news, pinecone_client, polymarket, social
+from backend.data import news, pinecone_client, polymarket, social
 from backend.llm import embeddings
 from backend.llm.client import RunContext, TOOL_SYSTEM_PROMPT
 
@@ -164,8 +164,6 @@ def mocked_pipeline(monkeypatch):
     async def fake_web(query, max_results=6):
         return []
 
-    from backend.data import web_search
-
     async def fake_kalshi(question):
         return {
             "venue": "Kalshi", "event_title": "Fed decision in September?",
@@ -176,9 +174,9 @@ def mocked_pipeline(monkeypatch):
 
     from backend.data import kalshi
 
-    monkeypatch.setattr(gdelt, "fetch_articles", fake_articles)
-    monkeypatch.setattr(google_news, "fetch_articles", fake_gnews)
-    monkeypatch.setattr(web_search, "search", fake_web)
+    monkeypatch.setattr(news, "gdelt_articles", fake_articles)
+    monkeypatch.setattr(news, "google_news_articles", fake_gnews)
+    monkeypatch.setattr(news, "web_search", fake_web)
     monkeypatch.setattr(social, "gather_social", fake_social)
     monkeypatch.setattr(kalshi, "find_matching_event", fake_kalshi)
     # hermetic: never touch live Pinecone/embeddings/Supabase even with .env creds

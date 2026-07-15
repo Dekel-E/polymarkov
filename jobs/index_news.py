@@ -12,7 +12,7 @@ import argparse
 import asyncio
 import re
 
-from backend.data import gdelt, pinecone_client, polymarket, supabase_client
+from backend.data import news, pinecone_client, polymarket, supabase_client
 from backend.llm import embeddings
 
 GDELT_DELAY_S = 2.0  # be polite; GDELT 429s fast
@@ -32,7 +32,7 @@ async def collect_articles(markets: list[dict]) -> list[dict]:
         query = market_news_query(market)
         if not query:
             continue
-        for a in await gdelt.fetch_articles(query, max_records=15):
+        for a in await news.gdelt_articles(query, max_records=15):
             existing = articles.get(a["url"])
             entities = (existing.get("entities", []) if existing else []) + [market["slug"]]
             articles[a["url"]] = {**a, "entities": sorted(set(entities))}

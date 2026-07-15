@@ -16,7 +16,7 @@ MODULES: list[dict] = [
         "name": "QueryPlanner",
         "kind": "llm",
         "prompt_file": "query_planner",
-        "implementation": "backend/agent/modules/query_planner.py",
+        "implementation": "backend/agent/pipeline.py",
         "description": (
             "Parses the raw user prompt: classifies intent (market research / "
             "meta question about the agent itself / out of scope), extracts "
@@ -32,7 +32,7 @@ MODULES: list[dict] = [
         "name": "MarketResolver",
         "kind": "tool",
         "prompt_file": None,
-        "implementation": "backend/agent/modules/market_resolver.py",
+        "implementation": "backend/agent/pipeline.py",
         "description": (
             "Resolves the plan to ONE Polymarket market: direct slug/URL "
             "lookup, Gamma text search, then Pinecone vector match over the "
@@ -47,7 +47,7 @@ MODULES: list[dict] = [
         "name": "EvidenceRetriever",
         "kind": "tool",
         "prompt_file": None,
-        "implementation": "backend/agent/modules/evidence_retriever.py",
+        "implementation": "backend/agent/pipeline.py",
         "description": (
             "Gathers news evidence: indexed articles from Supabase/Pinecone, "
             "topped up live from GDELT and Google News, with a DuckDuckGo "
@@ -66,7 +66,7 @@ MODULES: list[dict] = [
         "name": "SocialScanner",
         "kind": "tool",
         "prompt_file": None,
-        "implementation": "backend/agent/modules/social_scanner.py",
+        "implementation": "backend/agent/pipeline.py",
         "description": (
             "Scrapes social chatter for the market: Polymarket comments, "
             "Bluesky posts and Reddit posts, plus a mention-velocity signal "
@@ -80,7 +80,7 @@ MODULES: list[dict] = [
         "name": "SentimentScorer",
         "kind": "llm",
         "prompt_file": "sentiment_scorer",
-        "implementation": "backend/agent/modules/sentiment_scorer.py",
+        "implementation": "backend/agent/pipeline.py",
         "description": (
             "ONE batched call scoring every evidence cluster and social post: "
             "sentiment -1..1 and stance yes/no/neutral relative to the "
@@ -138,7 +138,7 @@ MODULES: list[dict] = [
         "name": "Judge",
         "kind": "llm",
         "prompt_file": "judge",
-        "implementation": "backend/agent/modules/judge.py",
+        "implementation": "backend/agent/pipeline.py",
         "description": (
             "Synthesizes the council into the final dossier verdict. All "
             "price/fee/edge/Kelly arithmetic is DETERMINISTIC CODE "
@@ -167,7 +167,7 @@ MODULES: list[dict] = [
         "name": "MarketChat",
         "kind": "llm",
         "prompt_file": "market_chat",
-        "implementation": "backend/agent/modules/market_chat.py",
+        "implementation": "backend/agent/chat.py",
         "description": (
             "Grounded Q&A on ONE market (POST /api/market/chat). First plans "
             "whether the question needs fresh intel (prompt file "
@@ -189,7 +189,7 @@ MODULES: list[dict] = [
         "name": "DeskChat",
         "kind": "llm",
         "prompt_file": "desk_chat",
-        "implementation": "backend/agent/modules/desk_chat.py",
+        "implementation": "backend/agent/chat.py",
         "description": (
             "Global conversational entry point (POST /api/chat). A router "
             "call (prompt file desk_chat_router) classifies the question: "
@@ -210,7 +210,7 @@ MODULES: list[dict] = [
         "name": "CrossVenueScanner",
         "kind": "tool",
         "prompt_file": None,
-        "implementation": "backend/agent/modules/cross_venue.py",
+        "implementation": "backend/agent/pipeline.py",
         "description": (
             "Finds the same event priced on Kalshi (keyless search with "
             "embedded live yes bid/ask) via conservative token matching and "

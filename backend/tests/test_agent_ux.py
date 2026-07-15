@@ -7,9 +7,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from backend.agent import orchestrator
-from backend.agent.modules import query_planner
-from backend.agent.modules.council.base import time_context
+from backend.agent import orchestrator, pipeline
+from backend.agent.council import time_context
 from backend.agent.registry import MODULES
 from backend.agent.types import QueryPlan
 from backend.data.social import parse_bluesky_posts
@@ -56,7 +55,7 @@ async def test_meta_question_answers_without_running_the_pipeline(monkeypatch):
     async def fake_plan(ctx, user_prompt):
         return QueryPlan(in_scope=False, intent="meta")
 
-    monkeypatch.setattr(query_planner, "plan_query", fake_plan)
+    monkeypatch.setattr(pipeline, "plan_query", fake_plan)
     result = await orchestrator.run_pipeline("what can you do?")
     assert result.status == "ok"
     assert "What I CAN do" in (result.response or "")

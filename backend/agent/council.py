@@ -1,10 +1,12 @@
-"""Council shared machinery: one context built once, four personas run on it
+"""The AI council: one context built once, four personas run on it
 concurrently (LLM calls #3-#6). Personas assign interpretable weights only —
-pricing.py does all arithmetic.
+pricing.py does all arithmetic. PERSONAS maps each canonical module name to
+its prompt file in the registry.
 """
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 
 from pydantic import ValidationError
@@ -17,6 +19,13 @@ from backend.agent.types import (
     SocialPulse,
 )
 from backend.llm.client import RunContext, load_prompt
+
+PERSONAS = {
+    "BullAnalyst": "council_bull",
+    "BearAnalyst": "council_bear",
+    "QuantAnalyst": "council_quant",
+    "ResolutionSkeptic": "council_resolution_skeptic",
+}
 
 
 def _fmt(v: float | None, pct: bool = True) -> str:
@@ -167,3 +176,11 @@ async def run_persona(
             confidence="low",
             red_flags=[f"{name} schema failure"],
         )
+
+
+async def run_council(ctx: RunContext, shared_context: str) -> dict[str, PersonaOpinion]:
+    """All four personas concurrently on the identical context."""
+    opinions = await asyncio.gather(
+        *(run_persona(ctx, name, pf, shared_context) for name, pf in PERSONAS.items())
+    )
+    return dict(zip(PERSONAS, opinions))

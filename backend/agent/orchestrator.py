@@ -12,18 +12,7 @@ import asyncio
 import time
 
 from backend import config
-from backend.agent import intel_cache, pricing
-from backend.agent.modules import (
-    cross_venue,
-    evidence_retriever,
-    judge,
-    market_resolver,
-    query_planner,
-    sentiment_scorer,
-    social_scanner,
-)
-from backend.agent.modules.council import bear, bull, quant, resolution_skeptic
-from backend.agent.modules.council.base import build_shared_context
+from backend.agent import council, intel_cache, pipeline, pricing
 from backend.agent.types import (
     EvidenceCluster,
     ExecuteOut,
@@ -181,7 +170,7 @@ async def _run(ctx: RunContext, user_prompt: str, started: float, history: list[
             return _serve_cached(cached)
 
     # 1. QueryPlanner (LLM #1) — sees recent turns so follow-ups resolve
-    plan = await query_planner.plan_query(ctx, _planner_input(user_prompt, history))
+    plan = await pipeline.plan_query(ctx, _planner_input(user_prompt, history))
     if plan.intent == "meta":  # "who are you / what can you do" — answered
         return ExecuteOut(  # deterministically from the agent registry
             status="ok", response=self_description(), steps=ctx.steps
@@ -193,7 +182,7 @@ async def _run(ctx: RunContext, user_prompt: str, started: float, history: list[
         return ExecuteOut(status="ok", response=refusal, steps=ctx.steps)
 
     # 2. MarketResolver (tool)
-    resolved = await market_resolver.resolve_market(ctx, plan)
+    resolved = await pipeline.resolve_market(ctx, plan)
     if resolved.market is None:
         lines = ["I found several matching markets — please pick one and re-run:", ""]
         lines += [
@@ -213,30 +202,24 @@ async def _run(ctx: RunContext, user_prompt: str, started: float, history: list[
 
     # 3+4. EvidenceRetriever ∥ SocialScanner ∥ CrossVenueScanner (tools, concurrent)
     evidence, pulse, venue = await asyncio.gather(
-        evidence_retriever.retrieve_evidence(ctx, plan, market),
-        social_scanner.scan_social(ctx, plan, market),
-        cross_venue.scan(ctx, market),
+        pipeline.retrieve_evidence(ctx, plan, market),
+        pipeline.scan_social(ctx, plan, market),
+        pipeline.scan_cross_venue(ctx, market),
     )
 
     # 5. SentimentScorer (LLM #2, one batched call)
-    await sentiment_scorer.score_sentiment(ctx, market, evidence.clusters, pulse)
+    await pipeline.score_sentiment(ctx, market, evidence.clusters, pulse)
 
     # 6. Council (LLM #3-#6, concurrent, identical context)
-    shared_context = build_shared_context(
+    shared_context = council.build_shared_context(
         market, evidence.clusters, pulse, evidence.precedents, cross_venue=venue
     )
-    opinions = await asyncio.gather(
-        bull.run(ctx, shared_context),
-        bear.run(ctx, shared_context),
-        quant.run(ctx, shared_context),
-        resolution_skeptic.run(ctx, shared_context),
-    )
-    council = dict(zip((bull.NAME, bear.NAME, quant.NAME, resolution_skeptic.NAME), opinions))
+    opinions = await council.run_council(ctx, shared_context)
 
     # 7. Deterministic pricing (code) + Judge (LLM #7)
-    risk = pricing.parse_resolution_risk(council[resolution_skeptic.NAME].red_flags)
-    priced = pricing.compute_pricing(market, council, risk, len(evidence.clusters))
-    verdict = await judge.run_judge(ctx, market, council, priced)
+    risk = pricing.parse_resolution_risk(opinions["ResolutionSkeptic"].red_flags)
+    priced = pricing.compute_pricing(market, opinions, risk, len(evidence.clusters))
+    verdict = await pipeline.run_judge(ctx, market, opinions, priced)
 
     # 8. PaperBroker (tool) — only when the user asked to trade and verdict isn't PASS
     fill = None
@@ -248,8 +231,8 @@ async def _run(ctx: RunContext, user_prompt: str, started: float, history: list[
             fill = await paper_broker.execute_paper_trade(ctx, market, priced, strategy="ai_signal")
             trade_note = None if fill else "No paper trade opened: the order book had no fillable liquidity."
 
-    response = _dossier_markdown(market, verdict, priced, evidence.clusters, pulse, council, trade_note, fill)
-    ui = _ui_payload(market, verdict, priced, evidence.clusters, pulse, council, fill)
+    response = _dossier_markdown(market, verdict, priced, evidence.clusters, pulse, opinions, trade_note, fill)
+    ui = _ui_payload(market, verdict, priced, evidence.clusters, pulse, opinions, fill)
 
     # cache the analysis for repeat requests (the fill itself is not replayed)
     await asyncio.to_thread(

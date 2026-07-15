@@ -10,11 +10,10 @@ from __future__ import annotations
 import pytest
 
 from backend import config
-from backend.agent import intel_cache
-from backend.agent.modules import market_chat
+from backend.agent import chat, intel_cache
 from backend.agent.registry import CANONICAL_MODULES, MODULES, PROMPT_FILES
 from backend.agent.types import MarketState
-from backend.data import google_news, polymarket, social, supabase_client, web_search
+from backend.data import news, polymarket, social, supabase_client
 from backend.llm.client import RunContext
 
 
@@ -114,10 +113,10 @@ def stub_world(monkeypatch):
 
     monkeypatch.setattr(polymarket, "get_market_state", fake_state)
     monkeypatch.setattr(intel_cache, "get", lambda slug, max_age_s=None: _dossier_payload())
-    monkeypatch.setattr(google_news, "fetch_articles", fake_gnews)
-    monkeypatch.setattr(web_search, "search", fake_web)
+    monkeypatch.setattr(news, "google_news_articles", fake_gnews)
+    monkeypatch.setattr(news, "web_search", fake_web)
     monkeypatch.setattr(social, "gather_social", fake_social)
-    monkeypatch.setattr(market_chat.gdelt, "fetch_article_text", fake_text)
+    monkeypatch.setattr(news, "fetch_article_text", fake_text)
     indexed: list[list[dict]] = []
     monkeypatch.setattr(
         supabase_client, "upsert_articles", lambda articles: indexed.append(articles) or len(articles)
@@ -134,7 +133,7 @@ async def test_chat_gathers_indexes_and_cites(monkeypatch, stub_world):
             {"answer": "Latest: A happened.", "citations": [{"title": "Fresh A", "url": "https://news.ex/a"}]},
         ],
     )
-    result = await market_chat.chat("test-market", "what's the latest news?", [])
+    result = await chat.market_chat("test-market", "what's the latest news?", [])
 
     assert result["error"] is None
     assert result["answer"] == "Latest: A happened."
@@ -160,7 +159,7 @@ async def test_chat_skips_gathering_when_context_suffices(monkeypatch, stub_worl
             {"answer": "The spread is 2 points.", "citations": []},
         ],
     )
-    result = await market_chat.chat("test-market", "what is the spread?", [])
+    result = await chat.market_chat("test-market", "what is the spread?", [])
 
     assert result["error"] is None
     assert result["gathered"]["searched"] is False
@@ -176,12 +175,12 @@ async def test_chat_errors_without_market_or_dossier(monkeypatch):
 
     monkeypatch.setattr(polymarket, "get_market_state", no_state)
     monkeypatch.setattr(intel_cache, "get", lambda slug, max_age_s=None: None)
-    result = await market_chat.chat("ghost-market", "hi?", [])
+    result = await chat.market_chat("ghost-market", "hi?", [])
     assert result["answer"] is None
     assert "no market found" in result["error"]
 
 
 @pytest.mark.asyncio
 async def test_chat_rejects_empty_question():
-    result = await market_chat.chat("test-market", "   ", [])
+    result = await chat.market_chat("test-market", "   ", [])
     assert result["error"] == "empty question"

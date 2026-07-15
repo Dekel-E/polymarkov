@@ -1,34 +1,44 @@
-"""MarketChat — grounded per-market Q&A with on-demand intel gathering.
+"""The conversational layer: MarketChat + DeskChat.
 
-Flow per question (at most 2 LLM calls):
-1. plan (LLM, prompts/market_chat_planner.txt): does the question need fresh
+MarketChat (POST /api/market/chat) — grounded Q&A on ONE market, at most 2
+LLM calls per question:
+1. plan (prompts/market_chat_planner.txt): does the question need fresh
    intelligence, and which search queries?
 2. gather (deterministic, same fetchers the pipeline tools use): Google News
-   + DuckDuckGo web search per query, socials (Polymarket comments + Reddit).
-   Found articles are INDEXED into Supabase tagged with the market slug
-   (embedded=False) — the NewsIndexer embeds them into Pinecone on its next
-   scheduled pass, so chat discoveries feed future dossiers too.
-3. answer (LLM, prompts/market_chat.txt): market state + dossier + gathered
+   + DuckDuckGo web search per query, socials (Polymarket comments, Bluesky,
+   Reddit). Found articles are INDEXED into Supabase tagged with the market
+   slug (embedded=False) — the NewsIndexer embeds them into Pinecone on its
+   next pass, so chat discoveries feed future dossiers too.
+3. answer (prompts/market_chat.txt): market state + dossier + gathered
    sources + chat history -> answer with citations.
+
+DeskChat (POST /api/chat) — the global entry point. One router LLM call
+classifies the question, then:
+- market       -> resolve via Gamma search and delegate to MarketChat
+- portfolio    -> deterministic fact-gathering from Supabase + one grounded
+                 answer call
+- meta         -> the registry-built self-description (zero further calls)
+- out_of_scope -> friendly refusal + suggested Polymarket markets (zero LLM)
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, Optional
+from typing import Optional
 
 from backend import config
 from backend.agent import intel_cache
-from backend.agent.modules.council.base import time_context
-from backend.data import gdelt, google_news, polymarket, social, supabase_client, web_search
+from backend.agent.council import time_context
+from backend.data import news, polymarket, social, supabase_client
 from backend.llm.client import RunContext, load_prompt
 
-MODULE = "MarketChat"
+MARKET_CHAT = "MarketChat"
+DESK_CHAT = "DeskChat"
 
 
 # ---------------------------------------------------------------------------
-# Context assembly (pure-ish helpers)
+# MarketChat: context assembly
 # ---------------------------------------------------------------------------
 
 
@@ -38,7 +48,7 @@ def _dossier_context(payload: Optional[dict]) -> Optional[dict]:
         return None
     ui = payload.get("ui") or {}
     age_min = max(0, int(intel_cache._age_s(payload.get("created_at", "")) // 60))
-    news = [
+    news_items = [
         {k: c.get(k) for k in ("id", "headline", "source", "date", "url", "sentiment", "stance", "excerpt")}
         for c in (ui.get("news") or [])
     ]
@@ -46,7 +56,7 @@ def _dossier_context(payload: Optional[dict]) -> Optional[dict]:
         "age_minutes": age_min,
         "verdict": ui.get("verdict"),
         "council": ui.get("council"),
-        "news_clusters": news,
+        "news_clusters": news_items,
         "social_note": (ui.get("social") or {}).get("note"),
     }
 
@@ -71,7 +81,7 @@ def _clip_history(history: list[dict]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Gathering (deterministic tools)
+# MarketChat: gathering (deterministic tools)
 # ---------------------------------------------------------------------------
 
 
@@ -82,9 +92,9 @@ async def _gather(slug: str, plan: dict, event_id: str) -> tuple[list[dict], lis
 
     tasks: list = []
     for q in news_queries:
-        tasks.append(google_news.fetch_articles(q, max_records=config.CHAT_NEWS_RESULTS))
+        tasks.append(news.google_news_articles(q, max_records=config.CHAT_NEWS_RESULTS))
         if config.WEB_SEARCH_ENABLED:
-            tasks.append(web_search.search(q, max_results=config.CHAT_WEB_RESULTS))
+            tasks.append(news.web_search(q, max_results=config.CHAT_WEB_RESULTS))
     social_task = (
         social.gather_social(event_id, str(social_query), limit=config.CHAT_SOCIAL_POSTS)
         if social_query
@@ -111,7 +121,7 @@ async def _gather(slug: str, plan: dict, event_id: str) -> tuple[list[dict], lis
     if articles:
         texts = await asyncio.gather(
             *(
-                gdelt.fetch_article_text(a["url"], max_chars=config.EXCERPT_MAX_CHARS)
+                news.fetch_article_text(a["url"], max_chars=config.EXCERPT_MAX_CHARS)
                 for a in articles[:3]
             )
         )
@@ -133,11 +143,11 @@ async def _gather(slug: str, plan: dict, event_id: str) -> tuple[list[dict], lis
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# MarketChat: entry point
 # ---------------------------------------------------------------------------
 
 
-async def chat(slug: str, question: str, history: list[dict]) -> dict:
+async def market_chat(slug: str, question: str, history: list[dict]) -> dict:
     """Answer one chat question about `slug`. Never raises for expected cases."""
     ctx = RunContext()
     question = question.strip()[: config.CHAT_MAX_QUESTION_CHARS]
@@ -176,7 +186,7 @@ async def chat(slug: str, question: str, history: list[dict]) -> dict:
         },
         ensure_ascii=False,
     )
-    plan = await ctx.call_llm(MODULE, load_prompt("market_chat_planner"), plan_input)
+    plan = await ctx.call_llm(MARKET_CHAT, load_prompt("market_chat_planner"), plan_input)
     if not isinstance(plan, dict):
         plan = {"needs_fresh_intel": False, "news_queries": [], "social_query": None}
 
@@ -206,7 +216,7 @@ async def chat(slug: str, question: str, history: list[dict]) -> dict:
         },
         ensure_ascii=False,
     )
-    result = await ctx.call_llm(MODULE, load_prompt("market_chat"), answer_input)
+    result = await ctx.call_llm(MARKET_CHAT, load_prompt("market_chat"), answer_input)
     answer = str(result.get("answer", "")) if isinstance(result, dict) else str(result)
     citations = result.get("citations") if isinstance(result, dict) else []
     if not isinstance(citations, list):
@@ -228,4 +238,111 @@ async def chat(slug: str, question: str, history: list[dict]) -> dict:
         },
         "dossier_age_min": dossier_ctx["age_minutes"] if dossier_ctx else None,
         "error": None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# DeskChat: portfolio facts (deterministic)
+# ---------------------------------------------------------------------------
+
+
+def _portfolio_facts() -> dict:
+    """Everything the desk knows about itself, trimmed for one prompt."""
+    from backend.sim.portfolio import get_portfolio
+
+    p = get_portfolio()
+    open_rows = [
+        {k: r.get(k) for k in ("market_id", "side", "strategy", "size_usd",
+                               "entry_price", "current_price", "unrealized_pnl", "opened_at")}
+        for r in p["open"][:15]
+    ]
+    resolved = [
+        {k: r.get(k) for k in ("market_id", "side", "strategy", "size_usd",
+                               "pnl", "resolved_outcome", "resolved_at")}
+        for r in p["resolved"][:15]
+    ]
+    runs = [
+        {k: r.get(k) for k in ("market_id", "verdict", "fair_prob", "mid_at_run", "created_at")}
+        for r in supabase_client.get_recent_runs(10)
+    ]
+    briefing = supabase_client.latest_briefing()
+    return {
+        "stats": p["stats"],
+        "open_positions": open_rows,
+        "recent_resolved": resolved,
+        "settings": supabase_client.get_agent_settings(),
+        "recent_analyses": runs,
+        "pending_agenda": supabase_client.get_pending_agenda(8),
+        "latest_briefing": (briefing or {}).get("content", "")[:1200] or None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# DeskChat: entry point
+# ---------------------------------------------------------------------------
+
+
+async def desk_chat(question: str, history: list[dict]) -> dict:
+    """Answer one global chat question. Never raises for expected cases."""
+    ctx = RunContext()
+    question = question.strip()[: config.CHAT_MAX_QUESTION_CHARS]
+    if not question:
+        return {"answer": None, "citations": [], "market": None, "error": "empty question"}
+
+    recent = _clip_history(history)
+
+    route_raw = await ctx.call_llm(
+        DESK_CHAT,
+        load_prompt("desk_chat_router"),
+        json.dumps({"question": question, "chat_history": recent}, ensure_ascii=False),
+    )
+    route_raw = route_raw if isinstance(route_raw, dict) else {}
+    route = route_raw.get("route")
+
+    if route == "meta":
+        from backend.agent.orchestrator import self_description
+
+        return {"answer": self_description(), "citations": [], "market": None, "error": None}
+
+    if route == "market":
+        query = str(route_raw.get("market_query") or question)
+        try:
+            hits = await polymarket.search_markets(query, limit=1)
+        except Exception:
+            hits = []
+        if not hits:
+            return {
+                "answer": (
+                    f"I couldn't find an active Polymarket market for *{query}* — "
+                    "try naming the market more specifically or paste its URL."
+                ),
+                "citations": [], "market": None, "error": None,
+            }
+        slug = hits[0]["slug"]
+        result = await market_chat(slug, question, history)
+        result["market"] = {"slug": slug, "question": hits[0].get("question", slug)}
+        return result
+
+    if route == "portfolio":
+        facts = await asyncio.to_thread(_portfolio_facts)
+        answer_raw = await ctx.call_llm(
+            DESK_CHAT,
+            load_prompt("desk_chat"),
+            json.dumps(
+                {"time": time_context(None), "facts": facts,
+                 "chat_history": recent, "question": question},
+                ensure_ascii=False, default=str,
+            ),
+        )
+        answer = str(answer_raw.get("answer", "")) if isinstance(answer_raw, dict) else str(answer_raw)
+        return {"answer": answer, "citations": [], "market": None, "error": None}
+
+    # out_of_scope (or an unrecognized route): friendly refusal + suggestions
+    from backend.agent.orchestrator import REFUSAL_DEFAULT, suggest_markets
+
+    keywords = [k for k in (route_raw.get("topic_keywords") or []) if isinstance(k, str)]
+    reason = str(route_raw.get("reason") or REFUSAL_DEFAULT)
+    return {
+        "answer": reason + await suggest_markets(keywords),
+        "citations": [], "market": None, "error": None,
     }

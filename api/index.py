@@ -379,7 +379,7 @@ async def market_news(slug: str, limit: int = 10) -> dict:
     market question, merged with indexer-tagged articles. Semantic matches
     only count above the relevance floor."""
     try:
-        from backend.data import google_news
+        from backend.data import news
 
         limit = min(limit, 15)
         question = ""
@@ -408,7 +408,7 @@ async def market_news(slug: str, limit: int = 10) -> dict:
         # live, query-relevant headlines (works even when nothing is indexed)
         if question:
             seen = {a["url"] for a in articles}
-            for a in await google_news.fetch_articles(question, max_records=limit):
+            for a in await news.google_news_articles(question, max_records=limit):
                 if a["url"] not in seen:
                     articles.append(a)
                     seen.add(a["url"])
@@ -649,9 +649,9 @@ async def desk_chat_endpoint(body: DeskChatIn) -> dict:
     (via MarketChat), to the desk's own portfolio/state, to the agent's
     self-description, or to a helpful refusal with market suggestions."""
     try:
-        from backend.agent.modules import desk_chat
+        from backend.agent import chat
 
-        return await desk_chat.chat(body.question, body.history[:24])
+        return await chat.desk_chat(body.question, body.history[:24])
     except Exception as exc:
         return {"answer": None, "citations": [], "market": None, "error": str(exc)}
 
@@ -668,9 +668,9 @@ async def market_chat_endpoint(body: MarketChatIn) -> dict:
     question needs fresh intel, searches web/news and scrapes socials if so,
     indexes what it finds, and answers with citations."""
     try:
-        from backend.agent.modules import market_chat
+        from backend.agent import chat
 
-        return await market_chat.chat(body.slug, body.question, body.history[:24])
+        return await chat.market_chat(body.slug, body.question, body.history[:24])
     except Exception as exc:
         return {"answer": None, "citations": [], "error": str(exc)}
 
