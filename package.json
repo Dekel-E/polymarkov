@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "dev:api": ".venv\\Scripts\\python -m uvicorn api.index:app --reload --port 8000",
+    "up": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1",
+    "down": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 -Stop",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

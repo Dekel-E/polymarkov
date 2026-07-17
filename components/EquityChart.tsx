@@ -3,29 +3,39 @@
 import type { Portfolio } from "@/lib/types";
 
 /**
- * Equity over time: starting bankroll, stepped by each settled trade's PnL,
- * ending at current equity (incl. unrealized). One line, one baseline.
+ * Equity over time. Preferred source: daily snapshots recorded by the risk
+ * manager (include unrealized PnL). Fallback when fewer than 2 snapshots
+ * exist yet: reconstruct from settled trades' PnL. Ends at current equity.
  */
 export default function EquityChart({ portfolio }: { portfolio: Portfolio }) {
   const { stats } = portfolio;
-  const settled = portfolio.resolved
-    .filter((p) => p.pnl !== null)
-    .sort(
-      (a, b) =>
-        new Date(a.resolved_at ?? a.opened_at).getTime() -
-        new Date(b.resolved_at ?? b.opened_at).getTime(),
-    );
-  if (settled.length === 0) return null;
+  const snapshots = portfolio.equity_history ?? [];
 
   const points: { t: number; v: number }[] = [];
-  const firstT = new Date(settled[0].resolved_at ?? settled[0].opened_at).getTime();
-  points.push({ t: firstT - 3_600_000, v: stats.bankroll_usd });
-  let running = stats.bankroll_usd;
-  for (const p of settled) {
-    running += Number(p.pnl);
-    points.push({ t: new Date(p.resolved_at ?? p.opened_at).getTime(), v: running });
+  if (snapshots.length >= 2) {
+    for (const s of snapshots) {
+      points.push({ t: new Date(`${s.day}T12:00:00Z`).getTime(), v: s.equity_usd });
+    }
+    points.push({ t: Date.now(), v: stats.equity_usd });
+  } else {
+    const settled = portfolio.resolved
+      .filter((p) => p.pnl !== null)
+      .sort(
+        (a, b) =>
+          new Date(a.resolved_at ?? a.opened_at).getTime() -
+          new Date(b.resolved_at ?? b.opened_at).getTime(),
+      );
+    if (settled.length === 0) return null;
+
+    const firstT = new Date(settled[0].resolved_at ?? settled[0].opened_at).getTime();
+    points.push({ t: firstT - 3_600_000, v: stats.bankroll_usd });
+    let running = stats.bankroll_usd;
+    for (const p of settled) {
+      running += Number(p.pnl);
+      points.push({ t: new Date(p.resolved_at ?? p.opened_at).getTime(), v: running });
+    }
+    points.push({ t: Date.now(), v: stats.equity_usd });
   }
-  points.push({ t: Date.now(), v: stats.equity_usd });
 
   const W = 640;
   const H = 160;

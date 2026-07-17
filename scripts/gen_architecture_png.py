@@ -82,7 +82,7 @@ def right(b):
 # ---- title ----------------------------------------------------------------
 ax.text(2, 97.5, "POLYMARKOV", fontsize=17, fontweight="bold", color=AMBER)
 ax.text(2, 95.2, "pre-trade intelligence agent for Polymarket — one /api/execute run "
-        "+ conversational DeskChat (/api/chat) & MarketChat (/api/market/chat)",
+        "+ DeskChat (/api/chat) · MarketChat (/api/market/chat) · StrategyChat (/api/strategy/chat)",
         fontsize=9.5, color=DIM)
 # legend
 for i, (label, color) in enumerate([("LLM call", AMBER), ("deterministic tool", STEEL),
@@ -96,6 +96,8 @@ for i, (label, color) in enumerate([("LLM call", AMBER), ("deterministic tool", 
 gui = box(28, 88, 20, 5, "Web GUI", kind="io", sub="POST /api/execute  {prompt, history}")
 dc = box(3, 88, 22, 5, "DeskChat", kind="llm",
          sub="global chat · POST /api/chat\nroutes → MarketChat / portfolio / meta")
+sc2 = box(3, 79.5, 22, 5, "StrategyChat", kind="llm",
+          sub="desk control · POST /api/strategy/chat\ninstructions → settings patch (clamped by code)")
 qp = box(28, 79.5, 20, 5, "QueryPlanner", kind="llm", sub="LLM #1 · intent, market query, entities")
 mr = box(28, 71, 20, 5, "MarketResolver", kind="tool", sub="URL / text search / vector match")
 
@@ -177,6 +179,9 @@ arrow(right(jobs[0:1][0] and jobs), left(store) if False else (42.4, 6), color=T
 arrow((23, 9.9), (18, 61 - 0.4), color=TEAL, connection="arc3,rad=0.25", dashed=True)
 arrow((23, 9.9), (30, 28.1), color=TEAL, connection="arc3,rad=0.15", dashed=True, style="-")
 ax.text(10, 11.2, "warm cache reads", fontsize=7.5, color=TEAL)
+# StrategyChat writes agent_settings (read by every autonomous job)
+arrow((8, 79.5 - 0.4), (8, 9.9), color=TEAL, dashed=True)
+ax.text(8.7, 44, "agent_settings", fontsize=7.5, color=TEAL, rotation=90, va="center")
 
 plt.tight_layout(pad=0.6)
 OUT = r"c:\Users\admin1\Desktop\Coding\polymarkov\backend\assets\architecture.png"

@@ -104,7 +104,9 @@ def spread_violation_item(market: dict, yes_ask: float, no_ask: float) -> Option
 
 
 async def build_watch_set(state: WatchState) -> list[str]:
-    """Pick assets to watch: agent holdings + watchlist + top trending."""
+    """Pick assets to watch: agent holdings + watchlist + top trending.
+    Held/watched markets OUTSIDE the trending list are fetched explicitly —
+    a position must never fall off the radar just because volume moved on."""
     markets = await polymarket.get_trending_markets(60)
     held = {p["market_id"] for p in supabase_client.get_open_positions()}
     watched = set(supabase_client.distinct_watched_market_ids())
@@ -114,6 +116,16 @@ async def build_watch_set(state: WatchState) -> list[str]:
         if not m["yes_token_id"] or not m["no_token_id"]:
             continue
         if m["slug"] in held or m["slug"] in watched or len(picked) < 40:
+            picked.append(m)
+
+    trending_slugs = {m["slug"] for m in picked}
+    missing = (held | watched) - trending_slugs
+    for slug in sorted(missing)[:20]:  # bounded: one Gamma call per market
+        try:
+            m = await polymarket.get_market(slug)
+        except Exception:
+            continue
+        if m and m.get("active") and m.get("yes_token_id") and m.get("no_token_id"):
             picked.append(m)
 
     assets: list[str] = []

@@ -13,7 +13,7 @@ from backend.data import supabase_client
 
 def get_portfolio() -> dict:
     if not supabase_client.is_configured():
-        return {"open": [], "resolved": [], "stats": _stats([], [])}
+        return {"open": [], "resolved": [], "stats": _stats([], []), "equity_history": []}
 
     client = supabase_client.get_client()
     rows = (
@@ -24,7 +24,12 @@ def get_portfolio() -> dict:
     open_rows = [r for r in rows if r.get("status") == "open"]
     resolved = [r for r in rows if r.get("status") == "resolved"]
     _enrich_open(client, open_rows)
-    return {"open": open_rows, "resolved": resolved, "stats": _stats(open_rows, resolved)}
+    return {
+        "open": open_rows,
+        "resolved": resolved,
+        "stats": _stats(open_rows, resolved),
+        "equity_history": supabase_client.get_equity_history(),
+    }
 
 
 def _enrich_open(client, open_rows: list[dict]) -> None:

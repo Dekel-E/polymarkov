@@ -94,7 +94,7 @@ MODULES: list[dict] = [
         "name": "BullAnalyst",
         "kind": "llm",
         "prompt_file": "council_bull",
-        "implementation": "backend/agent/modules/council/bull.py",
+        "implementation": "backend/agent/council.py",
         "description": "Council persona arguing the strongest YES case from the shared evidence context.",
         "inputs": "shared council context (market, clusters, social, precedents)",
         "outputs": "PersonaOpinion {thesis, evidence_weights[], estimated_probability, confidence, red_flags}",
@@ -104,7 +104,7 @@ MODULES: list[dict] = [
         "name": "BearAnalyst",
         "kind": "llm",
         "prompt_file": "council_bear",
-        "implementation": "backend/agent/modules/council/bear.py",
+        "implementation": "backend/agent/council.py",
         "description": "Council persona arguing the strongest NO case from the shared evidence context.",
         "inputs": "shared council context",
         "outputs": "PersonaOpinion",
@@ -114,7 +114,7 @@ MODULES: list[dict] = [
         "name": "QuantAnalyst",
         "kind": "llm",
         "prompt_file": "council_quant",
-        "implementation": "backend/agent/modules/council/quant.py",
+        "implementation": "backend/agent/council.py",
         "description": "Council persona weighing base rates, precedents and market microstructure.",
         "inputs": "shared council context",
         "outputs": "PersonaOpinion",
@@ -124,7 +124,7 @@ MODULES: list[dict] = [
         "name": "ResolutionSkeptic",
         "kind": "llm",
         "prompt_file": "council_resolution_skeptic",
-        "implementation": "backend/agent/modules/council/resolution_skeptic.py",
+        "implementation": "backend/agent/council.py",
         "description": (
             "Council persona attacking the resolution criteria: ambiguity, "
             "edge cases, oracle risk. Its red flags set the resolution-risk "
@@ -196,15 +196,35 @@ MODULES: list[dict] = [
             "market questions are resolved to a Polymarket market and "
             "delegated to MarketChat; portfolio/status questions are answered "
             "from live Supabase facts (positions, PnL, strategies, runs, "
-            "agenda, briefing); questions about the agent itself get the "
-            "registry-built self-description; everything else gets a friendly "
-            "refusal with suggested Polymarket markets."
+            "agenda, briefing); control instructions ('turn off copy "
+            "trading', 'halt') are delegated to StrategyChat; questions "
+            "about the agent itself get the registry-built self-description; "
+            "everything else gets a friendly refusal with suggested "
+            "Polymarket markets."
         ),
         "inputs": "question + chat history",
         "outputs": "{answer, citations[], market|null}",
         "data_sources": [
             "Polymarket Gamma", "Supabase (positions, runs, agenda, briefings)",
         ],
+    },
+    {
+        "name": "StrategyChat",
+        "kind": "llm",
+        "prompt_file": "strategy_chat",
+        "implementation": "backend/agent/chat.py",
+        "description": (
+            "Natural-language control channel of the Strategy Desk "
+            "(POST /api/strategy/chat). Answers questions about the "
+            "autonomous agent's configuration and performance, and turns "
+            "explicit instructions ('turn off copy trading', 'set stop loss "
+            "to 30%', 'halt everything') into a settings patch. The LLM only "
+            "PROPOSES the patch — deterministic code whitelists the keys and "
+            "clamps every number to configured bounds before persisting."
+        ),
+        "inputs": "question + chat history (+ current settings, bounds, portfolio stats)",
+        "outputs": "{answer, applied (old->new diff)|null, settings|null}",
+        "data_sources": ["Supabase (agent_settings, positions)"],
     },
     {
         "name": "CrossVenueScanner",

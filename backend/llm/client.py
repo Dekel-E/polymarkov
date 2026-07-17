@@ -32,7 +32,12 @@ def is_configured() -> bool:
 def _client():
     from openai import AsyncOpenAI
 
-    return AsyncOpenAI(api_key=config.LLMOD_API_KEY, base_url=config.LLMOD_BASE_URL)
+    return AsyncOpenAI(
+        api_key=config.LLMOD_API_KEY,
+        base_url=config.LLMOD_BASE_URL,
+        timeout=config.LLM_TIMEOUT_S,
+        max_retries=config.LLM_MAX_RETRIES,
+    )
 
 
 def parse_json_response(text: str) -> Any:
@@ -87,21 +92,33 @@ class RunContext:
                 "LLM is not configured — set LLMOD_API_KEY and LLMOD_BASE_URL in .env"
             )
         messages = [{"role": "user", "content": user_prompt}]
-        text = await self._completion(system_prompt, messages)
         try:
-            parsed = parse_json_response(text)
-        except json.JSONDecodeError:
-            # one retry with an explicit nudge (course efficiency: max 1 retry)
-            messages += [
-                {"role": "assistant", "content": text},
-                {
-                    "role": "user",
-                    "content": "Your previous reply was not valid JSON. "
-                    "Return ONLY the valid JSON object, no prose, no code fences.",
-                },
-            ]
             text = await self._completion(system_prompt, messages)
-            parsed = parse_json_response(text)  # let it raise this time
+            try:
+                parsed = parse_json_response(text)
+            except json.JSONDecodeError:
+                # one retry with an explicit nudge (course efficiency: max 1 retry)
+                messages += [
+                    {"role": "assistant", "content": text},
+                    {
+                        "role": "user",
+                        "content": "Your previous reply was not valid JSON. "
+                        "Return ONLY the valid JSON object, no prose, no code fences.",
+                    },
+                ]
+                text = await self._completion(system_prompt, messages)
+                parsed = parse_json_response(text)  # let it raise this time
+        except Exception as exc:
+            # keep the trace honest: a failed call is still a call the agent
+            # made — record it before the caller decides how to degrade
+            self.steps.append(
+                Step(
+                    module=module,
+                    prompt=StepPrompt(system_prompt=system_prompt, user_prompt=user_prompt),
+                    response={"error": f"{type(exc).__name__}: {exc}"},
+                )
+            )
+            raise
 
         self.steps.append(
             Step(

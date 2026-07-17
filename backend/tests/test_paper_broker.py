@@ -190,3 +190,40 @@ async def test_local_position_id_when_supabase_off(monkeypatch):
     report = await paper_broker.execute_paper_trade(ctx, make_market(), make_pricing())
     assert report is not None
     assert report.position_id.startswith("local-")
+
+
+# ---------------------------------------------------------------------------
+# max_position_usd cap: autonomous directional fills only
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def small_cap(monkeypatch):
+    """Agent settings with a tight max_position_usd."""
+    import copy
+
+    settings = copy.deepcopy(config.DEFAULT_AGENT_SETTINGS)
+    settings["risk"]["max_position_usd"] = 40
+    monkeypatch.setattr(supabase_client, "get_agent_settings", lambda: settings)
+    return settings
+
+
+async def test_cap_applies_to_autonomous_fill(monkeypatch, captured_positions, small_cap):
+    mock_book(monkeypatch, asks=[(0.50, 1_000.0)])
+    report = await paper_broker.execute_paper_trade(
+        RunContext(), make_market(), make_pricing(size_pct=0.8), strategy="ai_signal"
+    )  # Kelly wants $80; the desk cap is $40
+    assert report is not None
+    assert report.size_usd == pytest.approx(40.0)
+
+
+async def test_cap_skips_manual_and_arbitrage(monkeypatch, captured_positions, small_cap):
+    mock_book(monkeypatch, asks=[(0.50, 1_000.0)])
+    manual = await paper_broker.execute_paper_trade(
+        RunContext(), make_market(), make_pricing(), size_usd=80.0, strategy="manual"
+    )
+    arb = await paper_broker.execute_paper_trade(
+        RunContext(), make_market(), make_pricing(), size_usd=80.0, strategy="arbitrage"
+    )  # clamping one arb leg would break the hedge
+    assert manual is not None and manual.size_usd == pytest.approx(80.0)
+    assert arb is not None and arb.size_usd == pytest.approx(80.0)

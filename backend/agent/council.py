@@ -161,21 +161,36 @@ def _sanitize(raw: dict) -> dict:
     return raw
 
 
+_CALL_FAILURE = "call failure"
+
+
+def _null_opinion(name: str, kind: str, reason: str) -> PersonaOpinion:
+    return PersonaOpinion(
+        thesis=f"{name} {reason} and was excluded from evidence weighting.",
+        evidence_weights=[],
+        estimated_probability=0.5,
+        confidence="low",
+        red_flags=[f"{name} {kind}"],
+    )
+
+
 async def run_persona(
     ctx: RunContext, name: str, prompt_file: str, shared_context: str
 ) -> PersonaOpinion:
-    raw = await ctx.call_llm(name, load_prompt(prompt_file), shared_context)
+    # Config errors (missing prompt file) must fail loudly — only RUNTIME
+    # failures degrade.
+    system_prompt = load_prompt(prompt_file)
+    # A broken persona must not kill the run: schema failures AND call
+    # failures (gateway error, timeout, invalid JSON after retry) both
+    # degrade to a null opinion; run_council aborts only if ALL four fail.
+    try:
+        raw = await ctx.call_llm(name, system_prompt, shared_context)
+    except Exception:  # noqa: BLE001
+        return _null_opinion(name, _CALL_FAILURE, "failed to respond")
     try:
         return PersonaOpinion.model_validate(_sanitize(raw if isinstance(raw, dict) else {}))
     except ValidationError:
-        # a broken persona must not kill the run; return a null opinion
-        return PersonaOpinion(
-            thesis=f"{name} returned an invalid response and was excluded from evidence weighting.",
-            evidence_weights=[],
-            estimated_probability=0.5,
-            confidence="low",
-            red_flags=[f"{name} schema failure"],
-        )
+        return _null_opinion(name, "schema failure", "returned an invalid response")
 
 
 async def run_council(ctx: RunContext, shared_context: str) -> dict[str, PersonaOpinion]:
@@ -183,4 +198,8 @@ async def run_council(ctx: RunContext, shared_context: str) -> dict[str, Persona
     opinions = await asyncio.gather(
         *(run_persona(ctx, name, pf, shared_context) for name, pf in PERSONAS.items())
     )
+    if all(o.red_flags and o.red_flags[0].endswith(_CALL_FAILURE) for o in opinions):
+        # the provider died mid-run — surface it instead of pricing a
+        # fabricated 50/50 council
+        raise RuntimeError("council unavailable: all four persona calls failed")
     return dict(zip(PERSONAS, opinions))

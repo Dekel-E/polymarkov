@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import ActivityFeed from "@/components/ActivityFeed";
 import DeskBriefing from "@/components/DeskBriefing";
+import StrategyChat from "@/components/StrategyChat";
 import { executeArbitrage, fetchArbitrage, fetchSettings, updateSettings } from "@/lib/api";
 import type { AgentSettings, ArbOpportunity } from "@/lib/types";
 
@@ -34,7 +35,7 @@ const STRATEGY_CARDS: {
   {
     key: "copy_trading",
     name: "Copy trading",
-    how: "Mirrors new positions from wallets you follow in the Smart Money League ($25 paper per position, each whale position copied once). Exits use OUR risk rules, not the whale's.",
+    how: "Mirrors new positions from wallets you follow in the Smart Money League — sized to the whale's conviction (their position's share of their book, applied to our bankroll, $5–$100), each whale position copied once. Exits use OUR risk rules, not the whale's.",
     risk: "Inherits the whale's judgment — diversify who you follow.",
     available: true,
   },
@@ -222,6 +223,14 @@ export default function StrategiesPage() {
           {note}
         </div>
       )}
+
+      <StrategyChat
+        onApplied={(s) => {
+          setSettings(s);
+          setRiskDraft(s.risk);
+          setNote("Settings updated by the agent on your instruction.");
+        }}
+      />
 
       <DeskBriefing />
 

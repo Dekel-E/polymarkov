@@ -36,11 +36,24 @@ async def execute_paper_trade(
     """
     if priced.verdict == "PASS":
         return None
+    settings = await asyncio.to_thread(supabase_client.get_agent_settings)
     if size_usd is None:
         if priced.suggested_size_pct_bankroll <= 0:
             return None
-        bankroll = supabase_client.current_bankroll()
+        try:
+            bankroll = float(settings["funds"]["bankroll_usd"])
+        except (KeyError, TypeError, ValueError):
+            bankroll = float(config.PAPER_BANKROLL_USD)
         size_usd = round(bankroll * priced.suggested_size_pct_bankroll / 100, 2)
+    # the Strategy Desk's "max position $" rule caps every AUTONOMOUS
+    # directional fill. Manual trades keep the user's explicit size (the API
+    # clamps them), and arbitrage legs are sized as a set — clamping one leg
+    # would break the hedge (they have their own ARB_MAX_SIZE_USD cap).
+    if strategy not in ("manual", "arbitrage"):
+        try:
+            size_usd = min(size_usd, float(settings["risk"]["max_position_usd"]))
+        except (KeyError, TypeError, ValueError):
+            pass
     if size_usd <= 0:
         return None
     book = await polymarket.get_order_book(market.yes_token_id)

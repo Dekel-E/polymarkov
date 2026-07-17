@@ -92,6 +92,14 @@ TEAM_INFO = {
 # HTTP behavior
 # ---------------------------------------------------------------------------
 HTTP_TIMEOUT_S = 10.0
+# LLM calls: bounded so one stuck gateway request can never eat the whole
+# serverless budget (Vercel kills at 300s — a kill returns a 504, not the
+# course envelope). Per-request timeout x (1 + max_retries) stays well under
+# the overall EXECUTE_DEADLINE_S, after which the pipeline returns the error
+# envelope with whatever steps it collected.
+LLM_TIMEOUT_S = 75.0
+LLM_MAX_RETRIES = 1
+EXECUTE_DEADLINE_S = 270.0
 GDELT_MAX_RECORDS = 25
 GDELT_TIMESPAN = "7d"
 CITATION_TEXT_MAX_CHARS = 1500
@@ -158,7 +166,6 @@ INTEL_CACHE_TTL_S = 900  # 15 minutes
 # GitHub Actions schedule). Caps protect the LLM quota.
 # ---------------------------------------------------------------------------
 AUTO_RUNS_PER_JOB = 3            # markets analyzed per auto-trade run
-AUTO_MAX_OPEN_POSITIONS = 10     # agent stops opening new trades at this count
 AUTO_MIN_MID = 0.05              # skip near-settled markets
 AUTO_MAX_MID = 0.95
 WATCHLIST_RUNS_PER_JOB = 5       # watched markets re-analyzed per refresh run
@@ -184,8 +191,18 @@ DEFAULT_AGENT_SETTINGS = {
     # paper funds are adjustable from the terminal (deposits/withdrawals)
     "funds": {"bankroll_usd": PAPER_BANKROLL_USD},
 }
-COPY_TRADE_SIZE_USD = 25         # paper size per mirrored whale position
 COPY_TRADES_PER_JOB = 5
+
+# Bounds for GUI/chat-editable settings — shared by PUT /api/settings and
+# StrategyChat so a typo (or the LLM) can never write an insane value.
+RISK_BOUNDS = {
+    "stop_loss_pct": (5, 95),
+    "take_profit_pct": (10, 500),
+    "max_position_usd": (10, 2000),
+    "max_open_positions": (1, 50),
+    "daily_loss_halt_usd": (10, 5000),
+}
+BANKROLL_BOUNDS = (100.0, 1_000_000.0)
 
 # Autonomy: sentinel triggers + agenda worker + daily self-accounting
 SENTINEL_MOVE_PTS = 0.08          # 24h price move that makes a market interesting

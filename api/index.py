@@ -316,15 +316,6 @@ class SettingsIn(BaseModel):
     funds: Optional[dict] = None
 
 
-_RISK_BOUNDS = {
-    "stop_loss_pct": (5, 95),
-    "take_profit_pct": (10, 500),
-    "max_position_usd": (10, 2000),
-    "max_open_positions": (1, 50),
-    "daily_loss_halt_usd": (10, 5000),
-}
-
-
 @app.get("/api/settings")
 async def get_settings() -> dict:
     """Strategy Desk state: strategy toggles, risk rules, breaker status."""
@@ -340,37 +331,34 @@ async def get_settings() -> dict:
 
 @app.put("/api/settings")
 async def put_settings(body: SettingsIn) -> dict:
-    """Partial update from the Strategy Desk (numbers clamped to sane bounds)."""
+    """Partial update from the Strategy Desk (whitelisted + clamped)."""
     try:
-        patch: dict = {}
-        if body.strategies is not None:
-            patch["strategies"] = {
-                k: bool(v)
-                for k, v in body.strategies.items()
-                if k in config.DEFAULT_AGENT_SETTINGS["strategies"]
-            }
-        if body.risk is not None:
-            cleaned = {}
-            for key, (lo, hi) in _RISK_BOUNDS.items():
-                if key in body.risk:
-                    try:
-                        cleaned[key] = max(lo, min(hi, float(body.risk[key])))
-                    except (TypeError, ValueError):
-                        continue
-            patch["risk"] = cleaned
-        if body.halt is not None and body.halt.get("active") is False:
-            patch["halt"] = {"active": False, "reason": "", "at": ""}  # manual resume
-        if body.funds is not None and "bankroll_usd" in body.funds:
-            try:
-                patch["funds"] = {
-                    "bankroll_usd": max(100.0, min(1_000_000.0, float(body.funds["bankroll_usd"])))
-                }
-            except (TypeError, ValueError):
-                pass
+        patch = supabase_client.sanitize_settings_patch(
+            body.model_dump(exclude_none=True)  # GUI can resume but not arm the halt
+        )
         settings = await asyncio.to_thread(supabase_client.update_agent_settings, patch)
         return {"settings": settings, "error": None}
     except Exception as exc:
         return {"settings": None, "error": str(exc)}
+
+
+class StrategyChatIn(BaseModel):
+    question: str
+    history: list[dict] = []
+
+
+@app.post("/api/strategy/chat")
+async def strategy_chat_endpoint(body: StrategyChatIn) -> dict:
+    """Strategy Desk chat (StrategyChat module): answers questions about the
+    autonomous agent's configuration/performance and applies instructed
+    settings changes (toggles, risk rules, halt/resume, bankroll) — the LLM
+    proposes a patch, code whitelists and clamps it."""
+    try:
+        from backend.agent import chat
+
+        return await chat.strategy_chat(body.question, body.history[:24])
+    except Exception as exc:
+        return {"answer": None, "applied": None, "settings": None, "error": str(exc)}
 
 
 @app.get("/api/market/news")

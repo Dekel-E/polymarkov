@@ -94,8 +94,21 @@ async def run_pipeline(user_prompt: str, history: list[dict] | None = None) -> E
     ctx = RunContext()
     started = time.monotonic()
     try:
-        result = await _run(ctx, user_prompt, started, history or [])
+        result = await asyncio.wait_for(
+            _run(ctx, user_prompt, started, history or []),
+            timeout=config.EXECUTE_DEADLINE_S,
+        )
         return result
+    except asyncio.TimeoutError:
+        return ExecuteOut(
+            status="error",
+            error=(
+                f"Analysis exceeded the {config.EXECUTE_DEADLINE_S:.0f}s time "
+                "budget and was stopped. Please try again."
+            ),
+            response=None,
+            steps=ctx.steps,
+        )
     except Exception as exc:  # noqa: BLE001 — envelope contract: never raise
         return ExecuteOut(
             status="error",

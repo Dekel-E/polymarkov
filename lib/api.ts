@@ -263,16 +263,24 @@ export async function fetchArbitrage(fresh = false): Promise<{ opportunities: Ar
   return { opportunities: data.opportunities, cached: data.cached };
 }
 
-export async function executeArbitrage(
-  opportunity: ArbOpportunity,
-): Promise<{ slug: string; filled: boolean; vwap?: number }[]> {
+export interface ArbLegReport {
+  slug: string;
+  filled: boolean;
+  side?: string;
+  vwap?: number;
+  size_usd?: number;
+  position_id?: string;
+  error?: string;
+}
+
+export async function executeArbitrage(opportunity: ArbOpportunity): Promise<ArbLegReport[]> {
   const res = await fetch("/api/arbitrage/execute", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ opportunity }),
   });
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
-  const data = (await res.json()) as { reports: never[]; error: string | null };
+  const data = (await res.json()) as { reports: ArbLegReport[]; error: string | null };
   if (data.error) throw new Error(data.error);
   return data.reports;
 }
@@ -348,6 +356,28 @@ export async function deskChat(question: string, history: ChatTurn[]): Promise<D
   });
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
   const data = (await res.json()) as DeskChatResult;
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+export interface StrategyChatResult {
+  answer: string | null;
+  applied: Record<string, { from: unknown; to: unknown }> | null;
+  settings: AgentSettings | null;
+  error: string | null;
+}
+
+export async function strategyChat(
+  question: string,
+  history: ChatTurn[],
+): Promise<StrategyChatResult> {
+  const res = await fetch("/api/strategy/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, history }),
+  });
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as StrategyChatResult;
   if (data.error) throw new Error(data.error);
   return data;
 }

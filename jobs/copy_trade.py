@@ -55,9 +55,10 @@ async def mirror_position(wallet: str, pos: dict, size_usd: float) -> bool:
         RunContext(), market, priced,
         size_usd=size_usd, strategy="copy",
     )
-    supabase_client.record_mirrored(
-        wallet, pos["slug"], pos["outcome"], fill.position_id if fill else None
-    )
+    # only a real fill counts as mirrored — a no-fill (empty book) stays
+    # unrecorded so the next run can retry it
+    if fill is not None:
+        supabase_client.record_mirrored(wallet, pos["slug"], pos["outcome"], fill.position_id)
     return fill is not None
 
 
@@ -77,8 +78,10 @@ async def main_async(dry_run: bool) -> None:
     wallets = supabase_client.distinct_followed_wallets()
     print(f"followed wallets: {len(wallets)}")
     copied = 0
+    attempts = 0  # a no-fill can retry next run, but must not eat the budget
+    max_attempts = config.COPY_TRADES_PER_JOB * 2
     for wallet in wallets:
-        if copied >= config.COPY_TRADES_PER_JOB:
+        if copied >= config.COPY_TRADES_PER_JOB or attempts >= max_attempts:
             break
         positions = await smart_money.fetch_wallet_positions(wallet, limit=10)
         if not wallet_gate(positions):
@@ -86,7 +89,7 @@ async def main_async(dry_run: bool) -> None:
             continue
         whale_total = sum(p["size_usd"] for p in positions)
         for pos in positions:
-            if copied >= config.COPY_TRADES_PER_JOB:
+            if copied >= config.COPY_TRADES_PER_JOB or attempts >= max_attempts:
                 break
             if not pos["slug"] or pos["size_usd"] < 100:
                 continue  # ignore dust — only mirror meaningful convictions
@@ -100,9 +103,11 @@ async def main_async(dry_run: bool) -> None:
             if dry_run:
                 copied += 1
                 continue
+            attempts += 1
             ok = await mirror_position(wallet, pos, size)
-            print(f"    mirrored ${size} paper: {'filled' if ok else 'NO FILL'}")
-            copied += 1
+            print(f"    mirrored ${size} paper: {'filled' if ok else 'NO FILL (retries next run)'}")
+            if ok:
+                copied += 1
     print(f"done — {copied} position(s) {'found' if dry_run else 'mirrored'}")
 
 

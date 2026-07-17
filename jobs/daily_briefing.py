@@ -84,7 +84,7 @@ async def main_async(dry_run: bool) -> None:
     if actions and not dry_run:
         supabase_client.update_agent_settings({"strategies": strategies})
 
-    portfolio = get_portfolio(scope="agent")
+    portfolio = get_portfolio()
     facts = {
         "stats": portfolio["stats"],
         "realized_today_usd": realized_pnl_today(),

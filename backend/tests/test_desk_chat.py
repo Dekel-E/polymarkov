@@ -173,3 +173,23 @@ async def test_desk_chat_rejects_empty_question():
 def test_config_lists_new_modules():
     assert "DeskChat" in config.CANONICAL_MODULES
     assert "CrossVenueScanner" in config.CANONICAL_MODULES
+
+
+@pytest.mark.asyncio
+async def test_desk_chat_routes_control_to_strategy_chat(monkeypatch):
+    _stub_llm(monkeypatch, [{"route": "control"}])
+
+    async def fake_strategy_chat(question, history):
+        return {
+            "answer": "Copy trading off.",
+            "applied": {"strategies.copy_trading": {"from": True, "to": False}},
+            "settings": {"strategies": {"copy_trading": False}},
+            "error": None,
+        }
+
+    monkeypatch.setattr(chat, "strategy_chat", fake_strategy_chat)
+    result = await chat.desk_chat("turn off copy trading", [])
+    assert result["answer"] == "Copy trading off."
+    assert result["applied"] == {"strategies.copy_trading": {"from": True, "to": False}}
+    assert result["market"] is None
+    assert result["citations"] == []

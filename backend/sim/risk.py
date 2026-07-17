@@ -61,14 +61,22 @@ def realized_pnl_today() -> float:
     return round(sum(float(r.get("pnl") or 0) for r in rows), 2)
 
 
+def daily_drawdown(realized_today: float, unrealized_total: float) -> float:
+    """Effective drawdown the breaker judges (pure): realized losses today
+    plus any OPEN drawdown. Unrealized gains don't offset realized losses —
+    they can evaporate before anyone books them."""
+    return realized_today + min(0.0, unrealized_total)
+
+
 async def run_risk_checks() -> dict:
-    """One pass: close breached positions, arm/refresh the circuit breaker."""
+    """One pass: close breached positions, arm/refresh the circuit breaker,
+    and record today's equity snapshot (the portfolio equity curve)."""
     settings = supabase_client.get_agent_settings()
     risk = settings["risk"]
     report = {"closed": [], "halted": False, "realized_today": 0.0}
 
     # 1. stop-loss / take-profit on every open position (any book)
-    data = portfolio.get_portfolio(scope="agent")
+    data = portfolio.get_portfolio()
     for position in data["open"]:
         reason = evaluate_position(position, position.get("current_price"), risk)
         if reason is None:
@@ -79,19 +87,34 @@ async def run_risk_checks() -> dict:
              "pnl": result.get("pnl"), "error": result.get("error")}
         )
 
-    # 2. daily circuit breaker on realized PnL
+    # 2. daily circuit breaker: realized loss today + open (unrealized) drawdown
     realized = realized_pnl_today()
     report["realized_today"] = realized
+    unrealized = float(data["stats"].get("unrealized_pnl_usd") or 0)
+    drawdown = daily_drawdown(realized, unrealized)
     halt_active = settings["halt"].get("active", False)
-    today = datetime.now(timezone.utc).date().isoformat()
-    if realized <= -float(risk["daily_loss_halt_usd"]) and not halt_active:
+    today = supabase_client.today_utc()
+    if drawdown <= -float(risk["daily_loss_halt_usd"]) and not halt_active:
         supabase_client.update_agent_settings(
-            {"halt": {"active": True, "reason": f"daily loss {realized} breached limit", "at": today}}
+            {"halt": {
+                "active": True,
+                "reason": (
+                    f"daily loss {realized:+.2f} realized "
+                    f"{min(0.0, unrealized):+.2f} unrealized breached limit"
+                ),
+                "at": today,
+            }}
         )
         report["halted"] = True
     elif halt_active and settings["halt"].get("at") and settings["halt"]["at"] < today:
         # a new day resets an automatic halt (manual resume also available in GUI)
         supabase_client.update_agent_settings({"halt": {"active": False, "reason": "", "at": ""}})
+
+    # 3. equity snapshot (one row per UTC day, last write wins) — best-effort
+    try:
+        supabase_client.save_equity_snapshot(data["stats"])
+    except Exception:  # noqa: BLE001 — the curve must never block risk checks
+        pass
 
     return report
 

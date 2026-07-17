@@ -327,3 +327,25 @@ async def test_ambiguous_market_returns_candidates(mocked_pipeline, monkeypatch)
     assert result.status == "ok"
     assert "pick" in result.response.lower()
     assert "market-0" in result.response
+
+
+# ---------------------------------------------------------------------------
+# a failed LLM call is still recorded in steps[] (trace honesty)
+# ---------------------------------------------------------------------------
+
+
+async def test_failed_llm_call_recorded_in_steps(monkeypatch):
+    from backend.llm import client as llm_client
+
+    monkeypatch.setattr(llm_client, "is_configured", lambda: True)
+
+    async def broken_completion(self, system_prompt, messages):
+        raise RuntimeError("gateway exploded")
+
+    monkeypatch.setattr(llm_client.RunContext, "_completion", broken_completion)
+    ctx = llm_client.RunContext()
+    with pytest.raises(RuntimeError):
+        await ctx.call_llm("QueryPlanner", "sys", "user")
+    assert len(ctx.steps) == 1
+    assert ctx.steps[0].module == "QueryPlanner"
+    assert "gateway exploded" in ctx.steps[0].response["error"]

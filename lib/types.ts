@@ -173,10 +173,19 @@ export interface WorkingQuote {
   placed_at: string;
 }
 
+export interface EquitySnapshot {
+  day: string;
+  equity_usd: number;
+  balance_usd: number;
+  realized_pnl_usd: number;
+  unrealized_pnl_usd: number;
+}
+
 export interface Portfolio {
   open: Position[];
   resolved: Position[];
   stats: PortfolioStats;
+  equity_history?: EquitySnapshot[];
 }
 
 // ---------------------------------------------------------------------------

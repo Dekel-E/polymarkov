@@ -3,8 +3,9 @@
 Every scheduled run: pick the most tradeable unanalyzed markets, run the
 full intel pipeline with trading enabled, and let the deterministic pricing
 engine decide (all PASS gates apply; a trade only opens on real net edge).
-Caps in config protect the LLM quota and the book:
-  AUTO_RUNS_PER_JOB, AUTO_MAX_OPEN_POSITIONS, AUTO_MIN_MID/AUTO_MAX_MID.
+Caps protect the LLM quota and the book: AUTO_RUNS_PER_JOB and
+AUTO_MIN_MID/AUTO_MAX_MID in config, max_open_positions from the
+GUI-editable agent settings.
 
 Usage:
     python -m jobs.auto_trade [--runs N] [--dry-run]

@@ -126,3 +126,19 @@ def test_parse_positions_sorted_and_capped():
     assert len(rows) == 1
     assert rows[0]["market"] == "Big"
     assert rows[0]["size_usd"] == 500.0
+
+
+# ---------------------------------------------------------------------------
+# circuit breaker: daily drawdown includes open (unrealized) losses
+# ---------------------------------------------------------------------------
+
+
+def test_daily_drawdown_counts_open_losses():
+    from backend.sim.risk import daily_drawdown
+
+    # unrealized loss deepens the drawdown
+    assert daily_drawdown(-100.0, -250.0) == -350.0
+    # unrealized GAINS never offset realized losses (they can evaporate)
+    assert daily_drawdown(-100.0, 250.0) == -100.0
+    assert daily_drawdown(0.0, -50.0) == -50.0
+    assert daily_drawdown(20.0, 30.0) == 20.0

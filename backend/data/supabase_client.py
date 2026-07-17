@@ -27,6 +27,12 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def today_utc() -> str:
+    """Date-only UTC stamp. The halt breaker's `at` field MUST use this
+    format: risk.py auto-resumes with a plain string compare against it."""
+    return datetime.now(timezone.utc).date().isoformat()
+
+
 # ---------------------------------------------------------------------------
 # markets
 # ---------------------------------------------------------------------------
@@ -403,6 +409,93 @@ def update_agent_settings(patch: dict) -> dict:
             {"key": "main", "value": merged, "updated_at": _now()}
         ).execute()
     return merged
+
+
+def save_equity_snapshot(stats: dict) -> None:
+    """Upsert today's equity snapshot (keyed on UTC day — last write wins)."""
+    if not is_configured():
+        return
+    get_client().table("equity_snapshots").upsert(
+        {
+            "day": today_utc(),
+            "equity_usd": float(stats.get("equity_usd") or 0),
+            "balance_usd": float(stats.get("balance_usd") or 0),
+            "open_exposure_usd": float(stats.get("open_exposure_usd") or 0),
+            "unrealized_pnl_usd": float(stats.get("unrealized_pnl_usd") or 0),
+            "realized_pnl_usd": float(stats.get("realized_pnl_usd") or 0),
+            "open_positions": int(stats.get("open_positions") or 0),
+            "created_at": _now(),
+        }
+    ).execute()
+
+
+def get_equity_history(limit: int = 90) -> list[dict]:
+    """Daily snapshots, oldest first (for the equity curve)."""
+    if not is_configured():
+        return []
+    try:
+        rows = (
+            get_client()
+            .table("equity_snapshots")
+            .select("day,equity_usd,balance_usd,realized_pnl_usd,unrealized_pnl_usd")
+            .order("day", desc=True)
+            .limit(limit)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return []
+    return list(reversed(rows))
+
+
+def sanitize_settings_patch(raw: dict, allow_halt_activation: bool = False) -> dict:
+    """Whitelist + clamp an untrusted settings patch (GUI or LLM-authored).
+
+    Unknown keys are dropped, numbers are clamped to config bounds, and the
+    circuit breaker can only be ARMED through here when the caller opts in
+    (StrategyChat may halt trading on instruction; the GUI resumes only)."""
+    from backend import config
+
+    patch: dict = {}
+    strategies = raw.get("strategies")
+    if isinstance(strategies, dict):
+        cleaned = {
+            k: bool(v)
+            for k, v in strategies.items()
+            if k in config.DEFAULT_AGENT_SETTINGS["strategies"]
+        }
+        if cleaned:
+            patch["strategies"] = cleaned
+    risk = raw.get("risk")
+    if isinstance(risk, dict):
+        cleaned = {}
+        for key, (lo, hi) in config.RISK_BOUNDS.items():
+            if key in risk:
+                try:
+                    cleaned[key] = max(lo, min(hi, float(risk[key])))
+                except (TypeError, ValueError):
+                    continue
+        if cleaned:
+            patch["risk"] = cleaned
+    halt = raw.get("halt")
+    if isinstance(halt, dict) and isinstance(halt.get("active"), bool):
+        if halt["active"] is False:
+            patch["halt"] = {"active": False, "reason": "", "at": ""}
+        elif allow_halt_activation:
+            patch["halt"] = {
+                "active": True,
+                "reason": str(halt.get("reason") or "halted on user instruction")[:200],
+                "at": today_utc(),
+            }
+    funds = raw.get("funds")
+    if isinstance(funds, dict) and "bankroll_usd" in funds:
+        lo, hi = config.BANKROLL_BOUNDS
+        try:
+            patch["funds"] = {"bankroll_usd": max(lo, min(hi, float(funds["bankroll_usd"])))}
+        except (TypeError, ValueError):
+            pass
+    return patch
 
 
 # ---------------------------------------------------------------------------

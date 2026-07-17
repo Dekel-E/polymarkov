@@ -28,6 +28,7 @@ flowchart TB
 
     CHAT["MarketChat<br/><small>LLM — grounded Q&A per market:<br/>plans → searches web/news + socials →<br/>indexes finds → answers with citations<br/>(POST /api/market/chat)</small>"]
     DESKCHAT["DeskChat<br/><small>LLM — global chat (POST /api/chat):<br/>routes → market / portfolio / meta /<br/>helpful refusal with market suggestions</small>"]
+    STRATCHAT["StrategyChat<br/><small>LLM — Strategy Desk control<br/>(POST /api/strategy/chat):<br/>instructions → settings patch,<br/>whitelisted + clamped by code</small>"]
 
     GUI --> QP --> MR
     MR --> ER
@@ -41,8 +42,11 @@ flowchart TB
     JUDGE --> PB
     GUI --> CHAT
     GUI --> DESKCHAT
+    GUI --> STRATCHAT
     DESKCHAT -->|market questions| CHAT
+    DESKCHAT -->|control instructions| STRATCHAT
     OUT -.->|dossier context| CHAT
+    STRATCHAT -.->|agent_settings| DB
 
     subgraph EXT["External services"]
         GAMMA["Polymarket Gamma + CLOB"]
@@ -91,6 +95,13 @@ costs at most 2 LLM calls (a planner deciding whether fresh intel is needed,
 then the grounded answer). Articles it gathers are indexed into Supabase and
 embedded by the `NewsIndexer` on its next pass.
 
+`StrategyChat` (ONE LLM call per turn) is the Strategy Desk's control
+channel: "turn off copy trading", "set stop loss to 30%", "halt everything"
+become a settings patch. The LLM only proposes — deterministic code
+whitelists the keys, clamps every number to `config.RISK_BOUNDS` /
+`config.BANKROLL_BOUNDS`, persists to `agent_settings`, and reports the real
+old→new diff. Every autonomous job reads those settings before trading.
+
 ## Agent registry
 
 Everything the agent can do is declared in one place —
@@ -112,4 +123,8 @@ Scheduled jobs reuse the same pipeline: `Sentinel` (perception) files agenda
 items, `WorkAgenda` investigates and trades under risk rules, strategy jobs
 (arbitrage / market making / copy trading / correlation graph) run under the
 Strategy Desk toggles, and `DailyBriefing` reports it all each morning.
-`jobs/watch_live.py` adds a real-time WebSocket sense when run persistently.
+`jobs/watch_live.py` adds a real-time WebSocket sense when run persistently
+(it always watches held + watchlisted markets, even outside the trending set).
+The risk manager's circuit breaker judges realized losses PLUS open
+unrealized drawdown, and records a daily equity snapshot
+(`equity_snapshots`) that drives the portfolio page's equity curve.

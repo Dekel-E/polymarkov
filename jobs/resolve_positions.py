@@ -88,6 +88,9 @@ async def harvest_precedents(dry_run: bool) -> int:
 
     supabase_client.upsert_precedents(precedents)
     supabase_client.mark_markets_inactive(resolved_ids)
+    if not (pinecone_client.is_configured() and embeddings.is_configured()):
+        print("  (Pinecone/embeddings not configured — precedent rows saved, vectors skipped)")
+        return len(precedents)
     vectors = embeddings.embed([p["question"] for p in precedents])
     items = [
         {

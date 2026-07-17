@@ -423,7 +423,13 @@ async def score_sentiment(
         f"Resolution criteria (excerpt): {market.resolution_criteria[:500]}\n\n"
         f"Items to score:\n{json.dumps(items, ensure_ascii=False, indent=1)}"
     )
-    raw = await ctx.call_llm("SentimentScorer", load_prompt("sentiment_scorer"), user_prompt)
+    try:
+        raw = await ctx.call_llm("SentimentScorer", load_prompt("sentiment_scorer"), user_prompt)
+    except Exception as exc:  # noqa: BLE001 — scoring is enrichment, not a hard
+        # dependency: leave items unscored instead of killing the run. The
+        # failed call is still recorded in steps[] by call_llm.
+        print(f"SentimentScorer degraded, items left unscored: {type(exc).__name__}")
+        return
 
     scored: dict[str, tuple[float, str]] = {}
     for row in raw.get("items", []) if isinstance(raw, dict) else []:

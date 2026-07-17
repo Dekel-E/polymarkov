@@ -17,8 +17,13 @@ classifies the question, then:
 - market       -> resolve via Gamma search and delegate to MarketChat
 - portfolio    -> deterministic fact-gathering from Supabase + one grounded
                  answer call
+- control      -> delegate to StrategyChat (instructions become a settings
+                 patch, whitelisted + clamped by code)
 - meta         -> the registry-built self-description (zero further calls)
 - out_of_scope -> friendly refusal + suggested Polymarket markets (zero LLM)
+
+StrategyChat (POST /api/strategy/chat) — the Strategy Desk control channel,
+also reachable through DeskChat's control route. ONE LLM call per turn.
 """
 
 from __future__ import annotations
@@ -35,6 +40,7 @@ from backend.llm.client import RunContext, load_prompt
 
 MARKET_CHAT = "MarketChat"
 DESK_CHAT = "DeskChat"
+STRATEGY_CHAT = "StrategyChat"
 
 
 # ---------------------------------------------------------------------------
@@ -278,6 +284,100 @@ def _portfolio_facts() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# StrategyChat: natural-language control of the Strategy Desk
+# ---------------------------------------------------------------------------
+
+
+def _settings_diff(before: dict, after: dict) -> dict:
+    """Flat old->new map of what actually changed (ground truth for the UI).
+    The halt section reports only `active` — reason/at are bookkeeping that
+    would inflate one user action into three 'changes'."""
+    diff: dict = {}
+    for section in ("strategies", "risk", "halt", "funds"):
+        b, a = before.get(section) or {}, after.get(section) or {}
+        keys = ("active",) if section == "halt" else a.keys()
+        for key in keys:
+            if a.get(key) != b.get(key):
+                diff[f"{section}.{key}"] = {"from": b.get(key), "to": a.get(key)}
+    return diff
+
+
+async def strategy_chat(question: str, history: list[dict]) -> dict:
+    """One Strategy Desk chat turn: answer, and apply any instructed settings
+    change (whitelisted + clamped by code — the LLM proposes, code disposes).
+    ONE LLM call per turn. Never raises for expected cases."""
+    ctx = RunContext()
+    question = question.strip()[: config.CHAT_MAX_QUESTION_CHARS]
+    if not question:
+        return {"answer": None, "applied": None, "settings": None, "error": "empty question"}
+
+    from backend.sim.portfolio import get_portfolio
+    from backend.sim.risk import realized_pnl_today
+
+    before, portfolio, realized = await asyncio.gather(
+        asyncio.to_thread(supabase_client.get_agent_settings),
+        asyncio.to_thread(get_portfolio),
+        asyncio.to_thread(realized_pnl_today),
+    )
+    stats = portfolio["stats"]
+    payload = json.dumps(
+        {
+            "settings": before,
+            "bounds": {"risk": config.RISK_BOUNDS, "bankroll_usd": config.BANKROLL_BOUNDS},
+            "realized_today_usd": realized,
+            "portfolio_stats": {
+                k: stats.get(k)
+                for k in (
+                    "bankroll_usd", "equity_usd", "available_usd", "open_positions",
+                    "open_exposure_usd", "unrealized_pnl_usd", "realized_pnl_usd",
+                    "win_rate", "exposure_by_strategy",
+                )
+            },
+            "chat_history": _clip_history(history),
+            "question": question,
+        },
+        ensure_ascii=False,
+        default=str,
+    )
+    try:
+        raw = await ctx.call_llm(STRATEGY_CHAT, load_prompt("strategy_chat"), payload)
+    except Exception as exc:  # noqa: BLE001
+        return {"answer": None, "applied": None, "settings": None,
+                "error": f"chat call failed: {type(exc).__name__}"}
+    raw = raw if isinstance(raw, dict) else {}
+    answer = str(raw.get("reply") or "").strip() or "(no reply)"
+
+    applied = None
+    settings = None
+    patch = raw.get("patch")
+    if isinstance(patch, dict) and patch:
+        clean = supabase_client.sanitize_settings_patch(patch, allow_halt_activation=True)
+        if clean:
+            try:
+                after = await asyncio.to_thread(supabase_client.update_agent_settings, clean)
+            except Exception:  # noqa: BLE001 — keep the "never raises" contract
+                return {
+                    "answer": answer + "\n\n_(the settings write failed — nothing was changed; try again)_",
+                    "applied": None, "settings": None, "error": None,
+                }
+            diff = _settings_diff(before, after)
+            if diff:
+                applied = diff
+                settings = after
+                lines = [
+                    f"- `{key}`: {change['from']} → {change['to']}"
+                    for key, change in diff.items()
+                ]
+                answer += "\n\n**Applied:**\n" + "\n".join(lines)
+            else:
+                answer += "\n\n_(no change — the settings already had these values)_"
+        else:
+            answer += "\n\n_(no change applied — the requested update was outside what I'm allowed to touch)_"
+
+    return {"answer": answer, "applied": applied, "settings": settings, "error": None}
+
+
+# ---------------------------------------------------------------------------
 # DeskChat: entry point
 # ---------------------------------------------------------------------------
 
@@ -322,6 +422,12 @@ async def desk_chat(question: str, history: list[dict]) -> dict:
         result = await market_chat(slug, question, history)
         result["market"] = {"slug": slug, "question": hits[0].get("question", slug)}
         return result
+
+    if route == "control":
+        # strategy-desk instruction: delegate to StrategyChat (its own LLM
+        # call proposes the patch; code whitelists, clamps and applies it)
+        result = await strategy_chat(question, history)
+        return {**result, "citations": [], "market": None}
 
     if route == "portfolio":
         facts = await asyncio.to_thread(_portfolio_facts)
