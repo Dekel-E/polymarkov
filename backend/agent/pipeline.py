@@ -27,7 +27,7 @@ from backend.agent.types import (
     SocialPost,
     SocialPulse,
 )
-from backend.data import kalshi, news, pinecone_client, polymarket, social
+from backend.data import kalshi, news, pinecone_client, polymarket, social, supabase_client
 from backend.llm import embeddings
 from backend.llm.client import RunContext, load_prompt
 from pydantic import ValidationError
@@ -159,6 +159,12 @@ class EvidencePack:
     precedents: list[Precedent] = field(default_factory=list)
 
 
+async def _empty_articles() -> list[dict]:
+    """A completed no-op coroutine — keeps asyncio.gather positional when a
+    source is feature-flagged off."""
+    return []
+
+
 def _authority(domain: str) -> int:
     return 2 if domain in _TIER1 else 1
 
@@ -268,18 +274,24 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
     if market.question and market.question.lower() != news_query.lower():
         gnews_queries.append(market.question)
 
-    gdelt_live, cached, precedents, *gnews_batches = await asyncio.gather(
+    # curated RSS + Wikipedia are keyless and work where GDELT's IP block bites
+    rss_feeds = news.rss_feeds_for(market.category) if config.RSS_ENABLED else []
+    wiki_query = market.question or news_query
+
+    gdelt_live, cached, precedents, rss_live, wiki_live, *gnews_batches = await asyncio.gather(
         news.gdelt_articles(news_query),
         _pinecone_news(market.question),
         _precedents(market.question),
+        news.rss_articles(news_query, rss_feeds) if rss_feeds else _empty_articles(),
+        news.wikipedia_articles(wiki_query) if config.WIKI_ENABLED else _empty_articles(),
         *(news.google_news_articles(q, max_records=config.GNEWS_MAX_RECORDS) for q in gnews_queries),
     )
     gnews_live = [a for batch in gnews_batches for a in batch]
 
     # merge, dedup by url (live wins: it's fresher)
     by_url = {a["url"]: a for a in cached}
-    by_url.update({a["url"]: a for a in gdelt_live})
-    by_url.update({a["url"]: a for a in gnews_live})
+    for a in gdelt_live + gnews_live + rss_live + wiki_live:
+        by_url[a["url"]] = a
 
     # web fallback: when the news feeds run thin, the agent searches the
     # open web itself (the top clusters get crawled for excerpts below)
@@ -290,7 +302,19 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
             by_url.setdefault(a["url"], a)
 
     articles = list(by_url.values())
-    live = gdelt_live + gnews_live + web_results
+    live = gdelt_live + gnews_live + rss_live + wiki_live + web_results
+
+    # index on demand: persist freshly-fetched articles tagged with this
+    # market so future runs retrieve them (and the NewsIndexer embeds them
+    # into Pinecone). Best-effort — a cache write must never break a run.
+    if live:
+        try:
+            await asyncio.to_thread(
+                supabase_client.upsert_articles,
+                [{**a, "entities": [market.slug]} for a in live if a.get("url")],
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     vectors: list[list[float]] | None = None
     if articles and embeddings.is_configured():
@@ -318,19 +342,26 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
     ]
 
     # read the actual pages of the top clusters so the council argues over
-    # substance, not headlines (bounded: N pages, short excerpts)
+    # substance, not headlines (bounded: N pages, short excerpts). Sources
+    # that carry their own text (Wikipedia) are used verbatim, never crawled.
+    pre_text = {a["url"]: a["fetched_text"] for a in articles if a.get("fetched_text")}
+
+    async def _excerpt(url: str) -> str:
+        if url in pre_text:
+            return pre_text[url][: config.EXCERPT_MAX_CHARS]
+        return await news.fetch_article_text(url, max_chars=config.EXCERPT_MAX_CHARS)
+
     to_read = clusters[: config.EXCERPT_CLUSTERS]
     if to_read:
-        texts = await asyncio.gather(
-            *(news.fetch_article_text(c.url, max_chars=config.EXCERPT_MAX_CHARS) for c in to_read)
-        )
+        texts = await asyncio.gather(*(_excerpt(c.url) for c in to_read))
         for cluster, text in zip(to_read, texts):
             cluster.excerpt = text
 
     ctx.add_tool_step(
         "EvidenceRetriever",
         f"news_query={news_query!r}; gdelt={len(gdelt_live)} google_news={len(gnews_live)} "
-        f"web_search={len(web_results)} cached={len(cached)} articles",
+        f"rss={len(rss_live)} wikipedia={len(wiki_live)} web_search={len(web_results)} "
+        f"cached={len(cached)} articles",
         {
             "clusters": [
                 {"id": c.id, "headline": c.headline, "source": c.source, "date": c.date}
@@ -353,6 +384,25 @@ async def scan_social(ctx: RunContext, plan: QueryPlan, market: MarketState) -> 
     query = plan.market_query or market.question
     data = await social.gather_social(market.event_id, query, limit=config.MAX_SOCIAL_POSTS)
 
+    # top up from the RedditIndexer's warm cache (indexed posts tagged with
+    # this market) — live scrapes run thin when sources rate-limit
+    raw_posts = list(data["posts"])
+    if len(raw_posts) < config.MAX_SOCIAL_POSTS:
+        seen = {p.get("url") for p in raw_posts if p.get("url")}
+        indexed = await asyncio.to_thread(
+            supabase_client.get_social_posts_for, market.slug, config.MAX_SOCIAL_POSTS
+        )
+        for row in indexed:
+            if row["url"] in seen:
+                continue
+            raw_posts.append(
+                {"text": row["text"], "source": row["source"], "url": row["url"],
+                 "created_at": row.get("posted_at")}
+            )
+            seen.add(row["url"])
+            if len(raw_posts) >= config.MAX_SOCIAL_POSTS:
+                break
+
     posts = [
         SocialPost(
             id=f"s{i + 1}",
@@ -361,9 +411,12 @@ async def scan_social(ctx: RunContext, plan: QueryPlan, market: MarketState) -> 
             url=p.get("url", ""),
             created_at=p.get("created_at"),
         )
-        for i, p in enumerate(data["posts"])
+        for i, p in enumerate(raw_posts)
     ]
-    pulse = SocialPulse(posts=posts, mention_velocity=data["mention_velocity"], note=data["note"])
+    note = data["note"]
+    if len(raw_posts) > len(data["posts"]):
+        note += f" (+{len(raw_posts) - len(data['posts'])} indexed posts from the Reddit cache)"
+    pulse = SocialPulse(posts=posts, mention_velocity=data["mention_velocity"], note=note)
 
     ctx.add_tool_step(
         "SocialScanner",

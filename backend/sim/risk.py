@@ -123,3 +123,41 @@ def strategies_allowed() -> tuple[dict, bool]:
     """(strategy flags, trading_allowed) — jobs call this before trading."""
     settings = supabase_client.get_agent_settings()
     return settings["strategies"], not settings["halt"].get("active", False)
+
+
+# ---------------------------------------------------------------------------
+# Strategy self-tuning: a strategy with a clearly bad record disables itself
+# ---------------------------------------------------------------------------
+
+
+def tune_strategies(pnl_7d: dict[str, dict], strategies: dict) -> list[str]:
+    """Disable autonomous strategies with a clearly bad 7-day record (pure).
+    Mutates `strategies` in place; returns human-readable actions. Needs
+    both enough evidence (TUNE_MIN_TRADES) and a real loss
+    (TUNE_DISABLE_LOSS_USD). Manual trades are never touched."""
+    from backend import config
+
+    actions = []
+    for strategy, record in pnl_7d.items():
+        if strategy in ("manual",) or strategy not in strategies:
+            continue
+        if not strategies.get(strategy):
+            continue
+        if record["trades"] >= config.TUNE_MIN_TRADES and record["pnl"] <= -config.TUNE_DISABLE_LOSS_USD:
+            strategies[strategy] = False
+            actions.append(
+                f"disabled {strategy}: {record['pnl']:+.2f} over {record['trades']} trades in 7d"
+            )
+    return actions
+
+
+def run_strategy_tuning() -> list[str]:
+    """One tuning pass: read the 7-day per-strategy record, disable losers,
+    persist. No LLM involved — runs on every risk-manager pass, so a losing
+    strategy is cut even when the daily briefing can't run."""
+    settings = supabase_client.get_agent_settings()
+    strategies = dict(settings["strategies"])
+    actions = tune_strategies(supabase_client.strategy_pnl_7d(), strategies)
+    if actions:
+        supabase_client.update_agent_settings({"strategies": strategies})
+    return actions

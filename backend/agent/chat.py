@@ -91,7 +91,9 @@ def _clip_history(history: list[dict]) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-async def _gather(slug: str, plan: dict, event_id: str) -> tuple[list[dict], list[dict], int]:
+async def _gather(
+    slug: str, plan: dict, event_id: str, category: str = "other"
+) -> tuple[list[dict], list[dict], int]:
     """Run the planned searches. Returns (articles, social_posts, indexed_count)."""
     news_queries = [q for q in (plan.get("news_queries") or []) if isinstance(q, str) and q.strip()][:2]
     social_query = plan.get("social_query")
@@ -101,6 +103,13 @@ async def _gather(slug: str, plan: dict, event_id: str) -> tuple[list[dict], lis
         tasks.append(news.google_news_articles(q, max_records=config.CHAT_NEWS_RESULTS))
         if config.WEB_SEARCH_ENABLED:
             tasks.append(news.web_search(q, max_results=config.CHAT_WEB_RESULTS))
+    # curated RSS + Wikipedia on the first query (keyless, work where GDELT
+    # is IP-blocked); both get indexed with the news below
+    if news_queries:
+        if config.RSS_ENABLED:
+            tasks.append(news.rss_articles(news_queries[0], news.rss_feeds_for(category)))
+        if config.WIKI_ENABLED:
+            tasks.append(news.wikipedia_articles(news_queries[0]))
     social_task = (
         social.gather_social(event_id, str(social_query), limit=config.CHAT_SOCIAL_POSTS)
         if social_query
@@ -123,14 +132,27 @@ async def _gather(slug: str, plan: dict, event_id: str) -> tuple[list[dict], lis
             by_url.setdefault(a["url"], a)
     articles = list(by_url.values())
 
-    # read the top pages so answers cite substance, not headlines
+    # top up socials from the RedditIndexer's warm cache for this market
+    if len(posts) < config.CHAT_SOCIAL_POSTS:
+        seen_posts = {p.get("url") for p in posts if p.get("url")}
+        for row in await asyncio.to_thread(
+            supabase_client.get_social_posts_for, slug, config.CHAT_SOCIAL_POSTS
+        ):
+            if row["url"] in seen_posts:
+                continue
+            posts.append({"text": row["text"], "source": row["source"], "url": row["url"]})
+            if len(posts) >= config.CHAT_SOCIAL_POSTS:
+                break
+
+    # read the top pages so answers cite substance, not headlines (Wikipedia
+    # already carries its intro text, so it is used verbatim, not re-crawled)
+    async def _excerpt(article: dict) -> str:
+        if article.get("fetched_text"):
+            return article["fetched_text"][: config.EXCERPT_MAX_CHARS]
+        return await news.fetch_article_text(article["url"], max_chars=config.EXCERPT_MAX_CHARS)
+
     if articles:
-        texts = await asyncio.gather(
-            *(
-                news.fetch_article_text(a["url"], max_chars=config.EXCERPT_MAX_CHARS)
-                for a in articles[:3]
-            )
-        )
+        texts = await asyncio.gather(*(_excerpt(a) for a in articles[:3]))
         for article, text in zip(articles[:3], texts):
             article["excerpt"] = text
 
@@ -201,7 +223,9 @@ async def market_chat(slug: str, question: str, history: list[dict]) -> dict:
     posts: list[dict] = []
     indexed = 0
     if plan.get("needs_fresh_intel"):
-        articles, posts, indexed = await _gather(slug, plan, market_ctx.get("event_id", ""))
+        articles, posts, indexed = await _gather(
+            slug, plan, market_ctx.get("event_id", ""), market_ctx.get("category", "other")
+        )
 
     # 3. answer, grounded in everything held + gathered
     answer_input = json.dumps(

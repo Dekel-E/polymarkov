@@ -68,7 +68,9 @@ REDDIT_CLIENT_SECRET = _env("REDDIT_CLIENT_SECRET")
 
 # Social sources are best-effort and feature-flagged (§2).
 ENABLE_POLYMARKET_COMMENTS = True
-ENABLE_REDDIT = bool(REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET)
+# Reddit works keyless via the public JSON search; OAuth (higher limits)
+# kicks in automatically when REDDIT_CLIENT_ID/SECRET are set.
+ENABLE_REDDIT = True
 ENABLE_BLUESKY = True   # public AppView search — keyless
 ENABLE_X = False        # paid API — off
 
@@ -234,6 +236,54 @@ GNEWS_MAX_RECORDS = 15            # Google News results per query (2 queries/run
 WEB_SEARCH_ENABLED = True         # DuckDuckGo fallback when news runs thin
 WEB_SEARCH_MIN_ARTICLES = 4       # below this article count, search the web
 WEB_SEARCH_RESULTS = 6
+
+# Curated RSS feeds + Wikipedia — keyless, work where GDELT's IP block bites.
+# Fetched on demand during intel gathering, filtered to the market's terms,
+# and indexed into Supabase (embedded by the NewsIndexer on its next pass).
+RSS_ENABLED = True
+WIKI_ENABLED = True
+RSS_MAX_FEEDS = 5                # general + category feeds fetched per gather
+RSS_MAX_RECORDS = 10             # relevant items kept per gather
+RSS_MATCH_MIN_TOKENS = 1         # an item must mention >= this many query terms
+WIKI_MAX_RECORDS = 3             # Wikipedia pages pulled per gather
+
+# Reputable, verified-live feeds (2026-07-17). A dead feed contributes [] —
+# the fetch degrades per-source, so the list can be pruned freely.
+RSS_FEEDS_GENERAL = [
+    "https://feeds.bbci.co.uk/news/world/rss.xml",
+    "https://www.theguardian.com/world/rss",
+    "https://feeds.npr.org/1001/rss.xml",
+]
+RSS_FEEDS_BY_CATEGORY = {
+    "finance": [
+        "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+        "https://feeds.bbci.co.uk/news/business/rss.xml",
+        "https://finance.yahoo.com/news/rssindex",
+    ],
+    "economics": [
+        "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+        "https://www.theguardian.com/business/rss",
+    ],
+    "crypto": [
+        "https://www.coindesk.com/arc/outboundfeeds/rss/",
+        "https://cointelegraph.com/rss",
+    ],
+    "tech": [
+        "https://feeds.arstechnica.com/arstechnica/index",
+        "https://www.theverge.com/rss/index.xml",
+    ],
+    "politics": [
+        "https://feeds.npr.org/1014/rss.xml",
+        "https://www.theguardian.com/us-news/us-politics/rss",
+    ],
+    "geopolitics": [
+        "https://feeds.bbci.co.uk/news/world/rss.xml",
+        "https://www.theguardian.com/world/rss",
+    ],
+    "sports": [
+        "https://www.espn.com/espn/rss/news",
+    ],
+}
 
 # Market making (paper): quote both sides, settle fills against what the
 # market actually traded through. Inventory risk is the binding constraint.

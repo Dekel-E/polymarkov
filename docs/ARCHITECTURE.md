@@ -10,7 +10,7 @@ flowchart TB
 
     QP["QueryPlanner<br/><small>LLM #1 — scope, market query, entities</small>"]
     MR["MarketResolver<br/><small>tool — URL / text search / vector match</small>"]
-    ER["EvidenceRetriever<br/><small>tool — news search + web fallback,<br/>dedup, cluster ≤8, read pages</small>"]
+    ER["EvidenceRetriever<br/><small>tool — GDELT/Google News/RSS/Wiki<br/>+ web fallback, dedup, cluster ≤8,<br/>read pages, index-on-demand</small>"]
     SS["SocialScanner<br/><small>tool — comments + mention velocity</small>"]
     CVS["CrossVenueScanner<br/><small>tool — same event priced on Kalshi</small>"]
     SC["SentimentScorer<br/><small>LLM #2 — ONE batched call</small>"]
@@ -50,7 +50,7 @@ flowchart TB
 
     subgraph EXT["External services"]
         GAMMA["Polymarket Gamma + CLOB"]
-        NEWS["GDELT · Google News · Web"]
+        NEWS["GDELT · Google News · RSS · Wikipedia · Web"]
         SOCIAL["Polymarket Comments · Bluesky · Reddit"]
         LLMOD["LLMod.ai<br/><small>gpt-5.4-mini · text-embedding-3-small</small>"]
         KALSHI["Kalshi<br/><small>cross-venue odds (keyless search)</small>"]
@@ -126,5 +126,15 @@ Strategy Desk toggles, and `DailyBriefing` reports it all each morning.
 `jobs/watch_live.py` adds a real-time WebSocket sense when run persistently
 (it always watches held + watchlisted markets, even outside the trending set).
 The risk manager's circuit breaker judges realized losses PLUS open
-unrealized drawdown, and records a daily equity snapshot
-(`equity_snapshots`) that drives the portfolio page's equity curve.
+unrealized drawdown, records a daily equity snapshot (`equity_snapshots`)
+that drives the portfolio page's equity curve, and runs **strategy
+self-tuning** on every pass: a strategy that lost ≥ `TUNE_DISABLE_LOSS_USD`
+over ≥ `TUNE_MIN_TRADES` trades in 7 days disables itself (no LLM involved).
+
+`jobs/autopilot.py` runs ALL of these cadences locally in one crash-proof
+process — full autonomy without GitHub Actions. `RedditIndexer`
+(`jobs/index_social.py`, every 2h) scrapes Reddit for posts about tracked
+markets (keyless; OAuth when configured), stores them in `social_posts`
+tagged per market, and embeds them into the Pinecone `social` namespace —
+`SocialScanner` and `MarketChat` top up from this warm cache whenever live
+scrapes run thin.

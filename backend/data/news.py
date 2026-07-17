@@ -1,11 +1,13 @@
-"""News & open-web intake — GDELT, Google News RSS, DuckDuckGo web search.
+"""News & open-web intake — GDELT, Google News RSS, curated RSS feeds,
+Wikipedia, and DuckDuckGo web search.
 
-Three free, keyless sources with one normalized article shape
+All free, keyless, with one normalized article shape
 ({url, title, domain, published_at, ...}); every fetcher degrades to []
 instead of raising. GDELT is broad but noisy and rate-limits aggressively;
-Google News search is precise and reliable; DuckDuckGo is the fallback
-sense when the news feeds run thin. `fetch_article_text` turns any article
-URL into readable excerpt text.
+Google News search is precise and reliable; curated RSS feeds and Wikipedia
+work where GDELT's IP block bites; DuckDuckGo is the fallback sense when the
+feeds run thin. `fetch_article_text` turns any article URL into readable
+excerpt text (Wikipedia carries its own extract, so it is never re-crawled).
 """
 
 from __future__ import annotations
@@ -189,6 +191,220 @@ async def google_news_articles(query: str, max_records: int = 10, days: int = 7)
             articles = parse_rss(resp.text, max_records=60)
             articles.sort(key=lambda a: a["published_at"] or "", reverse=True)
             return articles[:max_records]
+    except (httpx.HTTPError, ValueError):
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Curated RSS feeds (keyless) — reputable outlets, filtered to the market's
+# terms. Handles both RSS <item> and Atom <entry> feeds.
+# ---------------------------------------------------------------------------
+
+_STOP = {
+    "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "will",
+    "be", "is", "are", "was", "by", "at", "with", "from", "who", "what",
+    "when", "next", "than", "this", "that", "2025", "2026", "2027",
+}
+
+
+def _localname(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _parse_any_date(value: str) -> Optional[str]:
+    """RFC-822 (RSS) or ISO-8601 (Atom) date string -> ISO 8601, else None."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        return parsedate_to_datetime(value).isoformat()
+    except (TypeError, ValueError):
+        pass
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).isoformat()
+    except ValueError:
+        return None
+
+
+def parse_feed(xml_text: str, max_records: int = 40) -> list[dict]:
+    """RSS <item>s or Atom <entry>s -> normalized articles. Malformed -> []."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+    articles: list[dict] = []
+    for node in root.iter():
+        if _localname(node.tag) not in ("item", "entry"):
+            continue
+        title = url = pub = summary = ""
+        for child in node:
+            name = _localname(child.tag).lower()  # RSS pubDate is camelCase
+            if name == "title" and not title:
+                title = (child.text or "").strip()
+            elif name == "link":
+                href = child.get("href")  # Atom carries the URL in an attribute
+                if href:
+                    if child.get("rel", "alternate") == "alternate" and not url:
+                        url = href.strip()
+                elif (child.text or "").strip() and not url:  # RSS: element text
+                    url = child.text.strip()
+            elif name in ("pubdate", "published", "updated", "date") and not pub:
+                pub = (child.text or "").strip()
+            elif name in ("description", "summary", "content") and not summary:
+                summary = extract_text(child.text or "", max_chars=300)
+        if not url or not title:
+            continue
+        domain = urlparse(url).netloc.removeprefix("www.")
+        articles.append(
+            {
+                "url": url,
+                "title": title,
+                "domain": domain,
+                "published_at": _parse_any_date(pub),
+                "summary": summary,
+            }
+        )
+        if len(articles) >= max_records:
+            break
+    return articles
+
+
+def query_terms(query: str) -> list[str]:
+    """Distinct significant lowercase tokens (>=3 chars, non-stopword)."""
+    seen: list[str] = []
+    for w in re.findall(r"[a-z0-9]{3,}", query.lower()):
+        if w not in _STOP and w not in seen:
+            seen.append(w)
+    return seen
+
+
+def _relevance(text: str, terms: list[str]) -> int:
+    low = text.lower()
+    return sum(1 for w in terms if w in low)
+
+
+def rss_feeds_for(category: str, limit: Optional[int] = None) -> list[str]:
+    """General feeds + this category's feeds, deduped, capped (pure)."""
+    feeds = list(config.RSS_FEEDS_GENERAL)
+    for url in config.RSS_FEEDS_BY_CATEGORY.get(category or "", []):
+        if url not in feeds:
+            feeds.append(url)
+    return feeds[: (limit or config.RSS_MAX_FEEDS)]
+
+
+async def _fetch_feed(client: httpx.AsyncClient, url: str) -> list[dict]:
+    try:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        return parse_feed(resp.text)
+    except (httpx.HTTPError, ValueError):
+        return []
+
+
+async def rss_articles(
+    query: str, feeds: list[str], max_records: int = config.RSS_MAX_RECORDS
+) -> list[dict]:
+    """Items from the given feeds mentioning the query terms, best-first.
+
+    Feeds are whole-outlet headlines, so relevance filtering is essential:
+    an item is kept only if it mentions >= RSS_MATCH_MIN_TOKENS query terms,
+    ranked by term-match count then recency. [] when the query has no usable
+    terms (returning unfiltered headlines would be pure noise)."""
+    terms = query_terms(query)
+    if not terms or not feeds:
+        return []
+    async with httpx.AsyncClient(
+        timeout=config.HTTP_TIMEOUT_S, headers=_HEADERS, follow_redirects=True
+    ) as client:
+        batches = await asyncio.gather(*(_fetch_feed(client, u) for u in feeds))
+
+    scored: list[tuple[int, dict]] = []
+    seen: set[str] = set()
+    for batch in batches:
+        for a in batch:
+            if a["url"] in seen:
+                continue
+            score = _relevance(f"{a['title']} {a.get('summary', '')}", terms)
+            if score < config.RSS_MATCH_MIN_TOKENS:
+                continue
+            seen.add(a["url"])
+            scored.append((score, a))
+    scored.sort(key=lambda s: (s[0], s[1].get("published_at") or ""), reverse=True)
+    out = []
+    for _, a in scored[:max_records]:
+        a.pop("summary", None)
+        out.append(a)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Wikipedia (MediaWiki action API — keyless; needs a contact-info UA)
+# ---------------------------------------------------------------------------
+
+WIKI_API = "https://en.wikipedia.org/w/api.php"
+# Wikimedia's UA policy blocks generic agents; identify the project + contact.
+_WIKI_UA = (
+    "Polymarkov/0.1 (educational course project; "
+    f"{(config.TEAM_INFO['students'][0]['email'] if config.TEAM_INFO.get('students') else 'noreply@example.com')})"
+)
+
+
+def parse_wiki_pages(body: dict, max_records: int) -> list[dict]:
+    """MediaWiki query response -> article-shaped rows with the intro as
+    fetched_text (so the page is never re-crawled). Search rank preserved
+    via each page's `index` (the pages map is unordered). Pure."""
+    pages = ((body.get("query") or {}).get("pages")) or {}
+    rows = []
+    for p in pages.values():
+        url = p.get("fullurl")
+        title = p.get("title")
+        extract = (p.get("extract") or "").strip()
+        if not url or not title or not extract:
+            continue
+        rows.append(
+            {
+                "url": url,
+                "title": title,
+                "domain": "en.wikipedia.org",
+                "published_at": None,
+                "fetched_text": extract[: config.CITATION_TEXT_MAX_CHARS],
+                "_idx": p.get("index", 0),
+            }
+        )
+    rows.sort(key=lambda r: r["_idx"])
+    for r in rows:
+        r.pop("_idx", None)
+    return rows[:max_records]
+
+
+async def wikipedia_articles(
+    query: str, max_records: int = config.WIKI_MAX_RECORDS
+) -> list[dict]:
+    """Top Wikipedia pages for `query`, each with its intro text. [] on failure."""
+    if not query.strip():
+        return []
+    params = {
+        "action": "query",
+        "format": "json",
+        "generator": "search",
+        "gsrsearch": query.strip()[:250],
+        "gsrlimit": max_records,
+        "gsrnamespace": 0,
+        "prop": "extracts|info",
+        "exintro": 1,
+        "explaintext": 1,
+        "exlimit": "max",
+        "inprop": "url",
+    }
+    try:
+        async with httpx.AsyncClient(
+            timeout=config.HTTP_TIMEOUT_S,
+            headers={"User-Agent": _WIKI_UA},
+            follow_redirects=True,
+        ) as client:
+            resp = await client.get(WIKI_API, params=params)
+            resp.raise_for_status()
+            return parse_wiki_pages(resp.json() or {}, max_records)
     except (httpx.HTTPError, ValueError):
         return []
 

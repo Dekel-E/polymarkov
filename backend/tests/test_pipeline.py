@@ -174,9 +174,17 @@ def mocked_pipeline(monkeypatch):
 
     from backend.data import kalshi
 
+    async def fake_rss(query, feeds, max_records=10):
+        return []
+
+    async def fake_wiki(query, max_records=3):
+        return []
+
     monkeypatch.setattr(news, "gdelt_articles", fake_articles)
     monkeypatch.setattr(news, "google_news_articles", fake_gnews)
     monkeypatch.setattr(news, "web_search", fake_web)
+    monkeypatch.setattr(news, "rss_articles", fake_rss)
+    monkeypatch.setattr(news, "wikipedia_articles", fake_wiki)
     monkeypatch.setattr(social, "gather_social", fake_social)
     monkeypatch.setattr(kalshi, "find_matching_event", fake_kalshi)
     # hermetic: never touch live Pinecone/embeddings/Supabase even with .env creds

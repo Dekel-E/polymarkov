@@ -32,21 +32,9 @@ BRIEFING_SYSTEM_PROMPT = (
 )
 
 
-def tune_strategies(pnl_7d: dict[str, dict], strategies: dict) -> list[str]:
-    """Disable autonomous strategies with a clearly bad 7-day record (pure).
-    Returns human-readable actions. Manual trades are never touched."""
-    actions = []
-    for strategy, record in pnl_7d.items():
-        if strategy in ("manual",) or strategy not in strategies:
-            continue
-        if not strategies.get(strategy):
-            continue
-        if record["trades"] >= config.TUNE_MIN_TRADES and record["pnl"] <= -config.TUNE_DISABLE_LOSS_USD:
-            strategies[strategy] = False
-            actions.append(
-                f"disabled {strategy}: {record['pnl']:+.2f} over {record['trades']} trades in 7d"
-            )
-    return actions
+# Self-tuning lives in backend/sim/risk.py (runs on every risk-manager
+# pass, no LLM needed); the briefing re-runs it only to REPORT the actions.
+from backend.sim.risk import tune_strategies  # noqa: E402
 
 
 def _mm_rewards_7d() -> float:

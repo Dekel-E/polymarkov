@@ -126,6 +126,75 @@ def mark_articles_embedded(article_ids: list[str]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# social posts (RedditIndexer)
+# ---------------------------------------------------------------------------
+
+
+def upsert_social_posts(posts: list[dict]) -> int:
+    """Upsert scraped social posts by unique url. Returns rows written."""
+    if not is_configured() or not posts:
+        return 0
+    rows = [
+        {
+            "url": p["url"],
+            "text": (p.get("text") or "")[:500],
+            "source": p.get("source") or "reddit",
+            "subreddit": p.get("subreddit") or "",
+            "score": int(p.get("score") or 0),
+            "posted_at": p.get("created_at"),
+            "entities": p.get("entities") or [],
+        }
+        for p in posts
+        if p.get("url") and p.get("text")
+    ]
+    if not rows:
+        return 0
+    get_client().table("social_posts").upsert(rows, on_conflict="url").execute()
+    return len(rows)
+
+
+def get_social_posts_for(slug: str, limit: int = 20) -> list[dict]:
+    """Recent indexed posts tagged with this market (newest first)."""
+    if not is_configured():
+        return []
+    try:
+        return (
+            get_client()
+            .table("social_posts")
+            .select("url,text,source,subreddit,score,posted_at")
+            .contains("entities", [slug])
+            .order("posted_at", desc=True)
+            .limit(limit)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return []
+
+
+def get_unembedded_social_posts(limit: int = 200) -> list[dict]:
+    if not is_configured():
+        return []
+    return (
+        get_client()
+        .table("social_posts")
+        .select("id,url,text,source,subreddit,posted_at")
+        .eq("embedded", False)
+        .limit(limit)
+        .execute()
+        .data
+        or []
+    )
+
+
+def mark_social_posts_embedded(post_ids: list[str]) -> None:
+    if not is_configured() or not post_ids:
+        return
+    get_client().table("social_posts").update({"embedded": True}).in_("id", post_ids).execute()
+
+
+# ---------------------------------------------------------------------------
 # precedents
 # ---------------------------------------------------------------------------
 

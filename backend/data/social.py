@@ -102,25 +102,8 @@ async def _reddit_token(client: httpx.AsyncClient) -> Optional[str]:
     return resp.json().get("access_token")
 
 
-async def fetch_reddit_posts(query: str, limit: int = config.MAX_SOCIAL_POSTS) -> list[dict]:
-    """Recent Reddit posts matching `query`. [] unless Reddit is enabled."""
-    if not config.ENABLE_REDDIT:
-        return []
-    try:
-        async with httpx.AsyncClient(timeout=config.HTTP_TIMEOUT_S, headers=_HEADERS) as client:
-            token = await _reddit_token(client)
-            if not token:
-                return []
-            resp = await client.get(
-                "https://oauth.reddit.com/search",
-                params={"q": query, "sort": "new", "t": "week", "limit": limit},
-                headers={**_HEADERS, "Authorization": f"Bearer {token}"},
-            )
-            resp.raise_for_status()
-            children = resp.json().get("data", {}).get("children", [])
-    except (httpx.HTTPError, ValueError):
-        return []
-
+def parse_reddit_children(children: list[dict], limit: int) -> list[dict]:
+    """Reddit listing children -> normalized posts (pure)."""
     posts = []
     for child in children:
         d = child.get("data", {})
@@ -136,9 +119,41 @@ async def fetch_reddit_posts(query: str, limit: int = config.MAX_SOCIAL_POSTS) -
                 "created_at": (
                     datetime.fromtimestamp(created, tz=timezone.utc).isoformat() if created else None
                 ),
+                "score": int(d.get("score") or 0),
+                "subreddit": d.get("subreddit") or "",
             }
         )
-    return posts[:limit]
+        if len(posts) >= limit:
+            break
+    return posts
+
+
+async def fetch_reddit_posts(query: str, limit: int = config.MAX_SOCIAL_POSTS) -> list[dict]:
+    """Recent Reddit posts matching `query`. OAuth when credentials are set,
+    else the public JSON search (keyless, best-effort). [] on any failure."""
+    if not config.ENABLE_REDDIT or not query.strip():
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=config.HTTP_TIMEOUT_S, headers=_HEADERS) as client:
+            if config.REDDIT_CLIENT_ID and config.REDDIT_CLIENT_SECRET:
+                token = await _reddit_token(client)
+                if not token:
+                    return []
+                resp = await client.get(
+                    "https://oauth.reddit.com/search",
+                    params={"q": query, "sort": "new", "t": "week", "limit": limit},
+                    headers={**_HEADERS, "Authorization": f"Bearer {token}"},
+                )
+            else:  # keyless public endpoint — same listing schema
+                resp = await client.get(
+                    "https://www.reddit.com/search.json",
+                    params={"q": query, "sort": "new", "t": "week", "limit": limit},
+                )
+            resp.raise_for_status()
+            children = resp.json().get("data", {}).get("children", [])
+    except (httpx.HTTPError, ValueError):
+        return []
+    return parse_reddit_children(children, limit)
 
 
 # ---------------------------------------------------------------------------

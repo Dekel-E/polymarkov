@@ -15,6 +15,9 @@ env:
   SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
   PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
   PINECONE_INDEX: ${{ secrets.PINECONE_INDEX }}
+  # optional: switches the RedditIndexer from keyless search to OAuth
+  REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+  REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
 
 jobs:
   index:
@@ -33,6 +36,9 @@ jobs:
         run: python -m jobs.index_markets --top 300
       - name: NewsIndexer
         run: python -m jobs.index_news --markets 20
+      - name: RedditIndexer
+        run: python -m jobs.index_social --markets 15
+        continue-on-error: true # keyless Reddit rate-limits shared CI IPs
 
   resolve:
     # daily tick + manual runs

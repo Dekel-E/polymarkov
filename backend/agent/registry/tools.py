@@ -50,16 +50,20 @@ MODULES: list[dict] = [
         "implementation": "backend/agent/pipeline.py",
         "description": (
             "Gathers news evidence: indexed articles from Supabase/Pinecone, "
-            "topped up live from GDELT and Google News, with a DuckDuckGo "
-            "web-search fallback when coverage is thin. Deduplicates, "
-            "clusters (max 8), reads the top pages for excerpts, and pulls "
+            "topped up live from GDELT, Google News, curated RSS feeds "
+            "(reputable outlets, filtered to the market's terms) and "
+            "Wikipedia, with a DuckDuckGo web-search fallback when coverage "
+            "is thin. Deduplicates, clusters (max 8), reads the top pages for "
+            "excerpts, indexes everything it fetched back into Supabase "
+            "(tagged with the market) for future retrieval, and pulls "
             "resolved-market precedents."
         ),
         "inputs": "QueryPlan + MarketState",
         "outputs": "EvidenceCluster[] + Precedent[]",
         "data_sources": [
-            "GDELT", "Google News", "DuckDuckGo web search",
-            "Supabase (articles)", "Pinecone (news, precedents)",
+            "GDELT", "Google News", "Curated RSS feeds", "Wikipedia",
+            "DuckDuckGo web search", "Supabase (articles)",
+            "Pinecone (news, precedents)",
         ],
     },
     {
@@ -171,18 +175,19 @@ MODULES: list[dict] = [
         "description": (
             "Grounded Q&A on ONE market (POST /api/market/chat). First plans "
             "whether the question needs fresh intel (prompt file "
-            "market_chat_planner); if so it searches the web and Google News, "
-            "scrapes socials (Polymarket comments, Bluesky, Reddit), and INDEXES the "
-            "articles it finds into Supabase (the news indexer embeds them "
-            "into Pinecone on its next pass). Then answers strictly from the "
-            "dossier + gathered sources, citing them."
+            "market_chat_planner); if so it searches Google News, curated RSS "
+            "feeds, Wikipedia and the open web, scrapes socials (Polymarket "
+            "comments, Bluesky, Reddit), and INDEXES the articles it finds "
+            "into Supabase (the news indexer embeds them into Pinecone on its "
+            "next pass). Then answers strictly from the dossier + gathered "
+            "sources, citing them."
         ),
         "inputs": "market slug + question + chat history (+ cached dossier)",
         "outputs": "{answer, citations[], gathered {articles, social_posts}}",
         "data_sources": [
-            "Google News", "DuckDuckGo web search",
-            "Polymarket comments", "Bluesky", "Reddit",
-            "Supabase (articles, intel_cache)",
+            "Google News", "Curated RSS feeds", "Wikipedia",
+            "DuckDuckGo web search", "Polymarket comments", "Bluesky",
+            "Reddit", "Supabase (articles, intel_cache)",
         ],
     },
     {
@@ -261,6 +266,22 @@ MODULES: list[dict] = [
         "inputs": "cron schedule",
         "outputs": "articles table + vectors",
         "data_sources": ["GDELT", "Supabase", "Pinecone"],
+    },
+    {
+        "name": "RedditIndexer",
+        "kind": "job",
+        "prompt_file": None,
+        "implementation": "jobs/index_social.py",
+        "description": (
+            "Background cron: scrapes Reddit for posts about tracked markets "
+            "(trending + held + watchlisted), stores them in Supabase tagged "
+            "with market slugs, and embeds them into the Pinecone `social` "
+            "namespace. SocialScanner and MarketChat read this warm cache "
+            "alongside their live scrapes."
+        ),
+        "inputs": "cron schedule",
+        "outputs": "social_posts table + vectors",
+        "data_sources": ["Reddit", "Supabase", "Pinecone"],
     },
 ]
 

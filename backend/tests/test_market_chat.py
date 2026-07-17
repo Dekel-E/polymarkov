@@ -104,6 +104,13 @@ def stub_world(monkeypatch):
     async def fake_web(query, max_results=5):
         return [{"url": "https://web.ex/b", "title": "Fresh B", "domain": "web.ex", "published_at": None}]
 
+    async def fake_rss(query, feeds, max_records=10):
+        return [{"url": "https://bbc.ex/c", "title": "Fresh C", "domain": "bbc.ex", "published_at": None}]
+
+    async def fake_wiki(query, max_records=3):
+        return [{"url": "https://en.wikipedia.org/wiki/X", "title": "X", "domain": "en.wikipedia.org",
+                 "published_at": None, "fetched_text": "Wikipedia intro about X."}]
+
     async def fake_social(event_id, query, limit=20):
         return {"posts": [{"text": "chatter", "source": "reddit", "url": "https://r.ex/p"}],
                 "mention_velocity": 2.0, "note": "busy"}
@@ -115,8 +122,11 @@ def stub_world(monkeypatch):
     monkeypatch.setattr(intel_cache, "get", lambda slug, max_age_s=None: _dossier_payload())
     monkeypatch.setattr(news, "google_news_articles", fake_gnews)
     monkeypatch.setattr(news, "web_search", fake_web)
+    monkeypatch.setattr(news, "rss_articles", fake_rss)
+    monkeypatch.setattr(news, "wikipedia_articles", fake_wiki)
     monkeypatch.setattr(social, "gather_social", fake_social)
     monkeypatch.setattr(news, "fetch_article_text", fake_text)
+    monkeypatch.setattr(supabase_client, "get_social_posts_for", lambda slug, limit=20: [])
     indexed: list[list[dict]] = []
     monkeypatch.setattr(
         supabase_client, "upsert_articles", lambda articles: indexed.append(articles) or len(articles)
@@ -139,8 +149,8 @@ async def test_chat_gathers_indexes_and_cites(monkeypatch, stub_world):
     assert result["answer"] == "Latest: A happened."
     assert result["citations"] == [{"title": "Fresh A", "url": "https://news.ex/a"}]
     assert result["gathered"]["searched"] is True
-    assert result["gathered"]["articles"] == 2          # gnews + web, deduped by url
-    assert result["gathered"]["articles_indexed"] == 2  # indexed for the news pipeline
+    assert result["gathered"]["articles"] == 4          # gnews + web + rss + wiki, deduped
+    assert result["gathered"]["articles_indexed"] == 4  # indexed for the news pipeline
     assert result["gathered"]["social_posts"] == 1
     # gathered articles are tagged with the market slug for the indexer
     assert stub_world[0][0]["entities"] == ["test-market"]

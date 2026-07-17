@@ -144,8 +144,8 @@ arrow(bottom(judge), top(pb), connection="arc3,rad=-0.12")
 # ---- externals (right column) ----------------------------------------------
 gamma = box(72, 79, 24, 6, "Polymarket Gamma + CLOB", kind="ext", dashed=True,
             sub="markets · order books · price history")
-news = box(72, 69.5, 24, 6, "GDELT · Google News · Web", kind="ext", dashed=True,
-           sub="live headlines + page crawling")
+news = box(72, 69.5, 24, 6, "GDELT · Google News · RSS · Wiki · Web", kind="ext", dashed=True,
+           sub="live headlines + page crawling", title_size=9)
 soc = box(72, 60, 24, 6, "Comments · Bluesky · Reddit", kind="ext", dashed=True,
           sub="social posts")
 llmod = box(72, 44, 24, 6, "LLMod.ai", kind="ext", dashed=True,
@@ -172,8 +172,8 @@ arrow((84, 58.5 + 0.5), (84, 79 - 0.5), color=GRAY, dashed=True, style="-")
 # ---- storage + background jobs (bottom left) -------------------------------
 store = box(4, 2.5, 38, 7, "Supabase + Pinecone", kind="store",
             sub="markets · articles · precedents · positions · runs\nvector namespaces: markets / news / precedents")
-jobs = box(50, 2.5, 46, 7, "MarketIndexer · NewsIndexer", kind="store",
-           sub="cron (GitHub Actions): index top markets + news every 2h,\nresolve positions daily → precedents")
+jobs = box(50, 2.5, 46, 7, "MarketIndexer · NewsIndexer · RedditIndexer", kind="store",
+           sub="cron (Actions or local autopilot): markets + news + Reddit posts\nevery 2h, resolve positions daily → precedents")
 
 arrow(right(jobs[0:1][0] and jobs), left(store) if False else (42.4, 6), color=TEAL, style="-|>")
 arrow((23, 9.9), (18, 61 - 0.4), color=TEAL, connection="arc3,rad=0.25", dashed=True)
