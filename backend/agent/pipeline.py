@@ -302,28 +302,43 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
             by_url.setdefault(a["url"], a)
 
     articles = list(by_url.values())
-    live = gdelt_live + gnews_live + rss_live + wiki_live + web_results
 
-    # index on demand: persist freshly-fetched articles tagged with this
-    # market so future runs retrieve them (and the NewsIndexer embeds them
-    # into Pinecone). Best-effort — a cache write must never break a run.
-    if live:
+    # Embed the market question + every article title in ONE call, then GATE
+    # OUT live articles that are semantically unrelated to the question — the
+    # fix for off-topic exhibits. (Cached Pinecone news already cleared a
+    # higher floor upstream, so it survives this lower one.)
+    vectors: list[list[float]] | None = None
+    dropped_offtopic = 0
+    if articles and embeddings.is_configured():
+        try:
+            embedded = await asyncio.to_thread(
+                embeddings.embed,
+                [market.question, *[a["title"] or a["url"] for a in articles]],
+            )
+            q_vec, title_vecs = embedded[0], embedded[1:]
+            kept = [
+                (a, v)
+                for a, v in zip(articles, title_vecs)
+                if _cosine(v, q_vec) >= config.LIVE_EVIDENCE_MIN_SCORE
+            ]
+            dropped_offtopic = len(articles) - len(kept)
+            articles = [a for a, _ in kept]
+            vectors = [v for _, v in kept]
+        except Exception:
+            vectors = None
+
+    # index on demand: persist only the RELEVANT articles, tagged with this
+    # market, so future runs retrieve them (and the NewsIndexer embeds them
+    # into Pinecone). Gating first means the market's cache is never polluted
+    # with off-topic noise. Best-effort — a cache write must never break a run.
+    if articles:
         try:
             await asyncio.to_thread(
                 supabase_client.upsert_articles,
-                [{**a, "entities": [market.slug]} for a in live if a.get("url")],
+                [{**a, "entities": [market.slug]} for a in articles if a.get("url")],
             )
         except Exception:  # noqa: BLE001
             pass
-
-    vectors: list[list[float]] | None = None
-    if articles and embeddings.is_configured():
-        try:
-            vectors = await asyncio.to_thread(
-                embeddings.embed, [a["title"] or a["url"] for a in articles]
-            )
-        except Exception:
-            vectors = None
 
     grouped = cluster_articles(articles, vectors)
     clusters = [
@@ -361,7 +376,8 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
         "EvidenceRetriever",
         f"news_query={news_query!r}; gdelt={len(gdelt_live)} google_news={len(gnews_live)} "
         f"rss={len(rss_live)} wikipedia={len(wiki_live)} web_search={len(web_results)} "
-        f"cached={len(cached)} articles",
+        f"cached={len(cached)} articles; dropped {dropped_offtopic} off-topic "
+        f"(< {config.LIVE_EVIDENCE_MIN_SCORE} cosine to the market question)",
         {
             "clusters": [
                 {"id": c.id, "headline": c.headline, "source": c.source, "date": c.date}

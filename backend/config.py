@@ -117,6 +117,12 @@ CLUSTER_COSINE_THRESHOLD = 0.80  # same-day + cosine>0.80 -> one cluster
 # 0.5+ — so these floors are deliberately strict.
 NEWS_MIN_MATCH_SCORE = 0.62
 PRECEDENT_MIN_MATCH_SCORE = 0.55
+# Live articles (GDELT / Google News / RSS / Wikipedia / web) are gated
+# against the MARKET QUESTION by embedding cosine before they can become
+# evidence exhibits — without this, an off-topic headline that shares a word
+# slips in. Measured separation on these embeddings: on-topic titles ~0.60+,
+# unrelated ~0.38-0.46, so 0.55 divides them with margin on both sides.
+LIVE_EVIDENCE_MIN_SCORE = 0.55
 MAX_EVIDENCE_CLUSTERS = 8
 MAX_PRECEDENTS = 5
 MAX_SOCIAL_POSTS = 20
