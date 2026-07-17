@@ -128,7 +128,7 @@ export default function AgentPage() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 px-4 py-8 md:px-8">
+    <div className="desk-rise mx-auto max-w-4xl space-y-8 px-4 py-8 md:px-8">
       <header>
         <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
           The <span className="text-instrument">Agent</span>

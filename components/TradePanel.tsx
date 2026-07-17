@@ -94,11 +94,7 @@ export default function TradePanel({ slug, ui }: { slug: string; ui: DossierUi }
             className="w-24 rounded-xl border border-desk-line bg-desk-deep px-3 py-1.5 text-sm text-desk-ink focus:border-instrument/60 focus:outline-none"
           />
         </label>
-        <button
-          onClick={submit}
-          disabled={busy || amount <= 0}
-          className="rounded-xl bg-instrument px-5 py-2 text-sm font-bold text-desk-deep transition hover:bg-instrument-bright disabled:opacity-40"
-        >
+        <button onClick={submit} disabled={busy || amount <= 0} className="btn-primary">
           {busy ? "Filling…" : "Execute paper trade"}
         </button>
       </div>

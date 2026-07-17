@@ -57,7 +57,7 @@ export default function WatchlistPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 md:px-8">
+    <div className="desk-rise mx-auto max-w-4xl space-y-6 px-4 py-8 md:px-8">
       <header>
         <h1 className="font-display text-2xl font-bold uppercase tracking-wide md:text-3xl">
           Watchlist

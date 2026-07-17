@@ -2,19 +2,25 @@
 
 import type { MarketState, VerdictData } from "@/lib/types";
 
-const STAMP: Record<VerdictData["verdict"], { cls: string; label: string }> = {
-  BUY_YES: { cls: "border-emerald-400 text-emerald-400", label: "BUY YES" },
-  BUY_NO: { cls: "border-red-400 text-red-400", label: "BUY NO" },
-  PASS: { cls: "border-desk-edge text-desk-dim", label: "PASS" },
+const STAMP: Record<VerdictData["verdict"], { cls: string; label: string; glow: string }> = {
+  BUY_YES: { cls: "border-emerald-400 text-emerald-400", label: "BUY YES", glow: "text-glow-emerald" },
+  BUY_NO: { cls: "border-red-400 text-red-400", label: "BUY NO", glow: "text-glow-red" },
+  PASS: { cls: "border-desk-edge text-desk-dim", label: "PASS", glow: "" },
 };
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, hero }: { label: string; value: string; hero?: boolean }) {
   return (
     <div>
       <div className="font-mono text-[10px] uppercase tracking-widest text-desk-faint">
         {label}
       </div>
-      <div className="mt-0.5 font-mono text-sm font-semibold text-desk-ink">{value}</div>
+      <div
+        className={`mt-0.5 font-mono font-semibold text-desk-ink ${
+          hero ? "text-base text-instrument text-glow" : "text-sm"
+        }`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
@@ -28,12 +34,12 @@ export default function Verdict({
 }) {
   const stamp = STAMP[data.verdict];
   return (
-    <section className="rounded-2xl border border-desk-line bg-desk-panel/70 p-5">
+    <section className="desk-rise rounded-2xl border border-desk-line bg-desk-panel/70 p-5">
       <div className="flex flex-wrap items-start gap-6">
         {/* the stamp: pressed onto the dossier, slightly off-axis */}
         <div className="flex min-w-[128px] items-center justify-center py-2">
           <div
-            className={`-rotate-6 rounded border-[3px] px-4 py-1.5 font-display text-2xl font-bold uppercase tracking-[0.18em] opacity-90 ${stamp.cls}`}
+            className={`desk-stamp rounded border-[3px] px-4 py-1.5 font-display text-2xl font-bold uppercase tracking-[0.18em] ${stamp.cls} ${stamp.glow}`}
             aria-label={`Verdict: ${stamp.label}`}
           >
             {stamp.label}
@@ -44,6 +50,7 @@ export default function Verdict({
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
             <Metric
               label="fair value"
+              hero
               value={`${(data.fair_probability * 100).toFixed(1)}%${
                 market ? ` vs ${(market.mid * 100).toFixed(1)}%` : ""
               }`}

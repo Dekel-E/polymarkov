@@ -2,16 +2,181 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===========================================================================
+   LUMINOUS TERMINAL — near-black ground, electric-cyan signal, glowing data.
+   Product-register motion (150-500ms), natural ease-out, no bounce. Every
+   animation enhances an already-visible default and neutralizes under
+   prefers-reduced-motion.
+   =========================================================================== */
+:root {
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --signal: 34 225 230; /* electric cyan, as RGB channels for rgb()/alpha use */
+
+  --z-dropdown: 10;
+  --z-sticky: 20;
+  --z-overlay: 30;
+  --z-modal: 40;
+  --z-toast: 50;
+  --z-tooltip: 60;
+}
+
 ::selection {
-  background: rgb(240 180 65 / 0.3);
+  background: rgb(var(--signal) / 0.28);
+  color: #eaf1f8;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(36 50 71) transparent;
+  scrollbar-color: #1b2531 transparent;
 }
 
 :focus-visible {
-  outline: 2px solid #f0b441;
+  outline: 2px solid rgb(var(--signal));
   outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Terminal atmosphere: a faint fixed grid + a soft cyan aura at the top.
+   Cheap (one fixed layer, no repaint), subtle enough not to touch contrast. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(120% 60% at 50% -10%, rgb(var(--signal) / 0.06), transparent 60%),
+    linear-gradient(rgb(255 255 255 / 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.015) 1px, transparent 1px);
+  background-size: 100% 100%, 46px 46px, 46px 46px;
+}
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* --- glow helpers --------------------------------------------------------- */
+.text-glow {
+  text-shadow: 0 0 14px rgb(var(--signal) / 0.5);
+}
+.text-glow-emerald {
+  text-shadow: 0 0 14px rgb(52 211 153 / 0.45);
+}
+.text-glow-red {
+  text-shadow: 0 0 14px rgb(248 113 113 / 0.45);
+}
+
+/* ===========================================================================
+   Buttons — one consistent vocabulary across the whole surface.
+   =========================================================================== */
+@layer components {
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold transition-[transform,background-color,box-shadow,border-color,color,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)];
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .btn:disabled {
+    @apply cursor-not-allowed opacity-40;
+  }
+  .btn-primary {
+    @apply btn bg-instrument text-desk-deep;
+  }
+  .btn-primary:hover:not(:disabled) {
+    @apply bg-instrument-bright shadow-glow;
+  }
+  .btn-ghost {
+    @apply btn border border-desk-edge bg-transparent font-medium text-desk-soft;
+  }
+  .btn-ghost:hover:not(:disabled) {
+    @apply border-instrument/50 text-instrument;
+  }
+}
+
+/* ===========================================================================
+   Motion
+   =========================================================================== */
+@keyframes desk-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.desk-rise {
+  animation: desk-rise 0.6s var(--ease-out-quint) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+/* verdict stamp being pressed onto the dossier */
+@keyframes desk-stamp {
+  0% {
+    opacity: 0;
+    transform: rotate(-6deg) scale(1.5);
+  }
+  55% {
+    opacity: 1;
+    transform: rotate(-6deg) scale(0.94);
+  }
+  100% {
+    opacity: 0.92;
+    transform: rotate(-6deg) scale(1);
+  }
+}
+.desk-stamp {
+  animation: desk-stamp 0.5s var(--ease-out-expo) both;
+}
+
+/* skeleton shimmer — a light sweep, not a dumb pulse */
+@keyframes desk-shimmer {
+  from {
+    background-position: -180% 0;
+  }
+  to {
+    background-position: 180% 0;
+  }
+}
+.desk-skeleton {
+  background-color: #0b0f16;
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgb(43 60 79 / 0.6) 50%,
+    transparent 70%
+  );
+  background-size: 180% 100%;
+  animation: desk-shimmer 1.4s ease-in-out infinite;
+}
+
+/* soft attention pulse for a live / working marker */
+@keyframes desk-breathe {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgb(var(--signal) / 0.5);
+  }
+  50% {
+    opacity: 0.55;
+    box-shadow: 0 0 8px 2px rgb(var(--signal) / 0.15);
+  }
+}
+.desk-breathe {
+  animation: desk-breathe 1.9s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

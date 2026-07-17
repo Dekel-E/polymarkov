@@ -42,7 +42,7 @@ export default function ProbabilityGauge({
       <div className="relative h-6">
         {hasFair ? (
           <div
-            className="absolute -translate-x-1/2 whitespace-nowrap font-mono text-[11px] font-semibold uppercase tracking-wider text-instrument transition-[left] duration-700 ease-out motion-reduce:transition-none"
+            className="absolute -translate-x-1/2 whitespace-nowrap font-mono text-[11px] font-semibold uppercase tracking-wider text-instrument text-glow transition-[left] duration-700 ease-out motion-reduce:transition-none"
             style={{ left: `${clampLabel(fPct)}%` }}
           >
             council fair {(fairPos * 100).toFixed(1)}%
@@ -61,7 +61,7 @@ export default function ProbabilityGauge({
             className="absolute -translate-x-1/2 transition-[left] duration-700 ease-out motion-reduce:transition-none"
             style={{ left: `${fPct}%` }}
           >
-            <div className="h-0 w-0 border-x-[5px] border-t-[7px] border-x-transparent border-t-instrument" />
+            <div className="h-0 w-0 border-x-[5px] border-t-[7px] border-x-transparent border-t-instrument [filter:drop-shadow(0_0_5px_rgb(34_225_230_/_0.7))]" />
           </div>
         )}
       </div>

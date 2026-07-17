@@ -21,17 +21,20 @@ export default function MarketCard({
   market,
   watched,
   onToggleWatch,
+  index = 0,
 }: {
   market: MarketSummary;
   watched?: boolean;
   onToggleWatch?: (slug: string, watched: boolean) => void;
+  index?: number;
 }) {
   const days = daysLeft(market.end_date);
   const prob = market.mid * 100;
   return (
     <Link
       href={`/market/${market.slug}`}
-      className="group flex flex-col rounded-2xl border border-desk-line bg-desk-panel/70 p-4 transition hover:-translate-y-0.5 hover:border-desk-faint hover:bg-desk-panel"
+      style={{ "--i": Math.min(index, 8) } as React.CSSProperties}
+      className="desk-rise group flex flex-col rounded-2xl border border-desk-line bg-desk-panel/70 p-4 transition-[transform,border-color,background-color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:border-instrument/40 hover:bg-desk-panel hover:shadow-[0_8px_24px_-12px_rgb(0_0_0/0.6)]"
     >
       <div className="flex items-start gap-3">
         {market.image ? (

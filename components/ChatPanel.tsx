@@ -139,11 +139,7 @@ export default function ChatPanel<E>({
           placeholder={placeholder}
           className="min-h-[38px] flex-1 resize-y rounded-xl border border-desk-line bg-desk-deep/80 px-3 py-2 text-sm text-desk-ink placeholder-desk-faint focus:border-instrument/60 focus:outline-none"
         />
-        <button
-          onClick={handleSend}
-          disabled={busy || !input.trim()}
-          className="rounded-xl bg-instrument px-4 py-2 text-sm font-bold text-desk-deep transition hover:bg-instrument-bright disabled:cursor-not-allowed disabled:opacity-40"
-        >
+        <button onClick={handleSend} disabled={busy || !input.trim()} className="btn-primary">
           {busy ? "…" : sendLabel}
         </button>
       </div>

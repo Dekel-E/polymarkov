@@ -73,12 +73,12 @@ export default function Sidebar() {
   return (
     <aside className="flex shrink-0 flex-row items-center gap-1 border-b border-desk-line/80 bg-desk-deep/80 px-3 py-2 backdrop-blur md:h-screen md:w-60 md:flex-col md:items-stretch md:gap-0 md:border-b-0 md:border-r md:px-4 md:py-6 md:sticky md:top-0">
       <Link href="/" className="flex items-center gap-2.5 md:mb-8 md:px-2">
-        <span className="relative flex h-8 w-8 items-center justify-center rounded-full border border-instrument/40 bg-instrument/10">
+        <span className="relative flex h-8 w-8 items-center justify-center rounded-full border border-instrument/40 bg-instrument/10 shadow-glow">
           <span className="h-2 w-2 rounded-full bg-instrument" />
           <span className="absolute inset-0 animate-ping rounded-full border border-instrument/30 [animation-duration:3s]" />
         </span>
-        <span className="text-base font-bold tracking-tight text-desk-ink">
-          Poly<span className="text-instrument">markov</span>
+        <span className="font-display text-base font-bold tracking-tight text-desk-ink">
+          Poly<span className="text-instrument text-glow">markov</span>
         </span>
       </Link>
 
@@ -89,12 +89,15 @@ export default function Sidebar() {
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm transition ${
+              className={`relative flex items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${
                 active
                   ? "bg-instrument/10 font-semibold text-instrument"
-                  : "text-desk-dim hover:bg-desk-panel hover:text-desk-ink"
+                  : "text-desk-dim hover:bg-desk-raised hover:text-desk-ink"
               }`}
             >
+              {active && (
+                <span className="absolute left-0 top-1/2 hidden h-4 w-[3px] -translate-y-1/2 rounded-full bg-instrument shadow-glow md:block" />
+              )}
               <Icon />
               {label}
             </Link>

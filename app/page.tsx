@@ -20,17 +20,18 @@ export default function Home() {
   return (
     <div className="mx-auto max-w-6xl space-y-10 px-4 py-8 md:px-8">
       <header className="pt-2">
-        <div className="font-mono text-[11px] uppercase tracking-[0.25em] text-instrument">
+        <div className="desk-rise flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.25em] text-instrument text-glow" style={{ "--i": 0 } as React.CSSProperties}>
+          <span className="h-1.5 w-1.5 rounded-full bg-instrument desk-breathe" />
           Polymarkov · pre-trade intelligence
         </div>
-        <h1 className="mt-2 font-display text-3xl font-bold uppercase leading-none tracking-tight md:text-5xl">
+        <h1 className="desk-rise mt-3 font-display text-3xl font-bold uppercase leading-none tracking-tight text-balance md:text-5xl" style={{ "--i": 1 } as React.CSSProperties}>
           Every market has a fair price.
           <br />
           <span className="text-desk-dim">The desk finds it.</span>
         </h1>
       </header>
 
-      <section className="max-w-3xl rounded-2xl border border-desk-line bg-desk-panel/60 p-4">
+      <section className="desk-rise max-w-3xl rounded-2xl border border-desk-line bg-desk-panel/60 p-4" style={{ "--i": 2 } as React.CSSProperties}>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -39,12 +40,15 @@ export default function Home() {
           className="w-full resize-y rounded-xl border border-desk-line bg-desk-deep/80 p-3 text-sm text-desk-ink placeholder-desk-faint focus:border-instrument/60 focus:outline-none"
         />
         <div className="mt-3 flex items-center gap-4">
-          <button
-            onClick={() => run(prompt)}
-            disabled={running || !prompt.trim()}
-            className="rounded-xl bg-instrument px-6 py-2 text-sm font-bold text-desk-deep transition hover:bg-instrument-bright disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {running ? "Running…" : "Run Agent"}
+          <button onClick={() => run(prompt)} disabled={running || !prompt.trim()} className="btn-primary px-6">
+            {running ? (
+              <>
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-desk-deep/30 border-t-desk-deep" />
+                Running…
+              </>
+            ) : (
+              "Run Agent"
+            )}
           </button>
           {!running && (
             <span className="font-mono text-[11px] text-desk-faint">

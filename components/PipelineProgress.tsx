@@ -15,11 +15,23 @@ const STAGES: { label: string; doneAt: number }[] = [
 ];
 
 export default function PipelineProgress({ elapsed }: { elapsed: number }) {
+  // orientation-only progress: eases toward ~95% over the typical minute, then
+  // holds while the final stage finishes (never a fake 100%)
+  const pct = Math.min(95, Math.round((1 - Math.exp(-elapsed / 22)) * 100));
   return (
-    <div className="rounded-2xl border border-desk-line bg-desk-panel/60 p-4">
-      <div className="mb-3 flex items-center justify-between font-mono text-[11px] uppercase tracking-wider text-desk-dim">
-        <span>compiling dossier</span>
-        <span>{elapsed}s · typical ~1 min</span>
+    <div className="desk-rise rounded-2xl border border-desk-line bg-desk-panel/60 p-4">
+      <div className="mb-2.5 flex items-center justify-between font-mono text-[11px] uppercase tracking-wider text-desk-dim">
+        <span className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-instrument desk-breathe" />
+          compiling dossier
+        </span>
+        <span className="tabular-nums">{elapsed}s · typical ~1 min</span>
+      </div>
+      <div className="mb-3.5 h-1 overflow-hidden rounded-full bg-desk-line">
+        <div
+          className="h-full rounded-full bg-instrument transition-[width] duration-1000 ease-out"
+          style={{ width: `${pct}%` }}
+        />
       </div>
       <ol className="space-y-1.5">
         {STAGES.map((stage, i) => {

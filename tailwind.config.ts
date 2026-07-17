@@ -1,33 +1,41 @@
 import type { Config } from "tailwindcss";
 
-// "Night desk" token system: cold blue-black ground, hairline panels, one
-// instrument-amber accent for controls/dials. Green/red are reserved for
-// data semantics (YES/NO, PnL) and come from Tailwind's emerald/red.
+// "Luminous Terminal" token system: cool near-black ground, hairline panels,
+// one electric-cyan signal accent for controls, live data and markers.
+// Green/red stay reserved for data semantics (YES/NO, PnL) from Tailwind's
+// emerald/red; amber is kept only for warnings. Token NAMES are stable
+// (desk-* / instrument) so the whole surface recolors from here.
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
         desk: {
-          deep: "#0B1017", // page ground
-          panel: "#121A26", // cards
-          raised: "#182335", // hover / raised surfaces
-          line: "#243247", // hairlines & borders
-          edge: "#33436b", // stronger borders (chips, inputs)
-          ink: "#E7EDF4", // primary text
-          soft: "#A9B6C6", // secondary text
-          dim: "#7A889B", // tertiary text
-          faint: "#516075", // captions / disabled
+          deep: "#06080C", // page ground — cool near-black
+          panel: "#0B0F16", // cards
+          raised: "#131926", // hover / raised surfaces
+          line: "#1B2531", // hairlines & borders
+          edge: "#2A3644", // stronger borders (chips, inputs)
+          ink: "#EAF1F8", // primary text
+          soft: "#A6B3C4", // secondary text
+          dim: "#6E7D90", // tertiary text
+          faint: "#495768", // captions / disabled
         },
         instrument: {
-          DEFAULT: "#F0B441", // amber: controls, markers, labels
-          bright: "#FFCB5C",
+          DEFAULT: "#22E1E6", // electric cyan: controls, markers, live data
+          bright: "#6FF2F5",
+          dim: "#128B90",
         },
       },
       fontFamily: {
-        sans: ["var(--font-plex)", "system-ui", "sans-serif"],
-        mono: ["var(--font-plex-mono)", "ui-monospace", "monospace"],
-        display: ["var(--font-plex-cond)", "var(--font-plex)", "sans-serif"],
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
+        display: ["var(--font-display)", "var(--font-sans)", "sans-serif"],
+      },
+      boxShadow: {
+        glow: "0 0 0 1px rgb(34 225 230 / 0.25), 0 0 22px -6px rgb(34 225 230 / 0.55)",
+        "glow-lg": "0 0 0 1px rgb(34 225 230 / 0.3), 0 0 40px -8px rgb(34 225 230 / 0.6)",
+        lift: "0 12px 30px -14px rgb(0 0 0 / 0.7)",
       },
     },
   },

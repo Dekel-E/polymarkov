@@ -79,13 +79,13 @@ export default function MarketPage() {
         </div>
       )}
 
-      {!market && !loadError && <div className="h-64 animate-pulse rounded-2xl bg-desk-panel" />}
+      {!market && !loadError && <div className="desk-skeleton h-64 rounded-2xl" />}
 
       {market && (
-        <section className="rounded-2xl border border-desk-line bg-desk-panel/70">
+        <section className="desk-rise rounded-2xl border border-desk-line bg-desk-panel/70">
           {/* case-file bar */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-desk-line px-5 py-2.5 font-mono text-[11px] uppercase tracking-wider text-desk-dim">
-            <span className="text-instrument">case file</span>
+            <span className="text-instrument text-glow">case file</span>
             <span className="truncate">{market.slug}</span>
             <span>· {market.category}</span>
             {market.end_date && (
@@ -154,8 +154,9 @@ export default function MarketPage() {
             {!result && !running && (
               <button
                 onClick={() => run(`Market: ${slug}\nFocus: all\nTrade: no`)}
-                className="rounded-xl bg-instrument px-6 py-2.5 text-sm font-bold text-desk-deep transition hover:bg-instrument-bright"
+                className="btn-primary px-6 py-2.5"
               >
+                <span className="h-1.5 w-1.5 rounded-full bg-desk-deep/70" />
                 Generate intel
               </button>
             )}

@@ -162,8 +162,8 @@ export default function MarketGrid() {
             </div>
           )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {(results ?? []).map((m) => (
-              <MarketCard key={m.id} market={m} {...cardProps(m)} />
+            {(results ?? []).map((m, i) => (
+              <MarketCard key={m.id} market={m} index={i} {...cardProps(m)} />
             ))}
           </div>
         </div>
@@ -201,7 +201,7 @@ export default function MarketGrid() {
       {loading && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-44 animate-pulse rounded-2xl bg-desk-panel" />
+            <div key={i} style={{ "--i": i } as React.CSSProperties} className="desk-rise desk-skeleton h-44 rounded-2xl" />
           ))}
         </div>
       )}
@@ -255,8 +255,8 @@ export default function MarketGrid() {
                 )}
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {group.slice(0, 6).map((m) => (
-                  <MarketCard key={m.id} market={m} {...cardProps(m)} />
+                {group.slice(0, 6).map((m, i) => (
+                  <MarketCard key={m.id} market={m} index={i} {...cardProps(m)} />
                 ))}
               </div>
             </div>
@@ -267,8 +267,8 @@ export default function MarketGrid() {
       {/* single category (flat) */}
       {!loading && !query.trim() && category !== "all" && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {flat.map((m) => (
-            <MarketCard key={m.id} market={m} {...cardProps(m)} />
+          {flat.map((m, i) => (
+            <MarketCard key={m.id} market={m} index={i} {...cardProps(m)} />
           ))}
         </div>
       )}

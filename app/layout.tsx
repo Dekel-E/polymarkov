@@ -1,24 +1,26 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans, IBM_Plex_Sans_Condensed } from "next/font/google";
+import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import Sidebar from "@/components/Sidebar";
 import "./globals.css";
 
-const plex = IBM_Plex_Sans({
+// Luminous Terminal type: Space Grotesk display (character), Inter body
+// (clean, modern), JetBrains Mono for all data/labels (terminal feel).
+const sans = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-plex",
+  variable: "--font-sans",
 });
 
-const plexMono = IBM_Plex_Mono({
+const mono = JetBrains_Mono({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-plex-mono",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-mono",
 });
 
-const plexCond = IBM_Plex_Sans_Condensed({
+const display = Space_Grotesk({
   subsets: ["latin"],
-  weight: ["600", "700"],
-  variable: "--font-plex-cond",
+  weight: ["500", "600", "700"],
+  variable: "--font-display",
 });
 
 export const metadata: Metadata = {
@@ -33,7 +35,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${plex.variable} ${plexMono.variable} ${plexCond.variable} min-h-screen bg-desk-deep font-sans text-desk-ink antialiased`}
+        className={`${sans.variable} ${mono.variable} ${display.variable} min-h-screen bg-desk-deep font-sans text-desk-ink antialiased`}
       >
         <div className="flex min-h-screen flex-col md:flex-row">
           <Sidebar />

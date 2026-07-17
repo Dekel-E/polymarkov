@@ -179,7 +179,7 @@ export default function StrategiesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 px-4 py-8 md:px-8">
+    <div className="desk-rise mx-auto max-w-5xl space-y-8 px-4 py-8 md:px-8">
       <header>
         <h1 className="font-display text-2xl font-bold uppercase tracking-wide md:text-3xl">
           Strategy <span className="text-instrument">Desk</span>
@@ -312,11 +312,7 @@ export default function StrategiesPage() {
               </label>
             ))}
           </div>
-          <button
-            onClick={saveRisk}
-            disabled={saving || !riskDraft}
-            className="mt-4 rounded-xl bg-instrument px-5 py-2 text-sm font-bold text-desk-deep transition hover:bg-instrument-bright disabled:opacity-40"
-          >
+          <button onClick={saveRisk} disabled={saving || !riskDraft} className="btn-primary mt-4">
             {saving ? "Saving…" : "Save risk rules"}
           </button>
         </div>
