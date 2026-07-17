@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import CountUp from "@/components/CountUp";
 import type { DossierUi, PersonaOpinion } from "@/lib/types";
 
 /* --- persona emblems: line-art, 24-grid, currentColor (matches the desk) --- */
@@ -118,7 +119,7 @@ function Card({ persona, opinion, index }: { persona: Persona; opinion: PersonaO
         </div>
         <div className="text-right">
           <div className="font-mono text-lg font-bold tabular-nums text-desk-ink">
-            {(opinion.estimated_probability * 100).toFixed(0)}
+            <CountUp value={opinion.estimated_probability * 100} decimals={0} />
             <span className="text-xs font-normal text-desk-dim">%</span>
           </div>
           <div className="mt-0.5 flex items-center justify-end gap-1.5">

@@ -24,10 +24,20 @@ export default function CommandBar() {
   return (
     <header className="sticky top-0 z-[20] border-b border-desk-line/80 bg-desk-deep/70 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 md:px-8">
-        {/* brand */}
-        <Link href="/" className="flex items-center gap-2.5">
-          <span className="relative flex h-7 w-7 items-center justify-center rounded-full border border-instrument/40 bg-instrument/10 shadow-glow">
-            <span className="h-1.5 w-1.5 rounded-full bg-instrument desk-breathe" />
+        {/* brand — a rotating radar sweep around a pulsing core */}
+        <Link href="/" className="group flex items-center gap-2.5">
+          <span className="relative flex h-7 w-7 items-center justify-center">
+            <span
+              aria-hidden
+              className="absolute inset-0 rounded-full animate-[spin_3.5s_linear_infinite]"
+              style={{
+                background:
+                  "conic-gradient(from 0deg, transparent 0deg 250deg, rgb(34 225 230 / 0.6) 345deg, transparent 360deg)",
+              }}
+            />
+            <span aria-hidden className="absolute inset-[2.5px] rounded-full bg-desk-deep" />
+            <span aria-hidden className="absolute inset-0 rounded-full border border-instrument/30" />
+            <span className="relative h-1.5 w-1.5 rounded-full bg-instrument shadow-glow desk-breathe" />
           </span>
           <span className="hidden font-display text-[15px] font-bold tracking-tight text-desk-ink sm:block">
             Poly<span className="text-instrument text-glow">markov</span>

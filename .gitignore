@@ -1,13 +1,20 @@
 # deps
 node_modules/
 .venv/
+venv/
 __pycache__/
 *.pyc
+*.egg-info/
 
-# next.js
+# next.js / build artifacts
 .next/
 out/
+build/
+dist/
 next-env.d.ts
+*.tsbuildinfo
+.swc/
+.turbo/
 
 # env — never commit secrets
 .env
@@ -17,9 +24,23 @@ next-env.d.ts
 # vercel
 .vercel/
 
-# misc
-.DS_Store
-*.log
+# python tooling caches
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
 
-tsconfig.tsbuildinfo
+# editors / OS cruft
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+
+# impeccable design skill — local dev tool, not part of the product/submission
+.impeccable/
+.github/skills/
+.github/hooks/

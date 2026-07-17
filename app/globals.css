@@ -170,12 +170,24 @@ body > * {
   animation: desk-breathe 1.9s ease-in-out infinite;
 }
 
+/* Reduced motion: disable DECORATIVE motion (entrances, stamp, shimmer,
+   breathe) but keep FUNCTIONAL feedback — loading spinners (animate-spin),
+   the radar-sweep logo, and instant transitions. A frozen spinner reads as
+   broken, so those keep turning. */
 @media (prefers-reduced-motion: reduce) {
+  .desk-rise,
+  .desk-stamp {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .desk-skeleton,
+  .desk-breathe {
+    animation: none !important;
+  }
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }

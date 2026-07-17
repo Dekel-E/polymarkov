@@ -47,7 +47,7 @@ export default function PipelineProgress({ elapsed }: { elapsed: number }) {
               {done ? (
                 <span className="flex h-3.5 w-3.5 items-center justify-center text-emerald-400">✓</span>
               ) : active ? (
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-desk-line border-t-instrument" />
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-desk-line border-t-instrument [box-shadow:0_0_8px_rgb(34_225_230_/_0.45)]" />
               ) : (
                 <span className="ml-1 h-1 w-1 rounded-full bg-desk-line" />
               )}

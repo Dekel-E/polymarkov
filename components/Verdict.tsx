@@ -1,5 +1,6 @@
 "use client";
 
+import CountUp from "@/components/CountUp";
 import type { MarketState, VerdictData } from "@/lib/types";
 
 const STAMP: Record<VerdictData["verdict"], { cls: string; label: string; glow: string }> = {
@@ -48,13 +49,20 @@ export default function Verdict({
 
         <div className="min-w-0 flex-1">
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
-            <Metric
-              label="fair value"
-              hero
-              value={`${(data.fair_probability * 100).toFixed(1)}%${
-                market ? ` vs ${(market.mid * 100).toFixed(1)}%` : ""
-              }`}
-            />
+            <div>
+              <div className="font-mono text-[10px] uppercase tracking-widest text-desk-faint">
+                fair value
+              </div>
+              <div className="mt-0.5 font-mono text-base font-semibold text-instrument text-glow">
+                <CountUp value={data.fair_probability * 100} decimals={1} suffix="%" />
+                {market && (
+                  <span className="text-sm font-normal text-desk-dim">
+                    {" "}
+                    vs {(market.mid * 100).toFixed(1)}%
+                  </span>
+                )}
+              </div>
+            </div>
             <Metric label="net edge" value={`${(data.net_edge_pts * 100).toFixed(1)} pts`} />
             <Metric
               label="size"
