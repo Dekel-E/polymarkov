@@ -7,73 +7,139 @@ import MarketGrid from "@/components/MarketGrid";
 import PipelineProgress from "@/components/PipelineProgress";
 import { useAgentRun } from "@/lib/useAgentRun";
 
+const EXAMPLES = [
+  "Will the Fed cut interest rates at its next meeting?",
+  "Will Bitcoin close above $100k this year?",
+  "Who will win the next US presidential election?",
+];
+
 export default function Home() {
   const [prompt, setPrompt] = useState("");
   const { running, elapsed, result, fetchError, run, pastRuns } = useAgentRun();
   const resultsRef = useRef<HTMLDivElement | null>(null);
+  const consoleRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // bring the progress/results into view when a run starts
   useEffect(() => {
     if (running) resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [running]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-10 px-4 py-8 md:px-8">
-      <header className="pt-2">
-        <div className="desk-rise flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.25em] text-instrument text-glow" style={{ "--i": 0 } as React.CSSProperties}>
-          <span className="h-1.5 w-1.5 rounded-full bg-instrument desk-breathe" />
-          Polymarkov · pre-trade intelligence
-        </div>
-        <h1 className="desk-rise mt-3 font-display text-3xl font-bold uppercase leading-none tracking-tight text-balance md:text-5xl" style={{ "--i": 1 } as React.CSSProperties}>
-          Every market has a fair price.
-          <br />
-          <span className="text-desk-dim">The desk finds it.</span>
-        </h1>
-      </header>
-
-      <section className="desk-rise max-w-3xl rounded-2xl border border-desk-line bg-desk-panel/60 p-4" style={{ "--i": 2 } as React.CSSProperties}>
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          rows={3}
-          placeholder={'Ask about any market — e.g. "Analyze the Fed September rate cut market" — or paste a Polymarket URL'}
-          className="w-full resize-y rounded-xl border border-desk-line bg-desk-deep/80 p-3 text-sm text-desk-ink placeholder-desk-faint focus:border-instrument/60 focus:outline-none"
-        />
-        <div className="mt-3 flex items-center gap-4">
-          <button onClick={() => run(prompt)} disabled={running || !prompt.trim()} className="btn-primary px-6">
-            {running ? (
-              <>
-                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-desk-deep/30 border-t-desk-deep" />
-                Running…
-              </>
-            ) : (
-              "Run Agent"
-            )}
-          </button>
-          {!running && (
-            <span className="font-mono text-[11px] text-desk-faint">
-              typical run ~1 min · repeat runs are cached · follow-ups welcome
-            </span>
-          )}
-        </div>
-
-        {pastRuns.length > 1 && (
-          <div className="mt-3 border-t border-desk-line/60 pt-2">
-            <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-desk-faint">
-              this session
-            </div>
-            {pastRuns.slice(0, -1).map((r, i) => (
-              <div key={i} className="truncate font-mono text-[11px] text-desk-dim">
-                <span className="text-desk-faint">›</span> {r.prompt} — {r.summary}
-              </div>
-            ))}
+    <div className="mx-auto max-w-7xl space-y-14 px-4 py-10 md:px-8">
+      {/* hero — headline paired with the agent console */}
+      <section className="grid items-center gap-8 lg:grid-cols-[1.05fr_1fr]">
+        <header className="space-y-5">
+          <div
+            className="desk-rise inline-flex items-center gap-2 rounded-full border border-desk-line bg-desk-panel/60 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em] text-instrument text-glow"
+            style={{ "--i": 0 } as React.CSSProperties}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-instrument desk-breathe" />
+            live · pre-trade intelligence
           </div>
-        )}
+          <h1
+            className="desk-rise font-display text-4xl font-bold leading-[1.02] tracking-tight text-balance md:text-6xl"
+            style={{ "--i": 1 } as React.CSSProperties}
+          >
+            Point the desk at
+            <br />
+            any market.
+            <br />
+            <span className="text-desk-dim">It returns a verdict.</span>
+          </h1>
+          <p
+            className="desk-rise max-w-lg text-sm leading-relaxed text-desk-soft md:text-base"
+            style={{ "--i": 2 } as React.CSSProperties}
+          >
+            News, social sentiment, a four-analyst council and a deterministic fair-value
+            engine — compiled into one dossier with a{" "}
+            <span className="text-emerald-400">BUY</span> /{" "}
+            <span className="text-desk-dim">PASS</span> call and a paper-trade size.
+          </p>
+          <div
+            className="desk-rise flex flex-wrap gap-x-5 gap-y-1 font-mono text-[11px] text-desk-faint"
+            style={{ "--i": 3 } as React.CSSProperties}
+          >
+            <span>7 model calls / run</span>
+            <span>· deterministic pricing</span>
+            <span>· paper trading only</span>
+          </div>
+        </header>
+
+        {/* the console */}
+        <section
+          className="desk-rise overflow-hidden rounded-2xl border border-desk-edge bg-desk-panel/70 shadow-lift"
+          style={{ "--i": 2 } as React.CSSProperties}
+        >
+          <div className="flex items-center gap-2 border-b border-desk-line px-4 py-2.5 font-mono text-[11px] text-desk-dim">
+            <span className="flex gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-desk-edge" />
+              <span className="h-2 w-2 rounded-full bg-desk-edge" />
+              <span className="h-2 w-2 rounded-full bg-instrument/60" />
+            </span>
+            <span className="ml-1 tracking-wider">agent://console</span>
+            <span className="ml-auto text-desk-faint">Market · Focus · Trade</span>
+          </div>
+
+          <div className="p-4">
+            <div className="flex gap-2">
+              <span className="pt-3 font-mono text-sm text-instrument text-glow">›</span>
+              <textarea
+                ref={consoleRef}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && prompt.trim()) run(prompt);
+                }}
+                rows={3}
+                placeholder={'Ask about any market — "Analyze the Fed September rate cut" — or paste a Polymarket URL'}
+                className="w-full resize-y bg-transparent py-2.5 font-mono text-sm text-desk-ink placeholder-desk-faint focus:outline-none"
+              />
+            </div>
+
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {EXAMPLES.map((ex) => (
+                <button
+                  key={ex}
+                  onClick={() => {
+                    setPrompt(ex);
+                    consoleRef.current?.focus();
+                  }}
+                  className="rounded-lg border border-desk-line bg-desk-deep/60 px-2.5 py-1 text-left font-mono text-[11px] text-desk-dim transition-colors hover:border-instrument/40 hover:text-desk-ink"
+                >
+                  {ex}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 flex items-center gap-4">
+              <button onClick={() => run(prompt)} disabled={running || !prompt.trim()} className="btn-primary px-6">
+                {running ? (
+                  <>
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-desk-deep/30 border-t-desk-deep" />
+                    Running…
+                  </>
+                ) : (
+                  "Run Agent"
+                )}
+              </button>
+              <span className="font-mono text-[11px] text-desk-faint">
+                ⌘↵ to run · ~1 min · cached on repeat
+              </span>
+            </div>
+
+            {pastRuns.length > 1 && (
+              <div className="mt-3 space-y-0.5 border-t border-desk-line/60 pt-2">
+                {pastRuns.slice(0, -1).map((r, i) => (
+                  <div key={i} className="truncate font-mono text-[11px] text-desk-dim">
+                    <span className="text-desk-faint">›</span> {r.prompt} — {r.summary}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
       </section>
 
-      <DeskChat />
-
-      <div ref={resultsRef} className="scroll-mt-4">
+      <div ref={resultsRef} className="scroll-mt-20">
         {running && (
           <section className="max-w-3xl">
             <PipelineProgress elapsed={elapsed} />
@@ -86,8 +152,10 @@ export default function Home() {
         )}
       </div>
 
+      <DeskChat />
+
       <section>
-        <div className="mb-4 flex items-baseline justify-between">
+        <div className="mb-5 flex items-baseline justify-between">
           <h2 className="font-display text-xl font-bold uppercase tracking-wide">
             Trending markets
           </h2>
