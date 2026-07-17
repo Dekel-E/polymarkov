@@ -12,8 +12,7 @@ function age(date: string | null): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
-/** Latest indexed headlines for one market. Silent when the indexer has
- * nothing yet; the dossier's evidence exhibits replace this after a run. */
+/** Latest indexed headlines for one market; silent when none yet. */
 export default function MarketNews({ slug }: { slug: string }) {
   const [articles, setArticles] = useState<NewsArticle[] | null>(null);
 

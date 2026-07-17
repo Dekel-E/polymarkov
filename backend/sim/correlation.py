@@ -1,13 +1,8 @@
-"""Correlation graph: logical relations between markets + violation math.
+"""Logical relations between markets and the arb basket math they imply.
 
-Relations are classified ONCE by a single batched LLM call (the builder
-job) and stored; every arb scan then checks them mechanically:
-
-- implies(A -> B): if A is true then B must be. P(A) <= P(B) or a
-  risk-free basket exists: BUY_YES B + BUY_NO A pays >= $1 in every world
-  (A&B: 1+0; !A&B: 1+1; !A&!B: 0+1) for a cost of ask_B + no_ask_A.
-- excludes(A, B): both cannot be true: BUY_NO A + BUY_NO B pays >= $1 in
-  every world for a cost of no_ask_A + no_ask_B.
+Relations are classified once by a batched LLM call and stored; each scan then
+checks them mechanically. implies(A->B): BUY_YES B + BUY_NO A is a risk-free
+basket. excludes(A,B): BUY_NO A + BUY_NO B is.
 """
 
 from __future__ import annotations

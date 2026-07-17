@@ -1,6 +1,4 @@
-"""MarketIndexer — index top active markets into Supabase + Pinecone.
-
-Runs every 2h via GitHub Actions (never inside Vercel functions).
+"""Index top active markets into Supabase + Pinecone.
 
 Usage:
     python -m jobs.index_markets [--top 300] [--dry-run]

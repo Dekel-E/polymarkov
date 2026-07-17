@@ -1,9 +1,8 @@
-"""PaperBroker — deterministic tool: simulate a taker fill on the LIVE book.
+"""Simulate a taker fill on the live book.
 
-Walks real CLOB levels to fill the Kelly-suggested size, computes VWAP,
-slippage vs mid, and the category fee, then records the position in
-Supabase. BUY_NO is synthesized from the YES bid side (buying NO at price
-1 - bid is economically identical to selling YES at the bid).
+Walks real CLOB levels to fill the sized order, computes VWAP, slippage vs mid,
+and the category fee, then records the position. BUY_NO is synthesized from the
+YES bid side (buying NO at 1 - bid equals selling YES at the bid).
 """
 
 from __future__ import annotations
@@ -30,9 +29,7 @@ async def execute_paper_trade(
 ) -> Optional[FillReport]:
     """Fill the suggested size against the live book. None if nothing to trade.
 
-    `size_usd` overrides the Kelly sizing (manual trades from the GUI);
-    `strategy` attributes the trade (manual/ai_signal/arbitrage/copy/...) —
-    single-user install, so there is one book and no ownership tagging.
+    size_usd overrides the Kelly sizing; strategy attributes the trade.
     """
     if priced.verdict == "PASS":
         return None
@@ -45,10 +42,9 @@ async def execute_paper_trade(
         except (KeyError, TypeError, ValueError):
             bankroll = float(config.PAPER_BANKROLL_USD)
         size_usd = round(bankroll * priced.suggested_size_pct_bankroll / 100, 2)
-    # the Strategy Desk's "max position $" rule caps every AUTONOMOUS
-    # directional fill. Manual trades keep the user's explicit size (the API
-    # clamps them), and arbitrage legs are sized as a set — clamping one leg
-    # would break the hedge (they have their own ARB_MAX_SIZE_USD cap).
+    # The "max position $" rule caps autonomous directional fills. Manual
+    # trades keep the user's size; arbitrage legs are sized as a hedged set and
+    # have their own ARB_MAX_SIZE_USD cap.
     if strategy not in ("manual", "arbitrage"):
         try:
             size_usd = min(size_usd, float(settings["risk"]["max_position_usd"]))
@@ -61,7 +57,7 @@ async def execute_paper_trade(
     if priced.verdict == "BUY_YES":
         levels = book["asks"]  # best-first ascending
         ref_mid = market.mid
-    else:  # BUY_NO: YES bids (best-first descending) -> NO asks (best-first ascending)
+    else:  # BUY_NO: YES bids -> NO asks
         levels = [(round(1 - price, 6), size) for price, size in book["bids"]]
         ref_mid = 1 - market.mid
 
@@ -89,7 +85,7 @@ async def execute_paper_trade(
         "strategy": strategy,
     }
     position_id = await asyncio.to_thread(supabase_client.insert_position, position)
-    if position_id is None:  # Supabase unconfigured — still report the simulated fill
+    if position_id is None:  # Supabase unconfigured: still report the simulated fill
         position_id = f"local-{uuid.uuid4()}"
 
     report = FillReport(
@@ -111,16 +107,10 @@ async def execute_paper_trade(
     return report
 
 
-# ---------------------------------------------------------------------------
-# Manual close (single-user desk: any open position can be closed from the
-# GUI; the agent's jobs use the same path for risk exits)
-# ---------------------------------------------------------------------------
-
-
 def split_position(position: dict, fraction: float) -> tuple[dict, dict]:
-    """Split a position for a partial close (pure).
+    """Split a position for a partial close.
 
-    Returns (closed_part, remaining_updates): sizes and entry fees divide
+    Returns (closed_part, remaining_updates): size and entry fee divide
     proportionally; entry price and side are unchanged."""
     fraction = max(0.01, min(1.0, fraction))
     size = float(position["size_usd"])
@@ -147,9 +137,8 @@ def exit_pnl(position: dict, exit_price: float, exit_fee: float) -> float:
 
 
 async def close_position(position_id: str, fraction: float = 1.0) -> dict:
-    """Close all (or `fraction`) of an open paper position at the current
-    book. Returns a report dict with an `error` key on failure (never raises
-    for expected cases)."""
+    """Close all or `fraction` of an open position at the current book.
+    Returns a report dict with an `error` key set on failure."""
     rows = (
         supabase_client.get_client()
         .table("positions")
@@ -189,8 +178,7 @@ async def close_position(position_id: str, fraction: float = 1.0) -> dict:
             "exit_price": exit_price, "exit_fee": exit_fee, "pnl": pnl,
         }
 
-    # partial close: realize the closed part as its own resolved row,
-    # shrink the original in place
+    # partial close: realize the closed part as its own resolved row, shrink the original
     closed_part, remaining = split_position(position, fraction)
     shares = closed_part["size_usd"] / float(position["entry_price"])
     exit_fee = round(pricing_mod.taker_fee(market.category, exit_price) * shares, 4)

@@ -1,6 +1,4 @@
-"""NewsIndexer — GDELT news for high-volume markets into Supabase + Pinecone.
-
-Runs every 2h via GitHub Actions. Throttled: GDELT rate-limits aggressively.
+"""Index GDELT news for high-volume markets into Supabase + Pinecone.
 
 Usage:
     python -m jobs.index_news [--markets 20] [--dry-run]
@@ -15,7 +13,7 @@ import re
 from backend.data import news, pinecone_client, polymarket, supabase_client
 from backend.llm import embeddings
 
-GDELT_DELAY_S = 2.0  # be polite; GDELT 429s fast
+GDELT_DELAY_S = 2.0  # GDELT 429s fast
 
 
 def market_news_query(market: dict) -> str:

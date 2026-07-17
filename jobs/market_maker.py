@@ -129,8 +129,7 @@ async def place_quotes(dry_run: bool) -> None:
 
 
 async def cycle(dry_run: bool = False) -> None:
-    """One settle-then-requote pass — also called by the live watcher when
-    the mid drifts away from resting quotes."""
+    """One settle-then-requote pass (also invoked by the live watcher on drift)."""
     print("settling…")
     await settle_pending(dry_run)
     print("quoting…")

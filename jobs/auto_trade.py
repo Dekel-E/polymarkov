@@ -1,11 +1,6 @@
-"""Autonomous trading loop — the agent manages its own paper book.
-
-Every scheduled run: pick the most tradeable unanalyzed markets, run the
-full intel pipeline with trading enabled, and let the deterministic pricing
-engine decide (all PASS gates apply; a trade only opens on real net edge).
-Caps protect the LLM quota and the book: AUTO_RUNS_PER_JOB and
-AUTO_MIN_MID/AUTO_MAX_MID in config, max_open_positions from the
-GUI-editable agent settings.
+"""Pick tradeable unanalyzed markets, run the full intel pipeline with trading
+enabled, and let the pricing engine decide. Config caps and agent settings
+bound the LLM quota and the book.
 
 Usage:
     python -m jobs.auto_trade [--runs N] [--dry-run]
@@ -29,7 +24,7 @@ def select_candidates(
     cached_slugs: set[str],
     limit: int,
 ) -> list[dict]:
-    """Tradeable, unanalyzed markets, best first (pure; unit-tested)."""
+    """Tradeable, unanalyzed markets, best first."""
     picked = []
     for m in markets:  # already sorted by 24h volume desc
         if m["slug"] in open_slugs or m["slug"] in cached_slugs:

@@ -1,9 +1,5 @@
-"""One-time backfill: >=200 resolved binary markets into precedents.
-
-Pages Gamma's closed markets (highest volume first), keeps ones with an
-unambiguous YES/NO outcome, best-effort fetches the mid ~7 days before
-resolution from CLOB history, writes Supabase `precedents` + Pinecone
-`precedents` namespace.
+"""One-time backfill of resolved binary markets into precedents (Supabase +
+Pinecone). Pages Gamma's closed markets, keeps unambiguous YES/NO outcomes.
 
 Usage:
     python -m scripts.seed_precedents [--count 250] [--skip-history] [--dry-run]

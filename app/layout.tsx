@@ -4,8 +4,7 @@ import CommandBar from "@/components/CommandBar";
 import CommandPalette from "@/components/CommandPalette";
 import "./globals.css";
 
-// Luminous Terminal type: Space Grotesk display (character), Inter body
-// (clean, modern), JetBrains Mono for all data/labels (terminal feel).
+// Space Grotesk display, Inter body, JetBrains Mono for data/labels.
 const sans = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],

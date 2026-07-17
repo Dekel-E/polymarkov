@@ -184,8 +184,7 @@ export default function MarketPage() {
 
       {result?.status === "ok" && result.ui && <TradePanel slug={slug} ui={result.ui} />}
 
-      {/* grounded Q&A: the agent answers from its dossier and gathers +
-          indexes fresh news/social evidence when the question needs it */}
+      {/* grounded Q&A over the dossier, indexing fresh evidence when needed */}
       <MarketChat slug={slug} />
     </div>
   );

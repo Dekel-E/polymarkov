@@ -5,8 +5,7 @@ import MarketCard from "@/components/MarketCard";
 import { fetchMarkets, fetchWatchlist, searchMarkets, setWatched } from "@/lib/api";
 import type { MarketSummary } from "@/lib/types";
 
-// How many trending markets the dashboard pulls (server caps at 300).
-// Deeper = fuller category groups, slightly slower first load.
+// Trending markets to pull; server caps at 300.
 const MARKETS_TO_FETCH = 200;
 
 const CATEGORY_ORDER = [
@@ -59,7 +58,7 @@ export default function MarketGrid() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // debounced text search — replaces the grid while a query is active
+  // debounced text search, replaces the grid while a query is active
   useEffect(() => {
     const q = query.trim();
     if (!q) {

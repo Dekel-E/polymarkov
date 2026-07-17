@@ -1,9 +1,8 @@
 """Portfolio views over the paper-trading positions table.
 
-Single-user install: one book holds every position — the agent's strategy
-trades and manual GUI trades — distinguished by the `strategy` column.
-Open rows are enriched with the cached market mid so the GUI can show
-current price and unrealized PnL without hammering Gamma.
+One book holds every position, distinguished by the `strategy` column. Open
+rows are enriched with the cached market mid for current price and unrealized
+PnL without hitting Gamma.
 """
 
 from __future__ import annotations

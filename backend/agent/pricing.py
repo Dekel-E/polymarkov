@@ -1,8 +1,7 @@
-"""Deterministic pricing engine (plan §6) — code does ALL arithmetic.
+"""Deterministic pricing engine: code does all the arithmetic.
 
-LLM personas only assign interpretable weights; this module turns them into
-fair probability, net edge, verdict, and position size. The Judge LLM
-receives these numbers as immutable inputs. All constants live in config.
+Turns council evidence weights into fair probability, net edge, verdict, and
+position size. The Judge LLM receives these as immutable inputs.
 """
 
 from __future__ import annotations
@@ -27,17 +26,14 @@ def sigmoid(x: float) -> float:
 
 
 def taker_fee(category: str, p_exec: float) -> float:
-    """FEE_RATE[category] * p * (1-p) — peaks at 50c."""
+    """FEE_RATE[category] * p * (1-p), peaks at 50c."""
     rate = config.FEE_RATE.get(category, config.FEE_RATE["other"])
     return rate * p_exec * (1 - p_exec)
 
 
 def kelly_size_pct(fair: float, p_entry: float) -> float:
-    """Quarter-Kelly position size in % of bankroll, capped at 5%.
-
-    `fair` is the probability that the token being bought pays out;
-    `p_entry` is that token's execution price.
-    """
+    """Quarter-Kelly size in % of bankroll, capped at 5%. `fair` is the
+    payout probability of the bought token, `p_entry` its execution price."""
     if not 0 < p_entry < 1:
         return 0.0
     b = (1 - p_entry) / p_entry  # net odds
@@ -46,18 +42,13 @@ def kelly_size_pct(fair: float, p_entry: float) -> float:
 
 
 def parse_resolution_risk(red_flags: list[str]) -> str:
-    """ResolutionSkeptic encodes resolution_risk in red_flags[0] (§5)."""
+    """ResolutionSkeptic encodes resolution_risk in red_flags[0]."""
     if red_flags:
         first = red_flags[0].lower()
         for level in ("high", "medium", "low"):
             if level in first:
                 return level
-    return "medium"  # unknown -> neither trusting nor auto-PASS
-
-
-# ---------------------------------------------------------------------------
-# Evidence aggregation
-# ---------------------------------------------------------------------------
+    return "medium"  # unknown: neither trusting nor auto-PASS
 
 
 def _effective_weight(w: EvidenceWeight) -> float:
@@ -72,10 +63,8 @@ def aggregate_evidence(
 ) -> float:
     """Council evidence weights -> total log-odds update (capped).
 
-    1. effective_i = sign * strength * W_MAX * reliability * (1 - priced_in)
-    2. same evidence_id cited by multiple personas -> average, don't sum
-    3. within one cluster, after the largest |effective|, discount 0.5^k
-    4. clamp the sum to ±TOTAL_UPDATE_CAP
+    Dedup an evidence_id across personas by averaging, discount correlated
+    weights within a cluster, then clamp the sum to +/-TOTAL_UPDATE_CAP.
     """
     cluster_of = cluster_of or {}
 
@@ -98,11 +87,6 @@ def aggregate_evidence(
             total += eff * (config.CORRELATION_DISCOUNT**k)
 
     return clamp(total, -config.TOTAL_UPDATE_CAP, config.TOTAL_UPDATE_CAP)
-
-
-# ---------------------------------------------------------------------------
-# Main entry
-# ---------------------------------------------------------------------------
 
 
 def compute_pricing(
@@ -135,7 +119,7 @@ def compute_pricing(
 
     net_edge = abs(gross_edge) - half_spread - fee - slippage - config.SAFETY_MARGIN
 
-    # PASS triggers (PASS is a first-class outcome)
+    # PASS triggers
     pass_reasons: list[str] = []
     if resolution_risk == "high":
         pass_reasons.append("resolution risk is high")

@@ -20,8 +20,7 @@ export interface ChatTurn {
 }
 
 export async function executeAgent(prompt: string, history: ChatTurn[] = []): Promise<ExecuteOut> {
-  // ?ui=1: the graded envelope is exactly {status,error,response,steps};
-  // the GUI asks for the extra structured dossier payload on top.
+  // ?ui=1 adds the structured dossier payload on top of the graded envelope.
   const res = await fetch("/api/execute?ui=1", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

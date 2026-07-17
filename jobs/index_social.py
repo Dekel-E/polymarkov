@@ -1,12 +1,6 @@
-"""RedditIndexer — scrape Reddit for posts about tracked markets and index
-them for the AI: rows into Supabase `social_posts` (tagged with market
-slugs), vectors into the Pinecone `social` namespace. SocialScanner and
-MarketChat then read this warm cache alongside their live scrapes, so the
-council sees chatter even when a live scrape runs thin or gets rate-limited.
-
-Tracked = top trending markets + every market the desk holds or watches.
-Works keyless (public Reddit JSON search); REDDIT_CLIENT_ID/SECRET switch
-it to OAuth for higher limits.
+"""Scrape Reddit for posts about tracked markets into Supabase `social_posts`
+and the Pinecone `social` namespace. Works keyless; REDDIT_CLIENT_ID/SECRET
+switch it to OAuth for higher limits.
 
 Usage:
     python -m jobs.index_social [--markets 15] [--dry-run]
@@ -21,13 +15,12 @@ from backend.data import pinecone_client, polymarket, social, supabase_client
 from backend.llm import embeddings
 from jobs.index_news import market_news_query
 
-REDDIT_DELAY_S = 1.5  # keyless endpoint rate-limits fast — be polite
+REDDIT_DELAY_S = 1.5  # keyless endpoint rate-limits fast
 POSTS_PER_MARKET = 15
 
 
 async def tracked_markets(n_trending: int) -> list[dict]:
-    """Trending + held + watched, deduped by slug (held/watched fetched
-    explicitly so a position never falls off the radar)."""
+    """Trending + held + watched, deduped by slug."""
     markets = list(await polymarket.get_trending_markets(n_trending))
     have = {m["slug"] for m in markets}
     held = {p["market_id"] for p in supabase_client.get_open_positions()}

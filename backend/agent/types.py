@@ -10,10 +10,6 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-# ---------------------------------------------------------------------------
-# Course-mandated envelope
-# ---------------------------------------------------------------------------
-
 
 class StepPrompt(BaseModel):
     system_prompt: str
@@ -37,13 +33,8 @@ class ExecuteOut(BaseModel):
     error: Optional[str] = None
     response: Optional[str] = None
     steps: list[Step] = Field(default_factory=list)
-    # Optional structured payload for the GUI; graders read `response`.
+    # Optional structured payload for the GUI; clients read `response`.
     ui: Optional[dict[str, Any]] = None
-
-
-# ---------------------------------------------------------------------------
-# QueryPlanner output (§3.1)
-# ---------------------------------------------------------------------------
 
 
 class QueryPlan(BaseModel):
@@ -56,11 +47,6 @@ class QueryPlan(BaseModel):
     wants_trade: bool = False
     language: str = "English"
     reason: Optional[str] = None
-
-
-# ---------------------------------------------------------------------------
-# Market state (§3.2)
-# ---------------------------------------------------------------------------
 
 
 class MarketState(BaseModel):
@@ -78,11 +64,6 @@ class MarketState(BaseModel):
     depth_at_ask_usd: float = 0.0
     volume24h: float = 0.0
     price_history_7d: list[tuple[float, float]] = Field(default_factory=list)  # (ts, price)
-
-
-# ---------------------------------------------------------------------------
-# Evidence & social
-# ---------------------------------------------------------------------------
 
 
 class Article(BaseModel):
@@ -133,11 +114,6 @@ class SocialPulse(BaseModel):
     note: str = ""
 
 
-# ---------------------------------------------------------------------------
-# Council (§3.6)
-# ---------------------------------------------------------------------------
-
-
 class EvidenceWeight(BaseModel):
     evidence_id: str
     direction: Literal["yes", "no"]
@@ -153,11 +129,6 @@ class PersonaOpinion(BaseModel):
     estimated_probability: float = Field(ge=0, le=1)
     confidence: Literal["low", "medium", "high"]
     red_flags: list[str] = Field(default_factory=list)
-
-
-# ---------------------------------------------------------------------------
-# Pricing & verdict (§6)
-# ---------------------------------------------------------------------------
 
 
 class PricingResult(BaseModel):
@@ -184,11 +155,6 @@ class JudgeOutput(BaseModel):
     summary: str
     key_risks: list[str] = Field(default_factory=list)
     council_digest: dict[str, str] = Field(default_factory=dict)
-
-
-# ---------------------------------------------------------------------------
-# Paper trading (§3.8)
-# ---------------------------------------------------------------------------
 
 
 class FillReport(BaseModel):

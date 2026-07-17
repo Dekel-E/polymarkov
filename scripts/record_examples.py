@@ -1,7 +1,7 @@
-"""Freeze two REAL agent runs into agent_info's prompt_examples (course spec:
-each example needs prompt, full_response, and the full steps list).
+"""Freeze two real agent runs into agent_info's prompt_examples (prompt,
+full_response, and the full steps list).
 
-Run whenever the pipeline changes meaningfully:
+Usage:
     python -m scripts.record_examples [--slug <market-slug>]
 """
 

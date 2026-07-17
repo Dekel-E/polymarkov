@@ -15,18 +15,14 @@ import httpx
 from backend import config
 
 DATA_API = "https://data-api.polymarket.com"
-_HEADERS = {"User-Agent": "polymarkov/0.1 (course project)"}
+_HEADERS = {"User-Agent": "polymarkov/0.1"}
 
 WALLET_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
 MAX_IMPORT = 100
 
 
 def validate_wallet_import(items: Any) -> tuple[list[dict], int]:
-    """Normalize a user-supplied wallet list (JSON import).
-
-    Accepts ["0x..."] or [{"wallet"|"address": "0x...", "label"|"name": "..."}].
-    Returns (valid unique wallets as {wallet, label}, skipped count).
-    """
+    """Normalize a user-supplied wallet list (JSON import) -> (valid [{wallet, label}], skipped count)."""
     if not isinstance(items, list):
         return [], 0
     valid: list[dict] = []
@@ -81,9 +77,7 @@ def parse_leaderboard(rows: list[dict]) -> list[dict]:
     return out
 
 
-# /v1/leaderboard takes timePeriod=DAY|WEEK|MONTH|ALL (docs.polymarket.com,
-# "Get trader leaderboard rankings"). It silently IGNORES unknown params, so
-# the old window=7d style returned the same default board for every window.
+# /v1/leaderboard takes timePeriod=DAY|WEEK|MONTH|ALL and silently ignores unknown params.
 _TIME_PERIOD = {"1d": "DAY", "7d": "WEEK", "30d": "MONTH", "all": "ALL"}
 
 

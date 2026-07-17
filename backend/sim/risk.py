@@ -1,8 +1,7 @@
-"""Risk manager: stop-loss / take-profit / daily circuit breaker.
+"""Risk manager: stop-loss, take-profit, daily circuit breaker.
 
-Rules come from the GUI-editable agent settings; enforcement runs on the
-automation schedule. Protection keeps running even when strategies are
-halted — the breaker stops NEW trades, never risk checks.
+Rules come from the agent settings; enforcement runs on the automation
+schedule. The breaker stops new trades but never the risk checks themselves.
 """
 
 from __future__ import annotations
@@ -15,10 +14,10 @@ from backend.sim import paper_broker, portfolio
 
 
 def evaluate_position(position: dict, current_price: Optional[float], risk: dict) -> Optional[str]:
-    """'stop_loss' | 'take_profit' | None for one open position (pure).
+    """'stop_loss' | 'take_profit' | None for one open position.
 
-    Per-position price levels (sl_price / tp_price, set from the terminal)
-    take precedence; the global % rules are the fallback."""
+    Per-position sl_price / tp_price take precedence; the global % rules are
+    the fallback."""
     if current_price is None or current_price <= 0:
         return None
     entry = float(position["entry_price"])
@@ -62,9 +61,8 @@ def realized_pnl_today() -> float:
 
 
 def daily_drawdown(realized_today: float, unrealized_total: float) -> float:
-    """Effective drawdown the breaker judges (pure): realized losses today
-    plus any OPEN drawdown. Unrealized gains don't offset realized losses —
-    they can evaporate before anyone books them."""
+    """Realized losses today plus any open drawdown. Unrealized gains don't
+    offset realized losses; they can evaporate before anyone books them."""
     return realized_today + min(0.0, unrealized_total)
 
 
@@ -113,7 +111,7 @@ async def run_risk_checks() -> dict:
     # 3. equity snapshot (one row per UTC day, last write wins) — best-effort
     try:
         supabase_client.save_equity_snapshot(data["stats"])
-    except Exception:  # noqa: BLE001 — the curve must never block risk checks
+    except Exception:  # noqa: BLE001 the curve must never block risk checks
         pass
 
     return report
@@ -125,16 +123,11 @@ def strategies_allowed() -> tuple[dict, bool]:
     return settings["strategies"], not settings["halt"].get("active", False)
 
 
-# ---------------------------------------------------------------------------
-# Strategy self-tuning: a strategy with a clearly bad record disables itself
-# ---------------------------------------------------------------------------
-
-
 def tune_strategies(pnl_7d: dict[str, dict], strategies: dict) -> list[str]:
-    """Disable autonomous strategies with a clearly bad 7-day record (pure).
-    Mutates `strategies` in place; returns human-readable actions. Needs
-    both enough evidence (TUNE_MIN_TRADES) and a real loss
-    (TUNE_DISABLE_LOSS_USD). Manual trades are never touched."""
+    """Disable autonomous strategies with a bad 7-day record. Mutates
+    `strategies` in place and returns the actions taken. Needs both
+    TUNE_MIN_TRADES of evidence and a TUNE_DISABLE_LOSS_USD loss; manual
+    trades are never touched."""
     from backend import config
 
     actions = []
@@ -153,8 +146,7 @@ def tune_strategies(pnl_7d: dict[str, dict], strategies: dict) -> list[str]:
 
 def run_strategy_tuning() -> list[str]:
     """One tuning pass: read the 7-day per-strategy record, disable losers,
-    persist. No LLM involved — runs on every risk-manager pass, so a losing
-    strategy is cut even when the daily briefing can't run."""
+    persist. Runs on every risk-manager pass, no LLM involved."""
     settings = supabase_client.get_agent_settings()
     strategies = dict(settings["strategies"])
     actions = tune_strategies(supabase_client.strategy_pnl_7d(), strategies)

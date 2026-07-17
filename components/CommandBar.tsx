@@ -24,7 +24,7 @@ export default function CommandBar() {
   return (
     <header className="sticky top-0 z-[20] border-b border-desk-line/80 bg-desk-deep/70 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 md:px-8">
-        {/* brand — a rotating radar sweep around a pulsing core */}
+        {/* brand */}
         <Link href="/" className="group flex items-center gap-2.5">
           <span className="relative flex h-7 w-7 items-center justify-center">
             <span
@@ -44,7 +44,7 @@ export default function CommandBar() {
           </span>
         </Link>
 
-        {/* nav — scrolls horizontally on narrow screens */}
+        {/* nav */}
         <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {NAV.map(({ href, label }) => {
             const active = isActive(pathname, href);

@@ -44,7 +44,7 @@ export function useAgentRun() {
       () => setElapsed(Math.floor((Date.now() - started) / 1000)),
       1000,
     );
-    // back-and-forth support: prior turns let the planner resolve follow-ups
+    // prior turns let the planner resolve follow-ups
     const history: ChatTurn[] = pastRuns.flatMap((r) => [
       { role: "user" as const, content: r.prompt },
       { role: "assistant" as const, content: r.summary },

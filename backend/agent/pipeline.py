@@ -1,9 +1,7 @@
 """The /api/execute pipeline stages, in run order.
 
-QueryPlanner (LLM #1) -> MarketResolver (tool) -> EvidenceRetriever ∥
-SocialScanner ∥ CrossVenueScanner (tools) -> SentimentScorer (LLM #2) ->
-[council.py: LLM #3-#6] -> Judge (LLM #7). Module names here are canonical
-(registry/tools.py); the orchestrator wires the stages together.
+Module names here match the registry (registry/tools.py); the orchestrator
+wires the stages together.
 """
 
 from __future__ import annotations
@@ -32,11 +30,8 @@ from backend.llm import embeddings
 from backend.llm.client import RunContext, load_prompt
 from pydantic import ValidationError
 
-# ---------------------------------------------------------------------------
-# QueryPlanner — LLM call #1: user prompt -> structured research plan
-# ---------------------------------------------------------------------------
 
-
+# QueryPlanner: user prompt -> structured research plan.
 async def plan_query(ctx: RunContext, user_prompt: str) -> QueryPlan:
     raw = await ctx.call_llm("QueryPlanner", load_prompt("query_planner"), user_prompt)
     if isinstance(raw, dict) and raw.get("intent") not in ("market", "meta", "out_of_scope"):
@@ -47,12 +42,9 @@ async def plan_query(ctx: RunContext, user_prompt: str) -> QueryPlan:
         raise RuntimeError(f"QueryPlanner returned an unexpected schema: {exc}") from exc
 
 
-# ---------------------------------------------------------------------------
-# MarketResolver — deterministic tool: plan -> exactly one MarketState.
-# Resolution ladder: pasted URL/slug -> Gamma text search (clear winner by
-# volume) -> Pinecone vector match -> otherwise top candidates to pick from.
-# ---------------------------------------------------------------------------
-
+# MarketResolver resolves the plan to exactly one MarketState. Resolution
+# ladder: pasted URL/slug -> Gamma text search (clear winner by volume) ->
+# Pinecone vector match -> otherwise top candidates to pick from.
 CLEAR_WINNER_VOLUME_RATIO = 3.0
 VECTOR_MATCH_MIN_SCORE = 0.45
 
@@ -141,13 +133,10 @@ async def resolve_market(ctx: RunContext, plan) -> ResolveResult:
     return result
 
 
-# ---------------------------------------------------------------------------
-# EvidenceRetriever — deterministic tool: cached + live news -> ≤8 clusters.
-# Pinecone semantic search over cached news, live GDELT/Google News top-up,
-# near-duplicate removal (cosine > 0.92, keep highest-authority domain),
-# event clustering (same-day + cosine > 0.80), up to 5 resolved precedents.
-# Degrades gracefully without Pinecone/embeddings.
-# ---------------------------------------------------------------------------
+# EvidenceRetriever merges cached and live news into clusters: Pinecone
+# search over cached news, live GDELT/Google News top-up, near-duplicate
+# removal, same-day event clustering, plus resolved precedents. Degrades
+# gracefully without Pinecone/embeddings.
 
 # rough authority ranking for duplicate resolution
 _TIER1 = {"reuters.com", "apnews.com", "bloomberg.com", "ft.com", "wsj.com", "bbc.com"}
@@ -160,8 +149,7 @@ class EvidencePack:
 
 
 async def _empty_articles() -> list[dict]:
-    """A completed no-op coroutine — keeps asyncio.gather positional when a
-    source is feature-flagged off."""
+    """No-op coroutine to keep asyncio.gather positional when a source is off."""
     return []
 
 
@@ -233,8 +221,7 @@ async def _pinecone_news(query: str) -> list[dict]:
             "published_at": m["metadata"].get("date") or None,
         }
         for m in matches
-        # below the floor = merely nearest, not related — that's how a
-        # geopolitics market once got a page of World Cup "evidence"
+        # below the floor is merely nearest, not related
         if m["metadata"].get("url") and m["score"] >= config.NEWS_MIN_MATCH_SCORE
     ]
 
@@ -269,12 +256,12 @@ async def _precedents(question: str) -> list[Precedent]:
 async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> EvidencePack:
     news_query = " ".join(plan.entities[:3]) or market.question
 
-    # two Google News angles: the planner's entities AND the literal question
+    # two Google News angles: the planner's entities and the literal question
     gnews_queries = [news_query]
     if market.question and market.question.lower() != news_query.lower():
         gnews_queries.append(market.question)
 
-    # curated RSS + Wikipedia are keyless and work where GDELT's IP block bites
+    # keyless RSS + Wikipedia fallback for when GDELT's IP block bites
     rss_feeds = news.rss_feeds_for(market.category) if config.RSS_ENABLED else []
     wiki_query = market.question or news_query
 
@@ -288,13 +275,12 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
     )
     gnews_live = [a for batch in gnews_batches for a in batch]
 
-    # merge, dedup by url (live wins: it's fresher)
+    # merge, dedup by url; live wins since it's fresher
     by_url = {a["url"]: a for a in cached}
     for a in gdelt_live + gnews_live + rss_live + wiki_live:
         by_url[a["url"]] = a
 
-    # web fallback: when the news feeds run thin, the agent searches the
-    # open web itself (the top clusters get crawled for excerpts below)
+    # web fallback when the news feeds run thin
     web_results: list[dict] = []
     if config.WEB_SEARCH_ENABLED and len(by_url) < config.WEB_SEARCH_MIN_ARTICLES:
         web_results = await news.web_search(news_query)
@@ -303,10 +289,9 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
 
     articles = list(by_url.values())
 
-    # Embed the market question + every article title in ONE call, then GATE
-    # OUT live articles that are semantically unrelated to the question — the
-    # fix for off-topic exhibits. (Cached Pinecone news already cleared a
-    # higher floor upstream, so it survives this lower one.)
+    # Embed the market question and every article title in one call, then
+    # drop live articles semantically unrelated to the question. Cached
+    # Pinecone news already cleared a higher floor upstream.
     vectors: list[list[float]] | None = None
     dropped_offtopic = 0
     if articles and embeddings.is_configured():
@@ -327,10 +312,9 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
         except Exception:
             vectors = None
 
-    # index on demand: persist only the RELEVANT articles, tagged with this
-    # market, so future runs retrieve them (and the NewsIndexer embeds them
-    # into Pinecone). Gating first means the market's cache is never polluted
-    # with off-topic noise. Best-effort — a cache write must never break a run.
+    # persist only the relevant articles, tagged with this market, so future
+    # runs retrieve them. Gating first keeps off-topic noise out of the cache.
+    # Best-effort: a cache write must never break a run.
     if articles:
         try:
             await asyncio.to_thread(
@@ -356,9 +340,8 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
         for i, group in enumerate(grouped)
     ]
 
-    # read the actual pages of the top clusters so the council argues over
-    # substance, not headlines (bounded: N pages, short excerpts). Sources
-    # that carry their own text (Wikipedia) are used verbatim, never crawled.
+    # read the top cluster pages so the council argues over substance, not
+    # headlines. Sources that carry their own text are used verbatim.
     pre_text = {a["url"]: a["fetched_text"] for a in articles if a.get("fetched_text")}
 
     async def _excerpt(url: str) -> str:
@@ -391,17 +374,13 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
     return EvidencePack(clusters=clusters, precedents=precedents)
 
 
-# ---------------------------------------------------------------------------
-# SocialScanner — deterministic tool: recent posts + mention velocity
-# ---------------------------------------------------------------------------
-
-
+# SocialScanner: recent posts + mention velocity.
 async def scan_social(ctx: RunContext, plan: QueryPlan, market: MarketState) -> SocialPulse:
     query = plan.market_query or market.question
     data = await social.gather_social(market.event_id, query, limit=config.MAX_SOCIAL_POSTS)
 
-    # top up from the RedditIndexer's warm cache (indexed posts tagged with
-    # this market) — live scrapes run thin when sources rate-limit
+    # top up from the RedditIndexer's warm cache; live scrapes run thin when
+    # sources rate-limit
     raw_posts = list(data["posts"])
     if len(raw_posts) < config.MAX_SOCIAL_POSTS:
         seen = {p.get("url") for p in raw_posts if p.get("url")}
@@ -447,13 +426,8 @@ async def scan_social(ctx: RunContext, plan: QueryPlan, market: MarketState) -> 
     return pulse
 
 
-# ---------------------------------------------------------------------------
-# CrossVenueScanner — deterministic tool: same-event odds from Kalshi.
-# A second venue pricing the same event is a market-consensus prior no news
-# source can provide; the match is conservative — when unsure, nothing.
-# ---------------------------------------------------------------------------
-
-
+# CrossVenueScanner: same-event odds from Kalshi as a second consensus prior.
+# The match is conservative; when unsure, it returns nothing.
 async def scan_cross_venue(ctx: RunContext, market: MarketState) -> Optional[dict]:
     result = await kalshi.find_matching_event(market.question)
     ctx.add_tool_step(
@@ -466,10 +440,7 @@ async def scan_cross_venue(ctx: RunContext, market: MarketState) -> Optional[dic
     return result
 
 
-# ---------------------------------------------------------------------------
-# SentimentScorer — LLM call #2: ONE batched call scoring all news + posts
-# ---------------------------------------------------------------------------
-
+# SentimentScorer: one batched call scoring all news and posts.
 _STANCES = ("yes", "no", "neutral")
 
 
@@ -485,7 +456,7 @@ async def score_sentiment(
         for c in clusters
     ] + [{"id": p.id, "text": p.text[:280]} for p in pulse.posts]
     if not items:
-        return  # nothing to score; skipping the call saves budget
+        return
 
     user_prompt = (
         f"Market question: {market.question}\n"
@@ -494,9 +465,8 @@ async def score_sentiment(
     )
     try:
         raw = await ctx.call_llm("SentimentScorer", load_prompt("sentiment_scorer"), user_prompt)
-    except Exception as exc:  # noqa: BLE001 — scoring is enrichment, not a hard
-        # dependency: leave items unscored instead of killing the run. The
-        # failed call is still recorded in steps[] by call_llm.
+    except Exception as exc:  # noqa: BLE001
+        # scoring is enrichment: leave items unscored rather than kill the run
         print(f"SentimentScorer degraded, items left unscored: {type(exc).__name__}")
         return
 
@@ -520,12 +490,8 @@ async def score_sentiment(
             p.sentiment, p.stance = scored[p.id]
 
 
-# ---------------------------------------------------------------------------
-# Judge — pricing.py computes the decision (code), then LLM call #7 writes
-# the dossier narrative. The LLM may NOT change the numbers: whatever it
-# returns, the deterministic values are copied over its output.
-# ---------------------------------------------------------------------------
-
+# Judge writes the dossier narrative. pricing.py computes the decision; the
+# LLM may not change the numbers, deterministic values are copied over its output.
 _DIGEST_KEYS = {"BullAnalyst": "bull", "BearAnalyst": "bear", "QuantAnalyst": "quant", "ResolutionSkeptic": "skeptic"}
 
 
@@ -584,7 +550,7 @@ async def run_judge(
     if confidence not in ("low", "medium", "high"):
         confidence = "low"
 
-    # Deterministic values ALWAYS win — the LLM's numbers are discarded.
+    # Deterministic values always win; the LLM's numbers are discarded.
     return JudgeOutput(
         verdict=pricing.verdict,
         fair_probability=pricing.fair_adj,

@@ -1,8 +1,7 @@
-"""Dossier cache: skip the whole 7-call pipeline for repeat market requests.
+"""Dossier cache: skip the pipeline for repeat market requests.
 
-Two layers: an in-process dict (fast, also the only layer when Supabase is
-off) and the Supabase `intel_cache` table (survives serverless cold starts).
-Payload = {response, steps, ui, created_at}. Trades always bypass this.
+Two layers: an in-process dict and the Supabase `intel_cache` table (survives
+cold starts). Payload = {response, steps, ui, created_at}. Trades bypass this.
 """
 
 from __future__ import annotations
@@ -20,8 +19,8 @@ _MEM: dict[str, tuple[float, dict]] = {}  # slug -> (unix_ts, payload)
 _PROMPT_SLUG_RE = re.compile(r"market:\s*([a-z0-9][a-z0-9-]{5,})\s*$", re.IGNORECASE | re.MULTILINE)
 _WANTS_TRADE_RE = re.compile(r"trade:\s*yes", re.IGNORECASE)
 
-# System prompts are static files — storing them verbatim in every cached
-# step bloats rows ~10x. Store a marker, rehydrate on read.
+# System prompts are static files; storing them in every cached step bloats
+# rows ~10x. Store a marker and rehydrate on read.
 _PROMPT_FILE_BY_MODULE = {
     "QueryPlanner": "query_planner",
     "SentimentScorer": "sentiment_scorer",
@@ -73,9 +72,7 @@ def _rehydrate_steps(steps: list[dict]) -> list[dict]:
 def slug_from_prompt(prompt: str) -> Optional[str]:
     """Extract the slug from the GUI's templated prompt ('Market: <slug>').
 
-    Lets repeat requests skip even the QueryPlanner call. Returns None for
-    free-text prompts (they go through the planner as usual) and for
-    prompts that ask to trade.
+    Returns None for free-text prompts and for prompts that ask to trade.
     """
     if _WANTS_TRADE_RE.search(prompt):
         return None
@@ -94,8 +91,8 @@ def _age_s(created_at: str) -> float:
 def get(slug: str, max_age_s: Optional[float] = None) -> Optional[dict]:
     """Fresh cached payload for a market (steps rehydrated), or None.
 
-    `max_age_s` overrides the default TTL — MarketChat accepts a much older
-    dossier as context than the execute pipeline would serve."""
+    `max_age_s` overrides the default TTL; MarketChat accepts an older dossier
+    as context than the execute pipeline would serve."""
     ttl = max_age_s if max_age_s is not None else config.INTEL_CACHE_TTL_S
     payload = None
     hit = _MEM.get(slug)

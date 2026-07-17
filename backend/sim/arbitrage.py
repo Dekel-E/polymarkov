@@ -1,16 +1,8 @@
-"""Arbitrage detection over Polymarket books — pure math, no LLM.
+"""Arbitrage detection over Polymarket books (pure math, no LLM).
 
-Two invariants of binary/mutually-exclusive markets:
-1. Spread arb (one market): best YES ask + best NO ask >= $1. If the sum
-   drops below $1 by more than both taker fees, buying both sides locks in
-   the difference regardless of outcome.
-2. Dutch book (one negRisk event): the best YES asks across ALL mutually
-   exclusive outcomes must sum to >= $1 (exactly one pays out). Below that,
-   buying every outcome guarantees profit.
-
-Honest scope note: this is a paper-trading scanner. Real windows close in
-seconds to HFT bots; we detect and paper-execute whatever exists at scan
-time — the math and the fill simulation are real, the latency race is not.
+Spread arb: best YES ask + best NO ask below $1 by more than fees. Dutch book:
+best YES asks across all outcomes of a negRisk event sum below $1. Paper-only,
+so no latency race against real HFT bots.
 """
 
 from __future__ import annotations
@@ -109,10 +101,6 @@ def dutch_book_opportunity(
     }
 
 
-# ---------------------------------------------------------------------------
-# Live scan
-# ---------------------------------------------------------------------------
-
 _SEM = asyncio.Semaphore(5)  # be polite to the CLOB API
 
 
@@ -129,8 +117,7 @@ async def scan(
     n_markets: int = config.ARB_SCAN_MARKETS,
     n_events: int = config.ARB_SCAN_EVENTS,
 ) -> list[dict]:
-    """One full scan: spread arbs on top markets + dutch books on negRisk
-    events. Returns opportunities sorted by guaranteed profit."""
+    """Spread arbs on top markets + dutch books on negRisk events, sorted by profit."""
     opportunities: list[dict] = []
 
     # 1. spread arbs: need both token books
@@ -191,8 +178,7 @@ async def scan(
 
 
 async def execute_legs(opportunity: dict) -> list[dict]:
-    """Paper-fill every leg of an opportunity. Sequential (paper world) —
-    reports each leg so an unfilled one is visible, never hidden."""
+    """Paper-fill every leg, reporting each so an unfilled leg stays visible."""
     from backend.agent.types import PricingResult
     from backend.llm.client import RunContext
     from backend.sim import paper_broker

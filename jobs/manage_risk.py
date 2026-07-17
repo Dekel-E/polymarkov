@@ -1,10 +1,5 @@
-"""Risk manager job — stop-loss, take-profit, daily circuit breaker, and
-strategy self-tuning (a strategy with a clearly bad 7-day record disables
-itself — no LLM involved).
-
-Runs FIRST in the automation schedule so breached positions are closed, the
-breaker is armed, and losing strategies are cut before anything opens new
-trades. Rules live in agent_settings (edited from the Strategy Desk GUI).
+"""Stop-loss, take-profit, daily circuit breaker, and strategy self-tuning (no
+LLM). Runs first in the schedule so risk is handled before anything trades.
 
 Usage:
     python -m jobs.manage_risk

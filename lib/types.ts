@@ -1,4 +1,4 @@
-// Mirrors backend/agent/types.py — keep in sync.
+// Mirrors backend/agent/types.py; keep in sync.
 
 export interface StepPrompt {
   system_prompt: string;
@@ -11,9 +11,7 @@ export interface Step {
   response: unknown;
 }
 
-// ---------------------------------------------------------------------------
 // Markets (GET /api/markets, GET /api/market)
-// ---------------------------------------------------------------------------
 
 export interface MarketSummary {
   id: string;
@@ -50,9 +48,7 @@ export interface MarketState {
   price_history_7d: [number, number][]; // [unix_ts, price]
 }
 
-// ---------------------------------------------------------------------------
-// Dossier UI payload (populated by the pipeline from Phase 5)
-// ---------------------------------------------------------------------------
+// Dossier UI payload
 
 export interface EvidenceCluster {
   id: string;
@@ -120,9 +116,7 @@ export interface DossierUi {
   fill?: FillReport | null;
 }
 
-// ---------------------------------------------------------------------------
 // Portfolio (GET /api/portfolio)
-// ---------------------------------------------------------------------------
 
 export interface Position {
   id: string;
@@ -188,9 +182,7 @@ export interface Portfolio {
   equity_history?: EquitySnapshot[];
 }
 
-// ---------------------------------------------------------------------------
 // Smart Money League, watchlist, agent stats
-// ---------------------------------------------------------------------------
 
 export interface LeaderRow {
   rank: number;
@@ -213,9 +205,7 @@ export interface WalletPosition {
   current_price: number;
 }
 
-// ---------------------------------------------------------------------------
 // Strategy Desk
-// ---------------------------------------------------------------------------
 
 export interface AgentSettings {
   strategies: {

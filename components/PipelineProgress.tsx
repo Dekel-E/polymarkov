@@ -1,10 +1,7 @@
 "use client";
 
-/**
- * Staged wait indicator for the ~1 min agent run. Stages advance on elapsed
- * time against typical timings — orientation, not fake telemetry (the last
- * stage stays live however long the run takes).
- */
+// Staged wait indicator for the agent run. Stages advance on elapsed time,
+// not real telemetry; the last stage stays live until the run finishes.
 const STAGES: { label: string; doneAt: number }[] = [
   { label: "planning the query", doneAt: 7 },
   { label: "resolving the market", doneAt: 12 },
@@ -15,8 +12,7 @@ const STAGES: { label: string; doneAt: number }[] = [
 ];
 
 export default function PipelineProgress({ elapsed }: { elapsed: number }) {
-  // orientation-only progress: eases toward ~95% over the typical minute, then
-  // holds while the final stage finishes (never a fake 100%)
+  // eases toward ~95% then holds while the final stage finishes; never a fake 100%
   const pct = Math.min(95, Math.round((1 - Math.exp(-elapsed / 22)) * 100));
   return (
     <div className="desk-rise rounded-2xl border border-desk-line bg-desk-panel/60 p-4">

@@ -2,12 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-/**
- * The signature instrument: one 0–100 probability axis carrying the whole
- * thesis of a dossier. The market's price sits below the track; the
- * council's fair value sits above it; the shaded span between them is the
- * edge. Before analysis, only the market marker is shown.
- */
+// 0-100 probability axis: market price below the track, council fair value
+// above it, the shaded span between them is the edge.
 export default function ProbabilityGauge({
   market,
   fair,
@@ -15,8 +11,7 @@ export default function ProbabilityGauge({
   market: number; // 0..1
   fair?: number | null; // 0..1, present once a dossier exists
 }) {
-  // fair marker slides from the market position on arrival (one deliberate
-  // motion moment; disabled under prefers-reduced-motion via CSS)
+  // fair marker slides from the market position on mount; disabled under prefers-reduced-motion via CSS
   const [fairPos, setFairPos] = useState(market);
   useEffect(() => {
     if (fair == null) return;

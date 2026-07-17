@@ -1,6 +1,4 @@
-"""Arbitrage scanner job — detect pricing violations and paper-trade them.
-
-No LLM calls; pure order-book math. Scheduled with the other automation.
+"""Detect order-book pricing violations and paper-trade them. No LLM.
 
 Usage:
     python -m jobs.scan_arbitrage [--dry-run]

@@ -1,17 +1,7 @@
-"""Live watcher — the agent's real-time sense (persistent WebSocket daemon).
-
-Subscribes to Polymarket's CLOB market channel for tracked + trending
-markets and reacts in seconds instead of the hourly sentinel cadence:
-- price jump >= LIVE_MOVE_PTS since we started watching -> agenda item
-  (the hourly worker investigates; run `python -m jobs.work_agenda`
-  locally for immediate action)
-- best YES+NO asks violate $1 -> top-priority arbitrage agenda item
-- mid drifts >= MM_REQUOTE_DRIFT from resting MM quotes -> immediate
-  settle-and-requote cycle (only when market_making is enabled)
-
-Runs until Ctrl+C; reconnects on drops; refreshes its watch set every
-LIVE_REFRESH_MIN minutes. This process needs somewhere persistent to live
-(your PC or a small VPS) — GitHub Actions can't hold a socket open.
+"""Persistent WebSocket daemon on Polymarket's CLOB market channel. Reacts in
+seconds to price jumps, YES+NO spread violations, and MM quote drift by filing
+agenda items or requoting. Runs until Ctrl+C; reconnects on drops. Needs a
+persistent host — GitHub Actions can't hold a socket open.
 
 Usage:
     python -m jobs.watch_live [--dry-run]
@@ -48,7 +38,7 @@ class WatchState:
 
 
 def _price_of(payload: dict) -> Optional[float]:
-    """Extract a current YES price from a ws event (pure)."""
+    """Extract a current YES price from a ws event."""
     if payload.get("event_type") == "last_trade_price":
         try:
             return float(payload.get("price"))
@@ -78,7 +68,7 @@ def _best_ask_of(payload: dict) -> Optional[float]:
 
 
 def price_jump_item(market: dict, baseline: float, price: float) -> Optional[dict]:
-    """Agenda item when the live price broke away from our baseline (pure)."""
+    """Agenda item when the live price broke away from our baseline."""
     move = price - baseline
     if abs(move) < config.LIVE_MOVE_PTS:
         return None
@@ -90,7 +80,7 @@ def price_jump_item(market: dict, baseline: float, price: float) -> Optional[dic
 
 
 def spread_violation_item(market: dict, yes_ask: float, no_ask: float) -> Optional[dict]:
-    """Agenda item when YES+NO asks price under $1 after fees (pure)."""
+    """Agenda item when YES+NO asks price under $1 after fees."""
     cost = yes_ask + no_ask
     fees = taker_fee(market["category"], yes_ask) + taker_fee(market["category"], no_ask)
     profit = 1.0 - cost - fees
@@ -104,9 +94,8 @@ def spread_violation_item(market: dict, yes_ask: float, no_ask: float) -> Option
 
 
 async def build_watch_set(state: WatchState) -> list[str]:
-    """Pick assets to watch: agent holdings + watchlist + top trending.
-    Held/watched markets OUTSIDE the trending list are fetched explicitly —
-    a position must never fall off the radar just because volume moved on."""
+    """Assets to watch: holdings + watchlist + top trending. Held/watched markets
+    outside trending are fetched explicitly so a position never drops off."""
     markets = await polymarket.get_trending_markets(60)
     held = {p["market_id"] for p in supabase_client.get_open_positions()}
     watched = set(supabase_client.distinct_watched_market_ids())
@@ -134,7 +123,7 @@ async def build_watch_set(state: WatchState) -> list[str]:
         state.no_token_of[m["yes_token_id"]] = m["no_token_id"]
         assets += [m["yes_token_id"], m["no_token_id"]]
 
-    # remember which markets have resting MM quotes (for drift requotes)
+    # markets with resting MM quotes, for drift requotes
     state.mm_quoted.clear()
     if supabase_client.is_configured():
         try:
@@ -225,7 +214,7 @@ async def run(dry_run: bool, seconds: Optional[int] = None) -> None:
                     try:
                         raw = await asyncio.wait_for(ws.recv(), timeout=30)
                     except asyncio.TimeoutError:
-                        continue  # quiet market — keep listening
+                        continue  # quiet market
                     data = json.loads(raw)
                     for payload in data if isinstance(data, list) else [data]:
                         await handle_event(state, payload, dry_run)
@@ -238,7 +227,7 @@ async def run(dry_run: bool, seconds: Optional[int] = None) -> None:
 
 
 def main() -> None:
-    # daemons get piped/redirected — line-buffer so output is visible live
+    # line-buffer so piped/redirected output is visible live
     sys.stdout.reconfigure(line_buffering=True, encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="print findings, file nothing")

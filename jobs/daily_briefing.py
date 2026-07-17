@@ -1,9 +1,5 @@
-"""Daily briefing — the agent accounts for itself (ONE LLM call/day).
-
-Gathers hard numbers (book, PnL by strategy, yesterday's activity, agenda),
-applies mechanical self-tuning (a strategy with a bad enough 7-day record
-disables itself), then writes a short morning report. The report shows on
-the Strategy Desk.
+"""Gather book/PnL/agenda numbers, apply mechanical self-tuning, and write a
+short morning report (one LLM call/day).
 
 Usage:
     python -m jobs.daily_briefing [--dry-run]
@@ -32,8 +28,7 @@ BRIEFING_SYSTEM_PROMPT = (
 )
 
 
-# Self-tuning lives in backend/sim/risk.py (runs on every risk-manager
-# pass, no LLM needed); the briefing re-runs it only to REPORT the actions.
+# self-tuning lives in backend/sim/risk.py; re-run here only to report actions
 from backend.sim.risk import tune_strategies  # noqa: E402
 
 
@@ -100,7 +95,7 @@ async def main_async(dry_run: bool) -> None:
 
     ctx = llm_client.RunContext()
     content = await ctx.call_llm("DeskBriefing", BRIEFING_SYSTEM_PROMPT, json.dumps(facts, default=str))
-    # the model returns JSON-mode output; accept either a plain string or {"briefing": ...}
+    # accept either a plain string or {"briefing": ...}
     if isinstance(content, dict):
         content = content.get("briefing") or content.get("report") or json.dumps(content)
     supabase_client.save_briefing(str(content), facts)

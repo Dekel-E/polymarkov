@@ -1,5 +1,4 @@
-"""Render the architecture diagram (course requirement: clear PNG, module
-names IDENTICAL to the steps[] trace and all descriptions).
+"""Render the architecture diagram PNG.
 
     python -m scripts.gen_architecture_png
 """
@@ -79,7 +78,7 @@ def right(b):
     return (x + w + 0.4, y + h / 2)
 
 
-# ---- title ----------------------------------------------------------------
+# title
 ax.text(2, 97.5, "POLYMARKOV", fontsize=17, fontweight="bold", color=AMBER)
 ax.text(2, 95.2, "pre-trade intelligence agent for Polymarket — one /api/execute run "
         "+ DeskChat (/api/chat) · MarketChat (/api/market/chat) · StrategyChat (/api/strategy/chat)",
@@ -92,7 +91,7 @@ for i, (label, color) in enumerate([("LLM call", AMBER), ("deterministic tool", 
                                 facecolor=PANEL, edgecolor=color, linewidth=1.6))
     ax.text(x0 + 2.3, 97, label, fontsize=8, color=DIM, va="center")
 
-# ---- main pipeline (center column) ----------------------------------------
+# main pipeline (center column)
 gui = box(28, 88, 20, 5, "Web GUI", kind="io", sub="POST /api/execute  {prompt, history}")
 dc = box(3, 88, 22, 5, "DeskChat", kind="llm",
          sub="global chat · POST /api/chat\nroutes → MarketChat / portfolio / meta")
@@ -141,7 +140,7 @@ arrow((38, 39 - 0.5), top(judge))
 arrow(bottom(judge), top(out), connection="arc3,rad=0.12")
 arrow(bottom(judge), top(pb), connection="arc3,rad=-0.12")
 
-# ---- externals (right column) ----------------------------------------------
+# externals (right column)
 gamma = box(72, 79, 24, 6, "Polymarket Gamma + CLOB", kind="ext", dashed=True,
             sub="markets · order books · price history")
 news = box(72, 69.5, 24, 6, "GDELT · Google News · RSS · Wiki · Web", kind="ext", dashed=True,
@@ -153,8 +152,7 @@ llmod = box(72, 44, 24, 6, "LLMod.ai", kind="ext", dashed=True,
 kalshi = box(72, 34.5, 24, 6, "Kalshi", kind="ext", dashed=True,
              sub="cross-venue odds (keyless search)")
 
-# MarketChat sits on the externals spine: it searches news + socials on
-# demand and indexes what it finds (sub text carries the endpoint).
+# MarketChat sits on the externals spine (endpoint in sub text)
 chat = box(72, 51.5, 24, 7, "MarketChat", kind="llm",
            sub="grounded Q&A · POST /api/market/chat\nplans → searches news + socials →\nindexes finds → answers with citations")
 
@@ -169,7 +167,7 @@ arrow((84, 20.5), (84, 34.5 - 0.5), color=GRAY, dashed=True, style="-")
 arrow((84, 40.5 + 0.5), (84, 51.5 - 0.5), color=GRAY, dashed=True, style="-")
 arrow((84, 58.5 + 0.5), (84, 79 - 0.5), color=GRAY, dashed=True, style="-")
 
-# ---- storage + background jobs (bottom left) -------------------------------
+# storage + background jobs (bottom left)
 store = box(4, 2.5, 38, 7, "Supabase + Pinecone", kind="store",
             sub="markets · articles · precedents · positions · runs\nvector namespaces: markets / news / precedents")
 jobs = box(50, 2.5, 46, 7, "MarketIndexer · NewsIndexer · RedditIndexer", kind="store",

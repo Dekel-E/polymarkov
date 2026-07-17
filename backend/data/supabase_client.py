@@ -28,14 +28,8 @@ def _now() -> str:
 
 
 def today_utc() -> str:
-    """Date-only UTC stamp. The halt breaker's `at` field MUST use this
-    format: risk.py auto-resumes with a plain string compare against it."""
+    """Date-only UTC stamp. The halt breaker's `at` field must use this format; risk.py string-compares it."""
     return datetime.now(timezone.utc).date().isoformat()
-
-
-# ---------------------------------------------------------------------------
-# markets
-# ---------------------------------------------------------------------------
 
 
 def upsert_markets(markets: list[dict]) -> int:
@@ -78,11 +72,6 @@ def mark_markets_inactive(market_ids: list[str]) -> None:
     get_client().table("markets").update({"active": False}).in_("id", market_ids).execute()
 
 
-# ---------------------------------------------------------------------------
-# articles
-# ---------------------------------------------------------------------------
-
-
 def upsert_articles(articles: list[dict]) -> int:
     """Upsert GDELT articles by unique url. Returns rows written."""
     if not is_configured() or not articles:
@@ -123,11 +112,6 @@ def mark_articles_embedded(article_ids: list[str]) -> None:
     if not is_configured() or not article_ids:
         return
     get_client().table("articles").update({"embedded": True}).in_("id", article_ids).execute()
-
-
-# ---------------------------------------------------------------------------
-# social posts (RedditIndexer)
-# ---------------------------------------------------------------------------
 
 
 def upsert_social_posts(posts: list[dict]) -> int:
@@ -194,21 +178,11 @@ def mark_social_posts_embedded(post_ids: list[str]) -> None:
     get_client().table("social_posts").update({"embedded": True}).in_("id", post_ids).execute()
 
 
-# ---------------------------------------------------------------------------
-# precedents
-# ---------------------------------------------------------------------------
-
-
 def upsert_precedents(precedents: list[dict]) -> int:
     if not is_configured() or not precedents:
         return 0
     get_client().table("precedents").upsert(precedents).execute()
     return len(precedents)
-
-
-# ---------------------------------------------------------------------------
-# positions & runs
-# ---------------------------------------------------------------------------
 
 
 def insert_position(position: dict) -> Optional[str]:
@@ -243,7 +217,7 @@ def log_run(run: dict) -> None:
     try:
         get_client().table("runs").insert(run).execute()
     except Exception:
-        pass  # budget telemetry must never break a run
+        pass  # telemetry must never break a run
 
 
 def get_recent_runs(limit: int = 200) -> list[dict]:
@@ -261,10 +235,7 @@ def get_recent_runs(limit: int = 200) -> list[dict]:
     )
 
 
-# ---------------------------------------------------------------------------
-# watchlist (single-user: rows carry the fixed DESK_USER_ID because the
-# schema requires a non-null uuid; no per-user semantics remain)
-# ---------------------------------------------------------------------------
+# watchlist rows carry the fixed DESK_USER_ID; the schema needs a non-null uuid.
 
 
 def add_watch(market_id: str) -> None:
@@ -296,21 +267,15 @@ def get_watchlist() -> list[str]:
     )
     seen: set[str] = set()
     out: list[str] = []
-    for r in rows:  # newest first; dedupe rows left over from the auth era
+    for r in rows:  # newest first; dedupe
         if r["market_id"] not in seen:
             seen.add(r["market_id"])
             out.append(r["market_id"])
     return out
 
 
-# ---------------------------------------------------------------------------
-# agenda (autonomy): the agent's own prioritized to-do list
-# ---------------------------------------------------------------------------
-
-
 def add_agenda_items(items: list[dict]) -> int:
-    """Insert pending items [{market_id, reason, priority}]. A market with a
-    pending item is skipped (partial unique index), so re-triggers don't pile up."""
+    """Insert pending items [{market_id, reason, priority}]; dupes are skipped by a partial unique index."""
     if not is_configured() or not items:
         return 0
     written = 0
@@ -325,7 +290,7 @@ def add_agenda_items(items: list[dict]) -> int:
             ).execute()
             written += 1
         except Exception:
-            continue  # duplicate pending item — fine
+            continue  # duplicate pending item
     return written
 
 
@@ -369,11 +334,6 @@ def analyses_today() -> int:
         .execute()
     )
     return resp.count or 0
-
-
-# ---------------------------------------------------------------------------
-# briefings (autonomy): the agent's own morning reports
-# ---------------------------------------------------------------------------
 
 
 def save_briefing(content: str, facts: dict) -> None:
@@ -423,11 +383,6 @@ def strategy_pnl_7d() -> dict[str, dict]:
     for entry in out.values():
         entry["pnl"] = round(entry["pnl"], 2)
     return out
-
-
-# ---------------------------------------------------------------------------
-# agent settings (Strategy Desk) — GUI writes, jobs read
-# ---------------------------------------------------------------------------
 
 
 def _merge_settings(defaults: dict, stored: dict) -> dict:
@@ -519,11 +474,7 @@ def get_equity_history(limit: int = 90) -> list[dict]:
 
 
 def sanitize_settings_patch(raw: dict, allow_halt_activation: bool = False) -> dict:
-    """Whitelist + clamp an untrusted settings patch (GUI or LLM-authored).
-
-    Unknown keys are dropped, numbers are clamped to config bounds, and the
-    circuit breaker can only be ARMED through here when the caller opts in
-    (StrategyChat may halt trading on instruction; the GUI resumes only)."""
+    """Whitelist and clamp an untrusted settings patch. The circuit breaker only arms when the caller opts in."""
     from backend import config
 
     patch: dict = {}
@@ -567,11 +518,6 @@ def sanitize_settings_patch(raw: dict, allow_halt_activation: bool = False) -> d
     return patch
 
 
-# ---------------------------------------------------------------------------
-# mirrored trades (copy trading)
-# ---------------------------------------------------------------------------
-
-
 def already_mirrored(wallet: str, market_id: str, outcome: str) -> bool:
     if not is_configured():
         return False
@@ -605,10 +551,7 @@ def distinct_followed_wallets() -> list[str]:
     return sorted({r["wallet"] for r in rows})
 
 
-# ---------------------------------------------------------------------------
-# followed wallets (Smart Money League; single-user — same DESK_USER_ID rule
-# as the watchlist)
-# ---------------------------------------------------------------------------
+# followed wallets: single-user, same DESK_USER_ID rule as the watchlist.
 
 
 def follow_wallets(wallets: list[dict]) -> int:

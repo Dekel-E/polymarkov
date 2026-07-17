@@ -1,13 +1,6 @@
-"""Agenda worker — the agent's action loop (runs after the sentinel).
-
-Takes the highest-priority agenda items and investigates each with the full
-intel pipeline. Holding a position in that market? Then this is a THESIS
-CHECK: if the fresh fair value no longer supports the entry, the position is
-closed with the reasoning recorded ("I was wrong" is a first-class exit).
-Not holding? Trades only if the deterministic engine finds real edge.
-
-Budget guards: MAX_ANALYSES_PER_DAY, the strategy toggles, and the circuit
-breaker all apply.
+"""Investigate the highest-priority agenda items with the intel pipeline. If a
+market is held, recheck the thesis and close when fair value no longer supports
+the entry; otherwise trade only on real edge. Budget and strategy guards apply.
 
 Usage:
     python -m jobs.work_agenda [--items N] [--dry-run]
@@ -28,11 +21,7 @@ from backend.sim.risk import strategies_allowed
 
 
 def thesis_broken(position: dict, new_fair: float) -> bool:
-    """True when the fresh fair value no longer supports the position (pure).
-
-    A BUY_YES entered at 0.30 needs fair > entry to have been worth its
-    costs; once fair <= entry the original edge is gone entirely.
-    """
+    """True when the fresh fair value no longer supports the position."""
     entry = float(position["entry_price"])
     if position["side"] == "BUY_YES":
         return new_fair <= entry

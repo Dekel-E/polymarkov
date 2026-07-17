@@ -2,11 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-/**
- * Animate a number from 0 to `value` on mount (ease-out cubic). Purposeful:
- * used on the dossier's key figures so the eye lands on the number as it
- * settles. Honors prefers-reduced-motion (jumps straight to the value).
- */
+// Animate a number from 0 to value on mount. Honors prefers-reduced-motion.
 export default function CountUp({
   value,
   decimals = 0,

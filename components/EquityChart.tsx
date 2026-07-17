@@ -2,11 +2,8 @@
 
 import type { Portfolio } from "@/lib/types";
 
-/**
- * Equity over time. Preferred source: daily snapshots recorded by the risk
- * manager (include unrealized PnL). Fallback when fewer than 2 snapshots
- * exist yet: reconstruct from settled trades' PnL. Ends at current equity.
- */
+// Equity over time from daily snapshots, or reconstructed from settled
+// trades' PnL when fewer than 2 snapshots exist.
 export default function EquityChart({ portfolio }: { portfolio: Portfolio }) {
   const { stats } = portfolio;
   const snapshots = portfolio.equity_history ?? [];
@@ -70,7 +67,6 @@ export default function EquityChart({ portfolio }: { portfolio: Portfolio }) {
         </span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Equity over time">
-        {/* starting-bankroll baseline */}
         <line
           x1={PAD}
           x2={W - PAD}

@@ -1,13 +1,7 @@
-"""News & open-web intake — GDELT, Google News RSS, curated RSS feeds,
-Wikipedia, and DuckDuckGo web search.
+"""News and web intake: GDELT, Google News RSS, curated RSS, Wikipedia, DuckDuckGo.
 
-All free, keyless, with one normalized article shape
-({url, title, domain, published_at, ...}); every fetcher degrades to []
-instead of raising. GDELT is broad but noisy and rate-limits aggressively;
-Google News search is precise and reliable; curated RSS feeds and Wikipedia
-work where GDELT's IP block bites; DuckDuckGo is the fallback sense when the
-feeds run thin. `fetch_article_text` turns any article URL into readable
-excerpt text (Wikipedia carries its own extract, so it is never re-crawled).
+Every fetcher returns a normalized article dict and degrades to [] on failure.
+GDELT rate-limits aggressively.
 """
 
 from __future__ import annotations
@@ -25,18 +19,13 @@ import httpx
 
 from backend import config
 
-_HEADERS = {"User-Agent": "polymarkov/0.1 (course project)"}
-
-# ---------------------------------------------------------------------------
-# GDELT DOC 2.0 (10s timeout, one retry, fail fast on 429)
-# ---------------------------------------------------------------------------
+_HEADERS = {"User-Agent": "polymarkov/0.1"}
 
 GDELT_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 
 
 def _quote_query(query: str) -> str:
-    """GDELT treats unquoted multi-word queries as OR — quote phrases.
-    English-only: multilingual results are noise the pipeline can't use."""
+    """Quote multi-word queries; GDELT treats unquoted phrases as OR. English only."""
     query = query.strip()
     if " " in query and not query.startswith('"'):
         query = f'"{query}"'
@@ -79,7 +68,7 @@ async def gdelt_articles(
         "format": "json",
         "timespan": timespan,
     }
-    for attempt in range(2):  # one retry
+    for attempt in range(2):
         try:
             async with httpx.AsyncClient(timeout=config.HTTP_TIMEOUT_S, headers=_HEADERS) as client:
                 resp = await client.get(GDELT_URL, params=params)
@@ -90,15 +79,11 @@ async def gdelt_articles(
             # ValueError covers GDELT returning HTML/garbage instead of JSON
             status = getattr(getattr(exc, "response", None), "status_code", None)
             if status == 429:
-                break  # rate-limited: a 1s retry cannot succeed, fail fast
+                break  # rate-limited; a retry won't help
             if attempt == 0:
                 await asyncio.sleep(1.0)
     return []
 
-
-# ---------------------------------------------------------------------------
-# page crawling: URL -> readable excerpt text
-# ---------------------------------------------------------------------------
 
 _SCRIPT_RE = re.compile(r"<(script|style|noscript)[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
 _HTML_RE = re.compile(r"<[^>]+>")
@@ -126,10 +111,6 @@ async def fetch_article_text(url: str, max_chars: int = config.CITATION_TEXT_MAX
         return ""
 
 
-# ---------------------------------------------------------------------------
-# Google News RSS (precise, keyless, query-relevant headlines)
-# ---------------------------------------------------------------------------
-
 RSS_URL = "https://news.google.com/rss/search"
 
 
@@ -155,7 +136,7 @@ def parse_rss(xml_text: str, max_records: int) -> list[dict]:
         source = item.find("source")
         source_url = source.get("url", "") if source is not None else ""
         domain = urlparse(source_url).netloc or (source.text if source is not None else "") or "news.google.com"
-        # Google appends " - Source Name" to titles; strip it for clean display
+        # strip Google's trailing " - Source Name"
         if source is not None and source.text and title.endswith(f" - {source.text}"):
             title = title[: -len(f" - {source.text}")]
         articles.append(
@@ -172,10 +153,7 @@ def parse_rss(xml_text: str, max_records: int) -> list[dict]:
 
 
 async def google_news_articles(query: str, max_records: int = 10, days: int = 7) -> list[dict]:
-    """Recent articles matching `query`, NEWEST FIRST. [] on failure.
-
-    Google orders the feed by relevance, which surfaces day-old items over
-    fresh ones — so we parse a wide window and re-sort by publish time."""
+    """Recent articles matching query, newest first. Google sorts by relevance, so re-sort by time."""
     params = {
         "q": f"{query} when:{days}d",
         "hl": "en-US",
@@ -195,10 +173,7 @@ async def google_news_articles(query: str, max_records: int = 10, days: int = 7)
         return []
 
 
-# ---------------------------------------------------------------------------
-# Curated RSS feeds (keyless) — reputable outlets, filtered to the market's
-# terms. Handles both RSS <item> and Atom <entry> feeds.
-# ---------------------------------------------------------------------------
+# Curated RSS feeds, filtered to the market's terms. Handles RSS and Atom.
 
 _STOP = {
     "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "will",
@@ -238,15 +213,15 @@ def parse_feed(xml_text: str, max_records: int = 40) -> list[dict]:
             continue
         title = url = pub = summary = ""
         for child in node:
-            name = _localname(child.tag).lower()  # RSS pubDate is camelCase
+            name = _localname(child.tag).lower()
             if name == "title" and not title:
                 title = (child.text or "").strip()
             elif name == "link":
-                href = child.get("href")  # Atom carries the URL in an attribute
+                href = child.get("href")  # Atom keeps the URL in an attribute
                 if href:
                     if child.get("rel", "alternate") == "alternate" and not url:
                         url = href.strip()
-                elif (child.text or "").strip() and not url:  # RSS: element text
+                elif (child.text or "").strip() and not url:
                     url = child.text.strip()
             elif name in ("pubdate", "published", "updated", "date") and not pub:
                 pub = (child.text or "").strip()
@@ -304,12 +279,7 @@ async def _fetch_feed(client: httpx.AsyncClient, url: str) -> list[dict]:
 async def rss_articles(
     query: str, feeds: list[str], max_records: int = config.RSS_MAX_RECORDS
 ) -> list[dict]:
-    """Items from the given feeds mentioning the query terms, best-first.
-
-    Feeds are whole-outlet headlines, so relevance filtering is essential:
-    an item is kept only if it mentions >= RSS_MATCH_MIN_TOKENS query terms,
-    ranked by term-match count then recency. [] when the query has no usable
-    terms (returning unfiltered headlines would be pure noise)."""
+    """Feed items mentioning >= RSS_MATCH_MIN_TOKENS query terms, best-first. [] if no usable terms."""
     terms = query_terms(query)
     if not terms or not feeds:
         return []
@@ -337,22 +307,16 @@ async def rss_articles(
     return out
 
 
-# ---------------------------------------------------------------------------
-# Wikipedia (MediaWiki action API — keyless; needs a contact-info UA)
-# ---------------------------------------------------------------------------
-
 WIKI_API = "https://en.wikipedia.org/w/api.php"
-# Wikimedia's UA policy blocks generic agents; identify the project + contact.
+# Wikimedia blocks generic user-agents; identify the project and a contact.
 _WIKI_UA = (
-    "Polymarkov/0.1 (educational course project; "
+    "Polymarkov/0.1 ("
     f"{(config.TEAM_INFO['students'][0]['email'] if config.TEAM_INFO.get('students') else 'noreply@example.com')})"
 )
 
 
 def parse_wiki_pages(body: dict, max_records: int) -> list[dict]:
-    """MediaWiki query response -> article-shaped rows with the intro as
-    fetched_text (so the page is never re-crawled). Search rank preserved
-    via each page's `index` (the pages map is unordered). Pure."""
+    """MediaWiki response -> article rows with the intro as fetched_text. Rank preserved via page index."""
     pages = ((body.get("query") or {}).get("pages")) or {}
     rows = []
     for p in pages.values():
@@ -408,10 +372,6 @@ async def wikipedia_articles(
     except (httpx.HTTPError, ValueError):
         return []
 
-
-# ---------------------------------------------------------------------------
-# DuckDuckGo web search (keyless HTML endpoint — the fallback sense)
-# ---------------------------------------------------------------------------
 
 SEARCH_URL = "https://html.duckduckgo.com/html/"
 

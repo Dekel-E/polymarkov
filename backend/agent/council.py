@@ -1,7 +1,6 @@
-"""The AI council: one context built once, four personas run on it
-concurrently (LLM calls #3-#6). Personas assign interpretable weights only —
-pricing.py does all arithmetic. PERSONAS maps each canonical module name to
-its prompt file in the registry.
+"""AI council: one shared context, four personas run on it concurrently.
+
+Personas assign interpretable weights only; pricing.py does the arithmetic.
 """
 
 from __future__ import annotations
@@ -35,8 +34,8 @@ def _fmt(v: float | None, pct: bool = True) -> str:
 
 
 def time_context(end_date: str | None, now: datetime | None = None) -> str:
-    """'Today: … | Days to resolution: …' — the model does NOT know the
-    current date, so time-to-resolution must be computed for it."""
+    """'Today: ... | Days to resolution: ...'. The model has no current date,
+    so time-to-resolution is computed for it."""
     now = now or datetime.now(timezone.utc)
     line = f"Today: {now.date().isoformat()}"
     if end_date:
@@ -66,7 +65,7 @@ def build_shared_context(
     precedents: list[Precedent],
     cross_venue: dict | None = None,
 ) -> str:
-    """Identical input for all four personas — built once (§3.6)."""
+    """Identical input for all four personas, built once."""
     lines = [
         "== MARKET ==",
         f"Question: {market.question}",
@@ -177,12 +176,10 @@ def _null_opinion(name: str, kind: str, reason: str) -> PersonaOpinion:
 async def run_persona(
     ctx: RunContext, name: str, prompt_file: str, shared_context: str
 ) -> PersonaOpinion:
-    # Config errors (missing prompt file) must fail loudly — only RUNTIME
-    # failures degrade.
+    # Missing prompt file must fail loudly; only runtime failures degrade.
     system_prompt = load_prompt(prompt_file)
-    # A broken persona must not kill the run: schema failures AND call
-    # failures (gateway error, timeout, invalid JSON after retry) both
-    # degrade to a null opinion; run_council aborts only if ALL four fail.
+    # A broken persona must not kill the run: schema and call failures both
+    # degrade to a null opinion. run_council aborts only if all four fail.
     try:
         raw = await ctx.call_llm(name, system_prompt, shared_context)
     except Exception:  # noqa: BLE001
@@ -199,7 +196,6 @@ async def run_council(ctx: RunContext, shared_context: str) -> dict[str, Persona
         *(run_persona(ctx, name, pf, shared_context) for name, pf in PERSONAS.items())
     )
     if all(o.red_flags and o.red_flags[0].endswith(_CALL_FAILURE) for o in opinions):
-        # the provider died mid-run — surface it instead of pricing a
-        # fabricated 50/50 council
+        # provider died mid-run; surface it rather than price a fake 50/50
         raise RuntimeError("council unavailable: all four persona calls failed")
     return dict(zip(PERSONAS, opinions))

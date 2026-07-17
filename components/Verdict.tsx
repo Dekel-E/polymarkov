@@ -37,7 +37,7 @@ export default function Verdict({
   return (
     <section className="desk-rise rounded-2xl border border-desk-line bg-desk-panel/70 p-5">
       <div className="flex flex-wrap items-start gap-6">
-        {/* the stamp: pressed onto the dossier, slightly off-axis */}
+        {/* the stamp */}
         <div className="flex min-w-[128px] items-center justify-center py-2">
           <div
             className={`desk-stamp rounded border-[3px] px-4 py-1.5 font-display text-2xl font-bold uppercase tracking-[0.18em] ${stamp.cls} ${stamp.glow}`}

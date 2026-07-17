@@ -1,7 +1,4 @@
-"""Watchlist refresher — keep dossiers fresh for markets users follow.
-
-Re-analyzes watched markets whose cached dossier has expired (never trades).
-Each run also becomes a row in `runs`, building per-market verdict history.
+"""Re-analyze watched markets whose cached dossier has expired (never trades).
 
 Usage:
     python -m jobs.refresh_watchlist [--limit N] [--dry-run]

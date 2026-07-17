@@ -1,9 +1,8 @@
-"""Agent report card: run history + calibration once markets resolve.
+"""Agent report card: run history and calibration once markets resolve.
 
-Brier score = mean((forecast - outcome)^2), lower is better. We score the
-agent's fair probability against each resolved market's outcome and compare
-with the market price at run time — the honest question is not "is the
-agent accurate" but "does it beat the market it trades against".
+Brier score = mean((forecast - outcome)^2), lower is better. Scores the
+agent's fair probability against each resolved outcome and compares it with
+the market price at run time.
 """
 
 from __future__ import annotations

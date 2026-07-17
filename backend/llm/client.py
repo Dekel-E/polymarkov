@@ -1,13 +1,7 @@
-"""LLMod.ai chat wrapper with per-request step capture (course requirement).
+"""LLMod.ai chat wrapper with per-request step capture.
 
-Every LLM call goes through RunContext.call_llm, which:
-- requests JSON (response_format json_object when supported, else instructed),
-- retries once on invalid JSON with a "return only valid JSON" nudge,
-- appends {module, prompt: {system_prompt, user_prompt}, response} to steps,
-- accumulates token usage for the runs table.
-
-Tool (non-LLM) modules log via RunContext.add_tool_step so the steps trace
-stays 1:1 with the architecture diagram.
+Every LLM call goes through RunContext.call_llm: it requests JSON, retries once
+on invalid JSON, records each call as a step, and tallies token usage.
 """
 
 from __future__ import annotations
@@ -53,8 +47,6 @@ class RunContext:
         self.tokens_in = 0
         self.tokens_out = 0
 
-    # -- tool steps ---------------------------------------------------------
-
     def add_tool_step(self, module: str, inputs: str, outputs: Any) -> None:
         self.steps.append(
             Step(
@@ -63,8 +55,6 @@ class RunContext:
                 response=outputs,
             )
         )
-
-    # -- LLM steps ----------------------------------------------------------
 
     async def _completion(self, system_prompt: str, messages: list[dict]) -> str:
         kwargs: dict[str, Any] = dict(
@@ -97,7 +87,7 @@ class RunContext:
             try:
                 parsed = parse_json_response(text)
             except json.JSONDecodeError:
-                # one retry with an explicit nudge (course efficiency: max 1 retry)
+                # one retry with an explicit nudge
                 messages += [
                     {"role": "assistant", "content": text},
                     {
@@ -109,8 +99,7 @@ class RunContext:
                 text = await self._completion(system_prompt, messages)
                 parsed = parse_json_response(text)  # let it raise this time
         except Exception as exc:
-            # keep the trace honest: a failed call is still a call the agent
-            # made — record it before the caller decides how to degrade
+            # record the failed call before re-raising
             self.steps.append(
                 Step(
                     module=module,
@@ -132,6 +121,5 @@ class RunContext:
 
 @lru_cache(maxsize=32)
 def load_prompt(name: str) -> str:
-    """Read a prompt file (single source of truth, also served by agent_info).
-    Cached: prompts only change on deploy."""
+    """Read a prompt file. Cached; prompts only change on deploy."""
     return (config.PROMPTS_DIR / f"{name}.txt").read_text(encoding="utf-8")

@@ -1,9 +1,7 @@
-"""Social signal clients — best-effort, feature-flagged per source (§2).
+"""Social signal clients, feature-flagged per source.
 
-Primary source: Polymarket's own market comments (on-topic, free, no auth).
-Secondary: Bluesky post search (public AppView, keyless) and Reddit search
-(only when REDDIT_CLIENT_ID/SECRET are configured).
-Every function degrades to [] instead of raising.
+Primary: Polymarket market comments. Secondary: Bluesky search and Reddit
+(when configured). Every function degrades to [] instead of raising.
 """
 
 from __future__ import annotations
@@ -16,7 +14,7 @@ import httpx
 from backend import config
 
 GAMMA_BASE = "https://gamma-api.polymarket.com"
-_HEADERS = {"User-Agent": "polymarkov/0.1 (course project)"}
+_HEADERS = {"User-Agent": "polymarkov/0.1"}
 
 
 def _parse_ts(value: str) -> Optional[datetime]:
@@ -41,13 +39,8 @@ def mention_velocity(timestamps: list[datetime], now: Optional[datetime] = None)
     prior = [t for t in timestamps if week_ago <= t < day_ago]
     prior_daily_avg = len(prior) / 6.0
     if prior_daily_avg == 0:
-        return None  # guard div-by-zero: no baseline to compare against
+        return None  # no baseline
     return round(recent / prior_daily_avg, 2)
-
-
-# ---------------------------------------------------------------------------
-# Polymarket comments (primary)
-# ---------------------------------------------------------------------------
 
 
 async def fetch_polymarket_comments(event_id: str, limit: int = config.MAX_SOCIAL_POSTS) -> list[dict]:
@@ -87,11 +80,6 @@ async def fetch_polymarket_comments(event_id: str, limit: int = config.MAX_SOCIA
     return posts[:limit]
 
 
-# ---------------------------------------------------------------------------
-# Reddit (optional, client-credentials OAuth)
-# ---------------------------------------------------------------------------
-
-
 async def _reddit_token(client: httpx.AsyncClient) -> Optional[str]:
     resp = await client.post(
         "https://www.reddit.com/api/v1/access_token",
@@ -129,8 +117,7 @@ def parse_reddit_children(children: list[dict], limit: int) -> list[dict]:
 
 
 async def fetch_reddit_posts(query: str, limit: int = config.MAX_SOCIAL_POSTS) -> list[dict]:
-    """Recent Reddit posts matching `query`. OAuth when credentials are set,
-    else the public JSON search (keyless, best-effort). [] on any failure."""
+    """Recent Reddit posts matching query; OAuth when configured, else public JSON. [] on failure."""
     if not config.ENABLE_REDDIT or not query.strip():
         return []
     try:
@@ -144,7 +131,7 @@ async def fetch_reddit_posts(query: str, limit: int = config.MAX_SOCIAL_POSTS) -
                     params={"q": query, "sort": "new", "t": "week", "limit": limit},
                     headers={**_HEADERS, "Authorization": f"Bearer {token}"},
                 )
-            else:  # keyless public endpoint — same listing schema
+            else:  # keyless public endpoint, same listing schema
                 resp = await client.get(
                     "https://www.reddit.com/search.json",
                     params={"q": query, "sort": "new", "t": "week", "limit": limit},
@@ -156,12 +143,7 @@ async def fetch_reddit_posts(query: str, limit: int = config.MAX_SOCIAL_POSTS) -
     return parse_reddit_children(children, limit)
 
 
-# ---------------------------------------------------------------------------
-# Bluesky (public AppView search — keyless)
-# ---------------------------------------------------------------------------
-
-# api.bsky.app serves searchPosts keyless; the public.api.bsky.app mirror
-# 403s some clients (verified 2026-07-15).
+# api.bsky.app serves searchPosts keyless; the public.api.bsky.app mirror 403s some clients.
 BSKY_SEARCH_URL = "https://api.bsky.app/xrpc/app.bsky.feed.searchPosts"
 
 
@@ -171,7 +153,7 @@ def parse_bluesky_posts(body: dict, limit: int) -> list[dict]:
     for row in body.get("posts") or []:
         record = row.get("record") or {}
         text = (record.get("text") or "").strip()
-        uri = row.get("uri") or ""  # at://did:plc:xxx/app.bsky.feed.post/rkey
+        uri = row.get("uri") or ""
         handle = (row.get("author") or {}).get("handle") or ""
         if not text:
             continue
@@ -203,11 +185,6 @@ async def fetch_bluesky_posts(query: str, limit: int = config.MAX_SOCIAL_POSTS) 
             return parse_bluesky_posts(resp.json() or {}, limit)
     except (httpx.HTTPError, ValueError):
         return []
-
-
-# ---------------------------------------------------------------------------
-# Aggregate
-# ---------------------------------------------------------------------------
 
 
 async def gather_social(event_id: str, query: str, limit: int = config.MAX_SOCIAL_POSTS) -> dict:

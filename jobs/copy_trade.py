@@ -1,10 +1,5 @@
-"""Copy trading — mirror new positions of followed Smart Money wallets.
-
-For every wallet anyone follows: fetch its current on-chain positions, and
-paper-buy the same side of any position we haven't mirrored yet (fixed
-small size, capped per run). Mirrored keys are remembered so a position is
-copied at most once; exits are handled by our own risk manager, not the
-whale's (independent stop-losses).
+"""Mirror new positions of followed Smart Money wallets: paper-buy the same side
+once per position, capped per run. Exits use our own risk manager, not theirs.
 
 Usage:
     python -m jobs.copy_trade [--dry-run]
@@ -24,8 +19,8 @@ from backend.sim.risk import strategies_allowed
 
 
 def proportional_size(position_usd: float, whale_total_usd: float, bankroll: float) -> float:
-    """Mirror the whale's CONVICTION, not their dollars (pure): the position's
-    share of their book, applied to our bankroll, clamped to sane bounds."""
+    """Size by the whale's conviction: the position's share of their book applied
+    to our bankroll, clamped."""
     if whale_total_usd <= 0:
         return config.COPY_MIN_USD
     fraction = position_usd / whale_total_usd
@@ -33,8 +28,7 @@ def proportional_size(position_usd: float, whale_total_usd: float, bankroll: flo
 
 
 def wallet_gate(positions: list[dict]) -> bool:
-    """Only mirror wallets whose current book is in profit (pure). A whale
-    bleeding across their open positions is not a signal worth copying."""
+    """Only mirror wallets whose current book is in profit."""
     if not positions:
         return False
     return sum(p.get("pnl") or 0 for p in positions) >= 0
@@ -55,8 +49,7 @@ async def mirror_position(wallet: str, pos: dict, size_usd: float) -> bool:
         RunContext(), market, priced,
         size_usd=size_usd, strategy="copy",
     )
-    # only a real fill counts as mirrored — a no-fill (empty book) stays
-    # unrecorded so the next run can retry it
+    # only a real fill counts as mirrored; a no-fill retries next run
     if fill is not None:
         supabase_client.record_mirrored(wallet, pos["slug"], pos["outcome"], fill.position_id)
     return fill is not None
@@ -78,7 +71,7 @@ async def main_async(dry_run: bool) -> None:
     wallets = supabase_client.distinct_followed_wallets()
     print(f"followed wallets: {len(wallets)}")
     copied = 0
-    attempts = 0  # a no-fill can retry next run, but must not eat the budget
+    attempts = 0  # no-fills retry, but must not exhaust the budget
     max_attempts = config.COPY_TRADES_PER_JOB * 2
     for wallet in wallets:
         if copied >= config.COPY_TRADES_PER_JOB or attempts >= max_attempts:
@@ -92,7 +85,7 @@ async def main_async(dry_run: bool) -> None:
             if copied >= config.COPY_TRADES_PER_JOB or attempts >= max_attempts:
                 break
             if not pos["slug"] or pos["size_usd"] < 100:
-                continue  # ignore dust — only mirror meaningful convictions
+                continue  # ignore dust
             if supabase_client.already_mirrored(wallet, pos["slug"], pos["outcome"]):
                 continue
             size = proportional_size(pos["size_usd"], whale_total, supabase_client.current_bankroll())

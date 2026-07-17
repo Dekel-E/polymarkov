@@ -3,12 +3,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Markdown from "@/components/Markdown";
 
-/**
- * Shared chat scaffold for DeskChat / MarketChat / StrategyChat: message
- * state, history snapshotting, scroll, bubbles, input row. Variants supply
- * the transport (`send`) and optional extras renderers for assistant
- * bubbles (market links, gathered badges, citations, applied diffs).
- */
+// Shared chat scaffold for DeskChat / MarketChat / StrategyChat. Variants
+// supply the transport and optional extras renderers for assistant bubbles.
 
 export interface ChatTransportResult<E> {
   content: string;
@@ -148,7 +144,7 @@ export default function ChatPanel<E>({
   );
 }
 
-/** Shared "searched fresh intel" badge (DeskChat + MarketChat). */
+/** "Searched fresh intel" badge. */
 export function GatheredBadge({
   gathered,
 }: {
@@ -164,7 +160,7 @@ export function GatheredBadge({
   );
 }
 
-/** Shared citations list (DeskChat + MarketChat). */
+/** Citations list. */
 export function CitationsList({ citations }: { citations?: { title: string; url: string }[] }) {
   if (!citations || citations.length === 0) return null;
   return (

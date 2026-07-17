@@ -1,17 +1,14 @@
 import type { Config } from "tailwindcss";
 
-// "Luminous Terminal" token system: cool near-black ground, hairline panels,
-// one electric-cyan signal accent for controls, live data and markers.
-// Green/red stay reserved for data semantics (YES/NO, PnL) from Tailwind's
-// emerald/red; amber is kept only for warnings. Token NAMES are stable
-// (desk-* / instrument) so the whole surface recolors from here.
+// Design tokens. desk-* names stay stable so the surface recolors from here.
+// Green/red are reserved for data semantics (YES/NO, PnL); amber for warnings.
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
         desk: {
-          deep: "#06080C", // page ground — cool near-black
+          deep: "#06080C", // page ground
           panel: "#0B0F16", // cards
           raised: "#131926", // hover / raised surfaces
           line: "#1B2531", // hairlines & borders

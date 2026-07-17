@@ -1,9 +1,7 @@
-"""Vercel serverless entrypoint. Thin: all real logic lives in backend/.
+"""Vercel serverless entrypoint. All real logic lives in backend/.
 
-NOTE (course requirement): NO auth anywhere — no login, no signup, no
-guards. GUI-directed actions (manual trades, watchlist, followed wallets)
-belong to one shared anonymous desk (config.DESK_USER_ID); user_id NULL
-remains the agent's own book.
+No auth anywhere. GUI-directed actions belong to one shared desk
+(config.DESK_USER_ID); user_id NULL remains the agent's own book.
 """
 
 import asyncio
@@ -51,10 +49,8 @@ def _load_examples() -> list:
 
 @app.get("/api/agent_info")
 def agent_info() -> dict:
-    # Everything the agent can do lives in backend/agent/registry/ — tools.py
-    # (formal module/tool specs) + prompts/*.txt (system prompts). Both are
-    # read at runtime so these docs can never drift from behavior;
-    # prompt_examples are frozen real runs (course schema).
+    # tools.py (module/tool specs) and prompts/*.txt are read at runtime so
+    # these docs never drift from behavior; prompt_examples are frozen runs.
     from backend.agent.registry import MODULES
 
     prompt_files = sorted(config.PROMPTS_DIR.glob("*.txt"))
@@ -103,7 +99,7 @@ def model_architecture():
     return FileResponse(config.ARCHITECTURE_PNG, media_type="image/png")
 
 
-# --- GUI support endpoints (not part of the graded four) ---------------------
+# GUI support endpoints
 
 
 _markets_cache: dict = {"ts": 0.0, "limit": 0, "markets": []}
@@ -677,8 +673,7 @@ async def market_detail(slug: str) -> dict:
 
 @app.post("/api/execute")
 async def execute(body: ExecuteIn, ui: bool = False) -> JSONResponse:
-    """Course envelope: exactly {status, error, response, steps} at the top
-    level (the spec says "must match exactly these top-level fields"). The
+    """Returns exactly {status, error, response, steps} at the top level. The
     GUI opts into the extra structured dossier payload with ?ui=1."""
     try:
         out = await run_pipeline(body.prompt, history=body.history[:12])

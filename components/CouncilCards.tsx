@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import CountUp from "@/components/CountUp";
 import type { DossierUi, PersonaOpinion } from "@/lib/types";
 
-/* --- persona emblems: line-art, 24-grid, currentColor (matches the desk) --- */
+// persona emblems: line-art, 24-grid, currentColor
 
 function BullEmblem() {
   return (
@@ -93,8 +93,7 @@ function Confidence({ level, text }: { level: PersonaOpinion["confidence"]; text
 
 function Card({ persona, opinion, index }: { persona: Persona; opinion: PersonaOpinion; index: number }) {
   const target = Math.min(97, Math.max(3, opinion.estimated_probability * 100));
-  // dial marker slides from the 50% axis to the estimate on mount (one motion
-  // moment per card; neutralized under prefers-reduced-motion)
+  // dial marker slides from the 50% axis to the estimate on mount; neutralized under prefers-reduced-motion
   const [pos, setPos] = useState(50);
   useEffect(() => {
     const id = requestAnimationFrame(() => setPos(target));
@@ -161,7 +160,7 @@ export default function CouncilCards({ council }: { council: NonNullable<Dossier
   const present = PERSONAS.filter((p) => council[p.key]);
   if (!present.length) return null;
 
-  // where the four land relative to each other = how much they disagree
+  // spread of the four estimates = how much they disagree
   const probs = present.map((p) => council[p.key]!.estimated_probability * 100);
   const spread = Math.round(Math.max(...probs) - Math.min(...probs));
 

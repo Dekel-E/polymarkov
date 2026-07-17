@@ -1,8 +1,7 @@
 """Polymarket public API clients: Gamma (metadata) + CLOB (order book/prices).
 
-No auth required. Gamma returns `outcomes`, `outcomePrices`, `clobTokenIds`
-as stringified JSON arrays and numbers as strings — parse everything
-defensively. CLOB may return book levels in any order — always sort.
+No auth. Gamma returns outcomes/outcomePrices/clobTokenIds as stringified JSON
+and numbers as strings, so parse defensively. CLOB book levels are unsorted.
 """
 
 from __future__ import annotations
@@ -19,16 +18,11 @@ from backend.agent.types import MarketState
 GAMMA_BASE = "https://gamma-api.polymarket.com"
 CLOB_BASE = "https://clob.polymarket.com"
 
-_HEADERS = {"User-Agent": "polymarkov/0.1 (course project)"}
+_HEADERS = {"User-Agent": "polymarkov/0.1"}
 
 
 def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(timeout=config.HTTP_TIMEOUT_S, headers=_HEADERS)
-
-
-# ---------------------------------------------------------------------------
-# Parsing helpers
-# ---------------------------------------------------------------------------
 
 
 def _json_list(value: Any) -> list:
@@ -59,20 +53,18 @@ def parse_market_ref(text: str) -> Optional[str]:
     )
     if not match:
         return None
-    # /event/<event-slug>/<market-slug> -> prefer the market slug
+    # prefer the market slug over the event slug
     return match.group(2) or match.group(1)
 
 
-# Gamma's `category` field is empty for most markets. Infer one from the
-# question text so the dashboard can group markets and fees use the right
-# rate. First match wins; keep phrases specific to avoid false positives.
+# Gamma's category is usually empty; infer from question text. First match wins.
 _CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     ("sports", (
         "world cup", "fifa", "uefa", "champions league", "premier league", "la liga",
         "nba", "nfl", "nhl", "mlb", "super bowl", "olympic", "grand slam", "wimbledon",
         "us open", "f1", "grand prix", "ufc", "heavyweight", "playoff", "finals",
         "win the match", "relegat", "world series", "stanley cup", "ballon d'or",
-        # match-market phrasings ("Norway vs. England: O/U 2.5", "Exact Score")
+        # match-market phrasings
         " vs. ", " vs ", "exact score", "both teams to score", "o/u", "to advance",
         "in a draw", "clean sheet", "first goalscorer", "hat-trick", "penalty shootout",
     )),
@@ -175,11 +167,6 @@ def normalize_market(raw: dict) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# Gamma queries
-# ---------------------------------------------------------------------------
-
-
 async def list_markets(
     limit: int = 100,
     offset: int = 0,
@@ -203,8 +190,7 @@ async def list_markets(
 
 
 async def get_trending_markets(limit: int = 20) -> list[dict]:
-    """Top active markets by 24h volume. Pages past Gamma's 100-per-request
-    cap so category groups deeper than the top 100 still fill up."""
+    """Top active markets by 24h volume, paging past Gamma's 100-per-request cap."""
     markets: list[dict] = []
     seen: set[str] = set()
     for offset in range(0, limit, 100):
@@ -224,8 +210,7 @@ async def list_new_markets(limit: int = 30) -> list[dict]:
 
 
 async def list_events(limit: int = 20, neg_risk_only: bool = False) -> list[dict]:
-    """Active events with their markets. negRisk events are mutually
-    exclusive (exactly one outcome wins) — the precondition for dutch books."""
+    """Active events with their markets. negRisk events are mutually exclusive (one winner)."""
     async with _client() as client:
         resp = await client.get(
             f"{GAMMA_BASE}/events",
@@ -291,7 +276,7 @@ async def get_market(slug_or_id: str) -> Optional[dict]:
         rows = resp.json()
         if rows:
             return normalize_market(rows[0])
-        # Maybe it's an event slug — take the highest-volume market in it.
+        # maybe an event slug; take its highest-volume market
         resp = await client.get(f"{GAMMA_BASE}/events", params={"slug": slug_or_id})
         resp.raise_for_status()
         events = resp.json()
@@ -302,11 +287,6 @@ async def get_market(slug_or_id: str) -> Optional[dict]:
         if not markets:
             return None
         return max(markets, key=lambda m: m["volume24h"])
-
-
-# ---------------------------------------------------------------------------
-# CLOB: order book + price history
-# ---------------------------------------------------------------------------
 
 
 async def get_order_book(token_id: str) -> dict:
@@ -337,22 +317,13 @@ async def get_price_history(token_id: str, interval: str = "1w", fidelity: int =
         return [(_to_float(p.get("t")), _to_float(p.get("p"))) for p in points]
 
 
-# ---------------------------------------------------------------------------
-# Pure book math (unit-tested; reused by PaperBroker in Phase 7)
-# ---------------------------------------------------------------------------
-
-
 def depth_usd(levels: list[tuple[float, float]]) -> float:
     """Total notional (price * size) resting on the given side of the book."""
     return sum(price * size for price, size in levels)
 
 
 def walk_book(asks: list[tuple[float, float]], size_usd: float) -> dict:
-    """Simulate a taker buy of `size_usd` against ask levels (best-first).
-
-    Returns vwap, shares, filled_usd, levels_consumed, and slippage vs the
-    best ask (in probability points and bps of best ask).
-    """
+    """Simulate a taker buy of size_usd against ask levels (best-first)."""
     if size_usd <= 0 or not asks:
         return {
             "filled_usd": 0.0, "shares": 0.0, "vwap": None,
@@ -383,11 +354,6 @@ def walk_book(asks: list[tuple[float, float]], size_usd: float) -> dict:
         "slippage_bps": round(slippage_pts / best_ask * 10_000, 2) if best_ask else 0.0,
         "exhausted": remaining > 1e-9,
     }
-
-
-# ---------------------------------------------------------------------------
-# Combined market state for the pipeline / market detail endpoint
-# ---------------------------------------------------------------------------
 
 
 async def get_market_state(slug_or_id: str) -> Optional[MarketState]:

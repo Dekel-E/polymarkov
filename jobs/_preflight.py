@@ -1,5 +1,4 @@
-"""Shared job preflight: say exactly which credentials are present/missing
-(names only, never values) so a red Actions run diagnoses itself."""
+"""Report which credentials are present or missing (names only, never values)."""
 
 from __future__ import annotations
 
@@ -25,7 +24,7 @@ def report() -> dict:
 
 
 def require(*names: str) -> None:
-    """Exit 1 with a clear message when required credentials are missing."""
+    """Exit 1 if any required credential is missing."""
     checks = report()
     missing = [n for n in names if not checks.get(n, False)]
     if missing:

@@ -1,13 +1,9 @@
 """Paper market making: quote both sides, capture the spread, manage inventory.
 
-Fill simulation is honest and conservative: a resting limit order counts as
-filled only if the market actually TRADED THROUGH its price after placement
-(from CLOB price history). Fills map onto the existing position model:
-- bid filled  -> BUY_YES opened at our bid (strategy 'market_making')
-- ask filled  -> close our open MM long at the ask (spread captured), or
-                 open BUY_NO at (1 - ask) when we have no inventory
-Inventory risk is the binding constraint: hard per-market cap, quote skew
-against inventory, and no quoting near resolution (binary total-loss zone).
+A resting order counts as filled only if the market traded through its price
+after placement. A bid fill opens a BUY_YES long; an ask fill closes that long
+(spread captured) or opens BUY_NO when flat. Inventory risk is the binding
+constraint: per-market cap, quote skew, no quoting near resolution.
 """
 
 from __future__ import annotations
@@ -21,7 +17,7 @@ from backend.data import supabase_client
 
 
 def eligible_to_quote(market: dict, hours_to_end: Optional[float]) -> bool:
-    """Which markets are safe to make (pure)."""
+    """Which markets are safe to make."""
     if not market.get("yes_token_id"):
         return False
     if not (config.MM_MIN_MID <= market["mid"] <= config.MM_MAX_MID):
@@ -32,12 +28,7 @@ def eligible_to_quote(market: dict, hours_to_end: Optional[float]) -> bool:
 
 
 def make_quote(mid: float, inventory_usd: float) -> Optional[tuple[float, float]]:
-    """(bid, ask) around mid, skewed against inventory (pure).
-
-    Long inventory shifts both quotes DOWN: our ask gets easier to hit (we
-    unload) and our bid harder (we stop accumulating). At the cap we stop
-    bidding entirely by returning a bid of 0 handled by the caller.
-    """
+    """(bid, ask) around mid, skewed down against long inventory."""
     frac = max(-1.0, min(1.0, inventory_usd / config.MM_MAX_INVENTORY_USD))
     skew = frac * config.MM_INVENTORY_SKEW
     bid = round(mid - config.MM_HALF_SPREAD - skew, 3)
@@ -48,11 +39,7 @@ def make_quote(mid: float, inventory_usd: float) -> Optional[tuple[float, float]
 
 
 def reward_score(mid: float, bid: float, ask: float, size_usd: float) -> float:
-    """Simulated Polymarket liquidity-rewards score for one resting period.
-
-    Their program scores quotes quadratically by closeness to the midpoint:
-    being 1c away earns far more than 3c. Per side within the qualifying
-    band S: ((S - d) / S)^2 * size (pure)."""
+    """Simulated liquidity-rewards score: ((S - d) / S)^2 * size per side within band S."""
     S = config.MM_REWARD_MAX_SPREAD
     score = 0.0
     for distance in (mid - bid, ask - mid):
@@ -62,15 +49,14 @@ def reward_score(mid: float, bid: float, ask: float, size_usd: float) -> float:
 
 
 def needs_requote(mid_now: float, mid_at_placement: Optional[float]) -> bool:
-    """Live-watcher rule: the mid drifted away from our quotes (pure)."""
+    """True when the mid drifted far enough from our quotes to requote."""
     if mid_at_placement is None:
         return False
     return abs(mid_now - mid_at_placement) >= config.MM_REQUOTE_DRIFT
 
 
 def quote_fills(bid: float, ask: float, prices_after: list[float]) -> list[str]:
-    """Which sides the market traded through (pure). Conservative: touching
-    the price counts; no partial fills."""
+    """Which sides the market traded through. Touching the price counts; no partials."""
     fills = []
     if prices_after and min(prices_after) <= bid:
         fills.append("bid")

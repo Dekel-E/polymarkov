@@ -25,7 +25,7 @@ export default function Home() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-14 px-4 py-10 md:px-8">
-      {/* hero — headline paired with the agent console */}
+      {/* hero */}
       <section className="grid items-center gap-8 lg:grid-cols-[1.05fr_1fr]">
         <header className="space-y-5">
           <div

@@ -1,9 +1,5 @@
-"""Relation builder — maintain the correlation graph (ONE LLM call, daily).
-
-Embeds top market questions, pairs similar ones across events, and asks the
-model to classify strict logical relations (implies / excludes / none).
-Confident relations are stored; the arbitrage scanner checks them
-mechanically on every scan.
+"""Maintain the correlation graph: pair similar markets, classify logical
+relations (implies / excludes / none) with one LLM call, store confident ones.
 
 Usage:
     python -m jobs.build_relations [--dry-run]

@@ -1,30 +1,4 @@
-"""The conversational layer: MarketChat + DeskChat.
-
-MarketChat (POST /api/market/chat) — grounded Q&A on ONE market, at most 2
-LLM calls per question:
-1. plan (prompts/market_chat_planner.txt): does the question need fresh
-   intelligence, and which search queries?
-2. gather (deterministic, same fetchers the pipeline tools use): Google News
-   + DuckDuckGo web search per query, socials (Polymarket comments, Bluesky,
-   Reddit). Found articles are INDEXED into Supabase tagged with the market
-   slug (embedded=False) — the NewsIndexer embeds them into Pinecone on its
-   next pass, so chat discoveries feed future dossiers too.
-3. answer (prompts/market_chat.txt): market state + dossier + gathered
-   sources + chat history -> answer with citations.
-
-DeskChat (POST /api/chat) — the global entry point. One router LLM call
-classifies the question, then:
-- market       -> resolve via Gamma search and delegate to MarketChat
-- portfolio    -> deterministic fact-gathering from Supabase + one grounded
-                 answer call
-- control      -> delegate to StrategyChat (instructions become a settings
-                 patch, whitelisted + clamped by code)
-- meta         -> the registry-built self-description (zero further calls)
-- out_of_scope -> friendly refusal + suggested Polymarket markets (zero LLM)
-
-StrategyChat (POST /api/strategy/chat) — the Strategy Desk control channel,
-also reachable through DeskChat's control route. ONE LLM call per turn.
-"""
+"""Conversational layer: MarketChat, DeskChat, StrategyChat."""
 
 from __future__ import annotations
 
@@ -43,13 +17,8 @@ DESK_CHAT = "DeskChat"
 STRATEGY_CHAT = "StrategyChat"
 
 
-# ---------------------------------------------------------------------------
-# MarketChat: context assembly
-# ---------------------------------------------------------------------------
-
-
 def _dossier_context(payload: Optional[dict]) -> Optional[dict]:
-    """Slim dossier context for the answer call (drop history/steps bloat)."""
+    """Slim dossier context for the answer call."""
     if not payload:
         return None
     ui = payload.get("ui") or {}
@@ -69,7 +38,7 @@ def _dossier_context(payload: Optional[dict]) -> Optional[dict]:
 
 def _market_context(market) -> dict:
     m = market.model_dump()
-    m.pop("price_history_7d", None)  # hundreds of points — noise for Q&A
+    m.pop("price_history_7d", None)  # too noisy for Q&A
     m.pop("yes_token_id", None)
     return m
 
@@ -86,11 +55,6 @@ def _clip_history(history: list[dict]) -> list[dict]:
     return turns[-config.CHAT_MAX_HISTORY_TURNS :]
 
 
-# ---------------------------------------------------------------------------
-# MarketChat: gathering (deterministic tools)
-# ---------------------------------------------------------------------------
-
-
 async def _gather(
     slug: str, plan: dict, event_id: str, category: str = "other"
 ) -> tuple[list[dict], list[dict], int]:
@@ -103,8 +67,7 @@ async def _gather(
         tasks.append(news.google_news_articles(q, max_records=config.CHAT_NEWS_RESULTS))
         if config.WEB_SEARCH_ENABLED:
             tasks.append(news.web_search(q, max_results=config.CHAT_WEB_RESULTS))
-    # curated RSS + Wikipedia on the first query (keyless, work where GDELT
-    # is IP-blocked); both get indexed with the news below
+    # keyless RSS + Wikipedia fallback, indexed with the news below
     if news_queries:
         if config.RSS_ENABLED:
             tasks.append(news.rss_articles(news_queries[0], news.rss_feeds_for(category)))
@@ -144,8 +107,7 @@ async def _gather(
             if len(posts) >= config.CHAT_SOCIAL_POSTS:
                 break
 
-    # read the top pages so answers cite substance, not headlines (Wikipedia
-    # already carries its intro text, so it is used verbatim, not re-crawled)
+    # read the top pages so answers cite substance, not headlines
     async def _excerpt(article: dict) -> str:
         if article.get("fetched_text"):
             return article["fetched_text"][: config.EXCERPT_MAX_CHARS]
@@ -156,8 +118,7 @@ async def _gather(
         for article, text in zip(articles[:3], texts):
             article["excerpt"] = text
 
-    # index what was found: tagged with this market, embedded on the news
-    # indexer's next pass
+    # index what was found, tagged with this market
     indexed = 0
     if articles:
         try:
@@ -168,11 +129,6 @@ async def _gather(
         except Exception:
             indexed = 0
     return articles, posts, indexed
-
-
-# ---------------------------------------------------------------------------
-# MarketChat: entry point
-# ---------------------------------------------------------------------------
 
 
 async def market_chat(slug: str, question: str, history: list[dict]) -> dict:
@@ -196,7 +152,7 @@ async def market_chat(slug: str, question: str, history: list[dict]) -> dict:
     market_ctx = _market_context(market) if market else (dossier_payload.get("ui") or {}).get("market") or {}
     dossier_ctx = _dossier_context(dossier_payload)
 
-    # 1. plan — does this question need fresh intel?
+    # 1. plan: does this question need fresh intel?
     if dossier_ctx:
         held = (
             f"dossier: {dossier_ctx['age_minutes']} min old, "
@@ -227,7 +183,7 @@ async def market_chat(slug: str, question: str, history: list[dict]) -> dict:
             slug, plan, market_ctx.get("event_id", ""), market_ctx.get("category", "other")
         )
 
-    # 3. answer, grounded in everything held + gathered
+    # 3. answer, grounded in everything held and gathered
     answer_input = json.dumps(
         {
             "time": time_context(market_ctx.get("end_date")),
@@ -271,11 +227,6 @@ async def market_chat(slug: str, question: str, history: list[dict]) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# DeskChat: portfolio facts (deterministic)
-# ---------------------------------------------------------------------------
-
-
 def _portfolio_facts() -> dict:
     """Everything the desk knows about itself, trimmed for one prompt."""
     from backend.sim.portfolio import get_portfolio
@@ -307,15 +258,12 @@ def _portfolio_facts() -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# StrategyChat: natural-language control of the Strategy Desk
-# ---------------------------------------------------------------------------
-
-
 def _settings_diff(before: dict, after: dict) -> dict:
-    """Flat old->new map of what actually changed (ground truth for the UI).
-    The halt section reports only `active` — reason/at are bookkeeping that
-    would inflate one user action into three 'changes'."""
+    """Flat old->new map of what actually changed.
+
+    The halt section reports only `active`; reason/at are bookkeeping that
+    would inflate one user action into three changes.
+    """
     diff: dict = {}
     for section in ("strategies", "risk", "halt", "funds"):
         b, a = before.get(section) or {}, after.get(section) or {}
@@ -327,9 +275,8 @@ def _settings_diff(before: dict, after: dict) -> dict:
 
 
 async def strategy_chat(question: str, history: list[dict]) -> dict:
-    """One Strategy Desk chat turn: answer, and apply any instructed settings
-    change (whitelisted + clamped by code — the LLM proposes, code disposes).
-    ONE LLM call per turn. Never raises for expected cases."""
+    """One Strategy Desk chat turn. Applies any instructed settings change,
+    whitelisted and clamped by code. Never raises for expected cases."""
     ctx = RunContext()
     question = question.strip()[: config.CHAT_MAX_QUESTION_CHARS]
     if not question:
@@ -379,7 +326,7 @@ async def strategy_chat(question: str, history: list[dict]) -> dict:
         if clean:
             try:
                 after = await asyncio.to_thread(supabase_client.update_agent_settings, clean)
-            except Exception:  # noqa: BLE001 — keep the "never raises" contract
+            except Exception:  # noqa: BLE001
                 return {
                     "answer": answer + "\n\n_(the settings write failed — nothing was changed; try again)_",
                     "applied": None, "settings": None, "error": None,
@@ -399,11 +346,6 @@ async def strategy_chat(question: str, history: list[dict]) -> dict:
             answer += "\n\n_(no change applied — the requested update was outside what I'm allowed to touch)_"
 
     return {"answer": answer, "applied": applied, "settings": settings, "error": None}
-
-
-# ---------------------------------------------------------------------------
-# DeskChat: entry point
-# ---------------------------------------------------------------------------
 
 
 async def desk_chat(question: str, history: list[dict]) -> dict:
@@ -448,8 +390,6 @@ async def desk_chat(question: str, history: list[dict]) -> dict:
         return result
 
     if route == "control":
-        # strategy-desk instruction: delegate to StrategyChat (its own LLM
-        # call proposes the patch; code whitelists, clamps and applies it)
         result = await strategy_chat(question, history)
         return {**result, "citations": [], "market": None}
 
@@ -467,7 +407,7 @@ async def desk_chat(question: str, history: list[dict]) -> dict:
         answer = str(answer_raw.get("answer", "")) if isinstance(answer_raw, dict) else str(answer_raw)
         return {"answer": answer, "citations": [], "market": None, "error": None}
 
-    # out_of_scope (or an unrecognized route): friendly refusal + suggestions
+    # out_of_scope or unrecognized route: refusal plus suggestions
     from backend.agent.orchestrator import REFUSAL_DEFAULT, suggest_markets
 
     keywords = [k for k in (route_raw.get("topic_keywords") or []) if isinstance(k, str)]

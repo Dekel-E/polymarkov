@@ -1,11 +1,8 @@
-"""Kalshi cross-venue client — keyless search with embedded live prices.
+"""Kalshi cross-venue client: keyless search with embedded live prices.
 
-The v1 search endpoint (api.elections.kalshi.com/v1/search/series) returns
-events with their markets' yes_bid/yes_ask/last_price embedded (in cents);
-the unauthenticated trade-api v2 strips prices, so search is the only call
-needed. Matching is conservative token overlap — no match beats a wrong
-match, since the council treats cross-venue odds as a second market prior.
-Degrades to None on any failure.
+The v1 search endpoint returns events with yes_bid/yes_ask/last_price embedded
+in cents; the unauthenticated v2 strips prices. Matching is conservative token
+overlap. Degrades to None on any failure.
 """
 
 from __future__ import annotations
@@ -18,7 +15,7 @@ import httpx
 from backend import config
 
 SEARCH_URL = "https://api.elections.kalshi.com/v1/search/series"
-_HEADERS = {"User-Agent": "polymarkov/0.1 (course project)", "Accept": "application/json"}
+_HEADERS = {"User-Agent": "polymarkov/0.1", "Accept": "application/json"}
 
 _STOPWORDS = {
     "will", "the", "a", "an", "of", "to", "in", "on", "at", "by", "be", "is",

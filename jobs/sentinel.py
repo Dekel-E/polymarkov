@@ -1,11 +1,5 @@
-"""Sentinel — the agent's perception loop (NO LLM calls, runs every ~30 min).
-
-Watches the world and files findings on the agenda for the worker to
-investigate, highest priority first:
-- big 24h price moves on liquid markets
-- held positions moving against their entry (thesis check candidates)
-- held/watched markets resolving within 48h
-- news bursts on held/watched markets (Google News, cheap)
+"""Perception loop (no LLM): scan for signals and file agenda items by priority
+— big 24h moves, positions moving against entry, near-resolution, news bursts.
 
 Usage:
     python -m jobs.sentinel [--dry-run]
@@ -23,7 +17,7 @@ from backend.data import news, polymarket, smart_money, supabase_client
 
 
 def price_move_items(markets: list[dict]) -> list[dict]:
-    """Liquid markets that moved hard in 24h (pure; unit-tested)."""
+    """Liquid markets that moved hard in 24h."""
     items = []
     for m in markets:
         change = m.get("one_day_change")
@@ -42,7 +36,7 @@ def price_move_items(markets: list[dict]) -> list[dict]:
 
 
 def position_risk_items(positions: list[dict], mid_by_slug: dict[str, float]) -> list[dict]:
-    """Open positions whose market moved against the entry (pure)."""
+    """Open positions whose market moved against the entry."""
     items = []
     for p in positions:
         mid = mid_by_slug.get(p["market_id"])
@@ -63,7 +57,7 @@ def position_risk_items(positions: list[dict], mid_by_slug: dict[str, float]) ->
 
 
 def near_resolution_items(markets: list[dict], tracked: set[str], now: Optional[datetime] = None) -> list[dict]:
-    """Held/watched markets resolving within the window (pure)."""
+    """Held/watched markets resolving within the window."""
     now = now or datetime.now(timezone.utc)
     items = []
     for m in markets:
@@ -86,10 +80,7 @@ def near_resolution_items(markets: list[dict], tracked: set[str], now: Optional[
 
 
 def news_lag_item(slug: str, headline_count: int, one_day_change: Optional[float]) -> dict:
-    """News burst classified by whether the price has reacted (pure).
-
-    The money window: news broke, price hasn't moved yet — that outranks
-    everything except protecting the book."""
+    """News burst, ranked higher when the price hasn't reacted yet."""
     if one_day_change is not None and abs(one_day_change) < config.NEWS_LAG_MAX_MOVE:
         return {
             "market_id": slug,
@@ -104,11 +95,8 @@ def news_lag_item(slug: str, headline_count: int, one_day_change: Optional[float
 
 
 def new_listing_items(markets: list[dict], now: Optional[datetime] = None) -> list[dict]:
-    """Freshly created markets — priced by whoever showed up first (pure).
-
-    Micro-markets (Polymarket's auto-generated 5/15-minute up-downs) are
-    excluded via a minimum-lifetime rule: they'd resolve before the
-    pipeline even finished analyzing them."""
+    """Freshly created markets. Excludes micro-markets (5/15-min up-downs) via a
+    minimum-lifetime rule — they'd resolve before analysis finished."""
     now = now or datetime.now(timezone.utc)
     items = []
     for m in markets:
@@ -140,7 +128,7 @@ def new_listing_items(markets: list[dict], now: Optional[datetime] = None) -> li
 def whale_print_items(
     trades_by_slug: dict[str, list[dict]], since_ts: float
 ) -> list[dict]:
-    """Single fills big enough to be information (pure)."""
+    """Single fills big enough to be information."""
     items = []
     for slug, trades in trades_by_slug.items():
         big = [
@@ -167,7 +155,7 @@ async def news_burst_items(
     question_by_slug: dict[str, str],
     change_by_slug: dict[str, Optional[float]],
 ) -> list[dict]:
-    """Held/watched markets with a burst of fresh headlines (few API calls)."""
+    """Held/watched markets with a burst of fresh headlines."""
     items = []
     for slug in tracked_slugs[:10]:  # stay polite
         question = question_by_slug.get(slug)
@@ -194,7 +182,7 @@ async def main_async(dry_run: bool) -> None:
     watched = set(supabase_client.distinct_watched_market_ids())
     tracked = held | watched
 
-    # on-chain flow: recent big prints on tracked markets (few API calls)
+    # recent big prints on tracked markets
     since_ts = datetime.now(timezone.utc).timestamp() - config.WHALE_LOOKBACK_MIN * 60
     flow_slugs = [s for s in sorted(tracked) if condition_by_slug.get(s)][:8]
     trade_batches = await asyncio.gather(

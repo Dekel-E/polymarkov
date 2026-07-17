@@ -5,6 +5,7 @@ venv/
 __pycache__/
 *.pyc
 *.egg-info/
+CLAUDE.md
 
 # next.js / build artifacts
 .next/

@@ -1,8 +1,5 @@
-"""Daily job: settle paper positions on resolved markets and grow precedents.
-
-For every open position whose market has resolved: set resolved_outcome,
-compute PnL. Every resolved market we tracked also becomes a precedent row
-(+ vector in the Pinecone `precedents` namespace) for base-rate context.
+"""Settle paper positions on resolved markets and turn resolved markets into
+precedent rows (+ vectors) for base-rate context.
 
 Usage:
     python -m jobs.resolve_positions [--dry-run]

@@ -50,7 +50,7 @@ export default function DossierView({
         <Verdict data={ui.verdict} market={ui.market ?? liveMarket ?? undefined} />
       )}
 
-      {/* home-page runs: link to the market's case file instead of repeating it */}
+      {/* home-page runs link to the market's case file */}
       {ui?.market && !liveMarket && (
         <Link
           href={`/market/${ui.market.slug}`}
@@ -90,15 +90,14 @@ export default function DossierView({
         </section>
       )}
 
-      {/* refusals / candidate lists / anything without structured sections
-          render the markdown response directly */}
+      {/* responses without structured sections render as markdown */}
       {result.response && !hasSections && (
         <div className="rounded-2xl border border-desk-line bg-desk-panel/60 p-5">
           <Markdown>{result.response}</Markdown>
         </div>
       )}
 
-      {/* appendix: the graded artifacts, folded — humans read the sections above */}
+      {/* appendix: graded artifacts, folded */}
       {(result.response || result.steps.length > 0) && hasSections && (
         <details open={appendixOpen} className="group rounded-2xl border border-desk-line bg-desk-panel/40">
           <summary className="cursor-pointer select-none px-5 py-3.5 font-mono text-xs font-semibold uppercase tracking-wider text-desk-dim transition hover:text-desk-ink">

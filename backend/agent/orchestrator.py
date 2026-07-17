@@ -1,9 +1,7 @@
-"""Pipeline orchestrator (§3): exactly 7 LLM calls + tool steps per execute.
+"""Pipeline orchestrator: wires the stages together per execute.
 
-Order: QueryPlanner -> MarketResolver -> (EvidenceRetriever ∥ SocialScanner)
--> SentimentScorer -> Council×4 (concurrent) -> pricing.py -> Judge
-[-> PaperBroker, Phase 7]. Any failure returns the error envelope with the
-steps collected so far (always HTTP 200).
+Any failure returns the error envelope with the steps collected so far
+(always HTTP 200).
 """
 
 from __future__ import annotations
@@ -40,9 +38,8 @@ REFUSAL_DEFAULT = (
 
 
 def self_description() -> str:
-    """Answer 'who are you / what can you do' from the registry — the same
-    specs served by /api/agent_info, so this can never drift from the code.
-    Deterministic: costs zero LLM calls beyond the QueryPlanner."""
+    """Answer 'who are you / what can you do' from the registry. Same specs
+    as /api/agent_info, so it can't drift from the code. Zero LLM calls."""
     from backend.agent.registry import MODULES
 
     llm = [m for m in MODULES if m["kind"] == "llm"]
@@ -109,7 +106,7 @@ async def run_pipeline(user_prompt: str, history: list[dict] | None = None) -> E
             response=None,
             steps=ctx.steps,
         )
-    except Exception as exc:  # noqa: BLE001 — envelope contract: never raise
+    except Exception as exc:  # noqa: BLE001
         return ExecuteOut(
             status="error",
             error=f"{type(exc).__name__}: {exc}",
@@ -119,8 +116,7 @@ async def run_pipeline(user_prompt: str, history: list[dict] | None = None) -> E
 
 
 def _planner_input(user_prompt: str, history: list[dict]) -> str:
-    """Prepend recent turns so follow-ups ('what about the resolution risk?')
-    resolve against the market discussed before."""
+    """Prepend recent turns so follow-ups resolve against the prior market."""
     if not history:
         return user_prompt
     lines = ["== PREVIOUS CONVERSATION (context for resolving follow-ups) =="]
@@ -134,8 +130,8 @@ def _planner_input(user_prompt: str, history: list[dict]) -> str:
 
 
 async def suggest_markets(entities: list[str], fallback_query: str = "") -> str:
-    """Helpful refusal: turn an out-of-scope topic into Polymarket markets the
-    agent CAN analyze (deterministic Gamma search, zero LLM calls)."""
+    """Turn an out-of-scope topic into Polymarket markets the agent can
+    analyze. Deterministic Gamma search, zero LLM calls."""
     from backend.data import polymarket
 
     query = " ".join(entities[:3]).strip() or fallback_query.strip()
@@ -174,27 +170,23 @@ def _serve_cached(payload: dict) -> ExecuteOut:
 
 
 async def _run(ctx: RunContext, user_prompt: str, started: float, history: list[dict]) -> ExecuteOut:
-    # 0. Cache fast path: templated GUI prompts name the market outright,
-    #    so a fresh dossier can be served with ZERO LLM calls.
+    # Cache fast path: templated GUI prompts name the market outright, so a
+    # fresh dossier can be served without any LLM calls.
     fast_slug = intel_cache.slug_from_prompt(user_prompt)
     if fast_slug:
         cached = await asyncio.to_thread(intel_cache.get, fast_slug)
         if cached:
             return _serve_cached(cached)
 
-    # 1. QueryPlanner (LLM #1) — sees recent turns so follow-ups resolve
     plan = await pipeline.plan_query(ctx, _planner_input(user_prompt, history))
-    if plan.intent == "meta":  # "who are you / what can you do" — answered
-        return ExecuteOut(  # deterministically from the agent registry
-            status="ok", response=self_description(), steps=ctx.steps
-        )
+    if plan.intent == "meta":
+        return ExecuteOut(status="ok", response=self_description(), steps=ctx.steps)
     if not plan.in_scope:
         refusal = (plan.reason or REFUSAL_DEFAULT) + await suggest_markets(
             plan.entities, plan.market_query or ""
         )
         return ExecuteOut(status="ok", response=refusal, steps=ctx.steps)
 
-    # 2. MarketResolver (tool)
     resolved = await pipeline.resolve_market(ctx, plan)
     if resolved.market is None:
         lines = ["I found several matching markets — please pick one and re-run:", ""]
@@ -206,35 +198,31 @@ async def _run(ctx: RunContext, user_prompt: str, started: float, history: list[
         return ExecuteOut(status="ok", response="\n".join(lines), steps=ctx.steps)
     market = resolved.market
 
-    # 2b. Cache check post-resolve (free-text prompts). Trades bypass: the
-    #     user asked for an action, not just the analysis.
+    # Cache check post-resolve for free-text prompts. Trades bypass the cache.
     if not plan.wants_trade:
         cached = await asyncio.to_thread(intel_cache.get, market.slug)
         if cached:
             return _serve_cached(cached)
 
-    # 3+4. EvidenceRetriever ∥ SocialScanner ∥ CrossVenueScanner (tools, concurrent)
+    # Evidence, social and cross-venue tools run concurrently.
     evidence, pulse, venue = await asyncio.gather(
         pipeline.retrieve_evidence(ctx, plan, market),
         pipeline.scan_social(ctx, plan, market),
         pipeline.scan_cross_venue(ctx, market),
     )
 
-    # 5. SentimentScorer (LLM #2, one batched call)
     await pipeline.score_sentiment(ctx, market, evidence.clusters, pulse)
 
-    # 6. Council (LLM #3-#6, concurrent, identical context)
     shared_context = council.build_shared_context(
         market, evidence.clusters, pulse, evidence.precedents, cross_venue=venue
     )
     opinions = await council.run_council(ctx, shared_context)
 
-    # 7. Deterministic pricing (code) + Judge (LLM #7)
     risk = pricing.parse_resolution_risk(opinions["ResolutionSkeptic"].red_flags)
     priced = pricing.compute_pricing(market, opinions, risk, len(evidence.clusters))
     verdict = await pipeline.run_judge(ctx, market, opinions, priced)
 
-    # 8. PaperBroker (tool) — only when the user asked to trade and verdict isn't PASS
+    # Paper trade only when requested and the verdict isn't PASS.
     fill = None
     trade_note = None
     if plan.wants_trade:
@@ -247,7 +235,7 @@ async def _run(ctx: RunContext, user_prompt: str, started: float, history: list[
     response = _dossier_markdown(market, verdict, priced, evidence.clusters, pulse, opinions, trade_note, fill)
     ui = _ui_payload(market, verdict, priced, evidence.clusters, pulse, opinions, fill)
 
-    # cache the analysis for repeat requests (the fill itself is not replayed)
+    # cache the analysis for repeat requests; the fill is not replayed
     await asyncio.to_thread(
         intel_cache.put,
         market.slug,
@@ -271,11 +259,6 @@ async def _run(ctx: RunContext, user_prompt: str, started: float, history: list[
         },
     )
     return ExecuteOut(status="ok", response=response, steps=ctx.steps, ui=ui)
-
-
-# ---------------------------------------------------------------------------
-# Output assembly
-# ---------------------------------------------------------------------------
 
 
 def _pct(v: float | None) -> str:

@@ -1,14 +1,11 @@
-"""Formal registry of everything the agent can do — the single source of truth.
+"""Registry of every LLM module and tool the agent can run.
 
-Every LLM module and deterministic tool is declared here with the EXACT
-`module` name used in steps[] traces, the architecture diagram, and all
-descriptions (course requirement: names consistent everywhere). System
-prompts live next to this file in registry/prompts/, one .txt per LLM
-module (`prompt_file` stem). GET /api/agent_info serves this registry
-verbatim so the docs can never drift from the code.
+Each entry uses the exact `module` name that appears in steps[] traces and
+the diagram. Prompts live in registry/prompts/, one .txt per LLM module
+(`prompt_file` stem). GET /api/agent_info serves this registry verbatim.
 
-This file is deliberately dependency-free (no backend imports) so config
-and the modules themselves can import it without cycles.
+Kept dependency-free (no backend imports) so config and the modules can
+import it without cycles.
 """
 
 MODULES: list[dict] = [
