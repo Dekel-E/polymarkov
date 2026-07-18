@@ -1,11 +1,18 @@
 """Social signal clients, feature-flagged per source.
 
-Primary: Polymarket market comments. Secondary: Bluesky search and Reddit
-(when configured). Every function degrades to [] instead of raising.
+Polymarket market comments + Bluesky search (both keyless, reliable) + Reddit.
+Reddit has no usable keyless API (its JSON endpoints 403 datacenter IPs and its
+search RSS 429s under load), so it is *scraped* — primarily through a search
+engine (`site:reddit.com` via DuckDuckGo, which never touches Reddit's
+rate-limited endpoints), supplemented by the search RSS, and via the OAuth API
+when credentials are set. Every function degrades to [] instead of raising, and
+the RedditIndexer warms a cache the request path tops up from.
 """
 
 from __future__ import annotations
 
+import asyncio
+import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -150,10 +157,82 @@ def parse_reddit_children(children: list[dict], limit: int) -> list[dict]:
 
 
 def _subreddit_query(query: str, category: str) -> str:
-    """Scope the search to the category's relevant subreddits."""
+    """Scope the search to the category's relevant subreddits (OAuth only —
+    Reddit's keyless RSS 429s this boolean form, so the RSS path uses the plain
+    query and prefers relevant subreddits after the fact)."""
     subs = relevant_subreddits(category)
     scope = " OR ".join(f"subreddit:{s}" for s in subs)
     return f"({scope}) {query.strip()}" if subs else query.strip()
+
+
+def _prefer_relevant(posts: list[dict], category: str, limit: int) -> list[dict]:
+    """Sort posts from the category's relevant subreddits first, keep `limit`."""
+    wanted = {s.lower() for s in relevant_subreddits(category)}
+    ranked = sorted(posts, key=lambda p: (p.get("subreddit", "").lower() not in wanted))
+    return ranked[:limit]
+
+
+def _subreddit_from_url(url: str) -> str:
+    m = re.search(r"/r/([A-Za-z0-9_]+)", url or "")
+    return m.group(1) if m else ""
+
+
+def parse_reddit_search(results: list[dict], limit: int) -> list[dict]:
+    """Search-engine `site:reddit.com` hits -> normalized posts (pure).
+    Scrapes Reddit *through the search index*, so it never touches Reddit's
+    rate-limited endpoints."""
+    posts: list[dict] = []
+    seen: set[str] = set()
+    for r in results:
+        url = r.get("url") or ""
+        if "reddit.com" not in (r.get("domain") or "") and "reddit.com" not in url:
+            continue
+        title = (r.get("title") or "").strip()
+        sub = _subreddit_from_url(url)
+        if not title or not sub or url in seen:
+            continue
+        seen.add(url)
+        posts.append(
+            {
+                "text": title[:500],
+                "source": "reddit",
+                "url": url,
+                "created_at": r.get("published_at"),
+                "subreddit": sub,
+            }
+        )
+        if len(posts) >= limit:
+            break
+    return posts
+
+
+async def _reddit_via_search(query: str, limit: int) -> list[dict]:
+    """Primary keyless scraper: DuckDuckGo `site:reddit.com` — immune to
+    Reddit's per-IP rate limiting because it queries the search index."""
+    from backend.data import news
+
+    try:
+        results = await news.web_search(f"site:reddit.com {query}", max_results=max(limit * 2, 15))
+    except Exception:
+        return []
+    return parse_reddit_search(results, max(limit * 2, 15))
+
+
+async def _reddit_via_rss(query: str, limit: int) -> list[dict]:
+    """Secondary keyless scraper: Reddit's own search RSS (works when Reddit
+    isn't throttling this IP; 429s often, so it only supplements the search)."""
+    try:
+        async with httpx.AsyncClient(
+            timeout=config.HTTP_TIMEOUT_S, headers={"User-Agent": _REDDIT_UA}, follow_redirects=True
+        ) as client:
+            resp = await client.get(
+                "https://www.reddit.com/search.rss",
+                params={"q": query, "sort": "relevance", "t": "month", "limit": max(limit * 2, 25)},
+            )
+            resp.raise_for_status()
+            return parse_reddit_rss(resp.text, max(limit * 2, 25))
+    except (httpx.HTTPError, ValueError):
+        return []
 
 
 def parse_reddit_rss(xml_text: str, limit: int) -> list[dict]:
@@ -194,32 +273,44 @@ async def fetch_reddit_posts(
     IPs). [] on any failure — Reddit rate-limits keyless access hard."""
     if not config.ENABLE_REDDIT or not query.strip():
         return []
-    scoped = _subreddit_query(query, category)
+    # Reddit search matches better on a short query than a long market question.
+    q = query.strip()[:120]
     try:
         if config.REDDIT_CLIENT_ID and config.REDDIT_CLIENT_SECRET:
+            # OAuth handles the boolean subreddit scope fine and is IP-reliable.
             async with httpx.AsyncClient(timeout=config.HTTP_TIMEOUT_S, headers=_HEADERS) as client:
                 token = await _reddit_token(client)
                 if not token:
                     return []
                 resp = await client.get(
                     "https://oauth.reddit.com/search",
-                    params={"q": scoped, "sort": "new", "t": "week", "limit": limit},
+                    params={"q": _subreddit_query(q, category), "sort": "new", "t": "week", "limit": limit},
                     headers={**_HEADERS, "Authorization": f"Bearer {token}"},
                 )
                 resp.raise_for_status()
                 children = resp.json().get("data", {}).get("children", [])
             return parse_reddit_children(children, limit)
 
-        # keyless: the search RSS feed serves where JSON is IP-blocked
-        async with httpx.AsyncClient(
-            timeout=config.HTTP_TIMEOUT_S, headers={"User-Agent": _REDDIT_UA}, follow_redirects=True
-        ) as client:
-            resp = await client.get(
-                "https://www.reddit.com/search.rss",
-                params={"q": scoped, "sort": "new", "t": "week", "limit": limit},
-            )
-            resp.raise_for_status()
-            return parse_reddit_rss(resp.text, limit)
+        # keyless: scrape Reddit through the search index (immune to Reddit's
+        # rate limiting) AND its search RSS, concurrently, then merge — the two
+        # fail independently, so together they stay populated. Prefer posts from
+        # the category's relevant subreddits.
+        batches = await asyncio.gather(
+            _reddit_via_search(q, limit),
+            _reddit_via_rss(q, limit),
+            return_exceptions=True,
+        )
+        posts: list[dict] = []
+        seen: set[str] = set()
+        for batch in batches:
+            if not isinstance(batch, list):
+                continue
+            for p in batch:
+                if p["url"] and p["url"] in seen:
+                    continue
+                seen.add(p["url"])
+                posts.append(p)
+        return _prefer_relevant(posts, category, limit)
     except (httpx.HTTPError, ValueError):
         return []
 

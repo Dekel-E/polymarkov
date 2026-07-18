@@ -162,6 +162,85 @@ async def fetch_market_trades(condition_id: str, limit: int = 50) -> list[dict]:
     return trades
 
 
+def _yes_lean(side: str, outcome: str, notional: float) -> float:
+    """Signed notional toward YES: buying YES or selling NO is bullish-YES."""
+    o = (outcome or "").strip().lower()
+    is_yes = o.startswith("y") or o in ("1", "true")
+    is_no = o.startswith("n") or o in ("0", "false")
+    if not (is_yes or is_no):  # multi-outcome market: no clean YES/NO direction
+        return 0.0
+    buy = (side or "").strip().upper() == "BUY"
+    return notional if (buy and is_yes) or (not buy and is_no) else -notional
+
+
+def aggregate_market_flow(
+    trades: list[dict], followed: list[dict], top: list[dict], whale_usd: float = 10_000.0
+) -> dict:
+    """Cross-reference recent market trades against followed + top wallets (pure).
+
+    Returns net directional flow, which tracked/top wallets are active and which
+    way they lean, and any whale prints."""
+    followed_ix = {(w.get("wallet") or "").lower(): w for w in followed}
+    top_ix = {(t.get("wallet") or "").lower(): t for t in top}
+
+    per_wallet: dict[str, dict] = {}
+    net_yes = 0.0
+    whales: list[dict] = []
+    for t in trades:
+        w = (t.get("wallet") or "").lower()
+        notional = float(t.get("notional_usd") or 0.0)
+        lean = _yes_lean(t.get("side", ""), t.get("outcome", ""), notional)
+        net_yes += lean
+        pw = per_wallet.setdefault(w, {"yes_lean": 0.0, "notional": 0.0, "trades": 0})
+        pw["yes_lean"] += lean
+        pw["notional"] += notional
+        pw["trades"] += 1
+        if notional >= whale_usd and w:
+            whales.append({
+                "wallet": w, "side": t.get("side", ""), "outcome": t.get("outcome", ""),
+                "notional_usd": round(notional, 2), "timestamp": t.get("timestamp"),
+            })
+
+    def _active(index: dict, name_key: str) -> list[dict]:
+        rows = []
+        for w, meta in index.items():
+            pw = per_wallet.get(w)
+            if not pw:
+                continue
+            rows.append({
+                "wallet": w,
+                "label": meta.get("label") or meta.get(name_key) or "",
+                "rank": meta.get("rank"),
+                "yes_lean_usd": round(pw["yes_lean"], 2),
+                "notional_usd": round(pw["notional"], 2),
+                "side": "YES" if pw["yes_lean"] >= 0 else "NO",
+            })
+        rows.sort(key=lambda r: abs(r["yes_lean_usd"]), reverse=True)
+        return rows
+
+    followed_active = _active(followed_ix, "name")
+    top_active = _active(top_ix, "name")
+    whales.sort(key=lambda x: x["notional_usd"], reverse=True)
+
+    if not followed_active and not top_active and not whales:
+        note = "No tracked/top-wallet activity detected in recent trades."
+    else:
+        direction = "YES" if net_yes >= 0 else "NO"
+        note = (
+            f"{len(followed_active)} followed + {len(top_active)} top-wallet(s) active; "
+            f"net flow {direction} ${abs(net_yes):,.0f}"
+            + (f"; {len(whales)} whale print(s)" if whales else "")
+        )
+    return {
+        "net_yes_usd": round(net_yes, 2),
+        "followed_active": followed_active,
+        "top_active": top_active,
+        "whale_prints": whales[:5],
+        "trades_scanned": len(trades),
+        "note": note,
+    }
+
+
 async def fetch_wallet_positions(wallet: str, limit: int = 8) -> list[dict]:
     """A wallet's current open positions, largest first. [] on failure."""
     try:

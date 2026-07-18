@@ -461,6 +461,51 @@ async def scan_cross_venue(ctx: RunContext, market: MarketState) -> Optional[dic
     return result
 
 
+# MicrostructureScanner: order-book shape + price technicals for the Quant.
+# Pure computation over the ladder MarketResolver already fetched — no network.
+async def scan_microstructure(ctx: RunContext, market: MarketState) -> dict:
+    from backend.agent import microstructure
+
+    ind = microstructure.compute(market)
+    ctx.add_tool_step(
+        "MicrostructureScanner",
+        f"slug={market.slug!r} book_levels={len(market.bids)}bids/{len(market.asks)}asks",
+        ind,
+    )
+    return ind
+
+
+# SmartMoneyScanner: is tracked/top-wallet money active in THIS market, and
+# which way? One trades call + the cached leaderboard + followed wallets.
+async def scan_smart_money(ctx: RunContext, market: MarketState) -> dict:
+    from backend.data import smart_money
+
+    empty = {"net_yes_usd": 0.0, "followed_active": [], "top_active": [],
+             "whale_prints": [], "trades_scanned": 0, "note": "no on-chain market id"}
+    if not market.condition_id:
+        ctx.add_tool_step("SmartMoneyScanner", f"slug={market.slug!r}", empty)
+        return empty
+    try:
+        trades, top, followed = await asyncio.gather(
+            smart_money.fetch_market_trades(market.condition_id, limit=config.SMART_MONEY_TRADES),
+            smart_money.fetch_leaderboard(window="30d", limit=config.SMART_MONEY_TOP_N),
+            asyncio.to_thread(supabase_client.get_followed_wallets),
+        )
+    except Exception:
+        ctx.add_tool_step("SmartMoneyScanner", f"slug={market.slug!r}", empty)
+        return empty
+    flow = smart_money.aggregate_market_flow(
+        trades, followed or [], top or [], whale_usd=config.WHALE_PRINT_USD
+    )
+    ctx.add_tool_step(
+        "SmartMoneyScanner",
+        f"condition_id={market.condition_id!r} trades={len(trades)} "
+        f"followed={len(followed or [])} top={len(top or [])}",
+        flow,
+    )
+    return flow
+
+
 # SentimentScorer: one batched call scoring all news and posts.
 _STANCES = ("yes", "no", "neutral")
 

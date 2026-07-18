@@ -57,6 +57,7 @@ class MarketState(BaseModel):
     resolution_criteria: str = ""
     category: str = "other"
     yes_token_id: str
+    condition_id: str = ""  # on-chain market id, for smart-money trade lookups
     mid: float
     best_bid: Optional[float] = None
     best_ask: Optional[float] = None
@@ -64,6 +65,9 @@ class MarketState(BaseModel):
     depth_at_ask_usd: float = 0.0
     volume24h: float = 0.0
     price_history_7d: list[tuple[float, float]] = Field(default_factory=list)  # (ts, price)
+    # full order-book ladder (best-first), for microstructure indicators
+    bids: list[tuple[float, float]] = Field(default_factory=list)  # (price, size)
+    asks: list[tuple[float, float]] = Field(default_factory=list)
 
 
 class Article(BaseModel):

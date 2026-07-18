@@ -115,6 +115,42 @@ export interface DossierUi {
   };
   fill?: FillReport | null;
   step_metrics?: StepMetric[]; // per-step latency/tokens, index-aligned with steps
+  microstructure?: Microstructure | null;
+  smart_money?: SmartMoneyFlow | null;
+}
+
+// Order-book + price technicals (MicrostructureScanner)
+export interface Microstructure {
+  imbalance: number | null;
+  micro_price: number | null;
+  micro_vs_mid_pts: number | null;
+  bid_depth_5c_usd: number;
+  ask_depth_5c_usd: number;
+  spread_pct: number | null;
+  momentum_24h_pts: number | null;
+  momentum_7d_pts: number | null;
+  volatility_pts: number | null;
+  trend: string;
+  rsi: number | null;
+  volume24h_usd: number;
+}
+
+// Tracked/top-wallet flow in a market (SmartMoneyScanner)
+export interface WalletFlow {
+  wallet: string;
+  label: string;
+  rank?: number | null;
+  yes_lean_usd: number;
+  notional_usd: number;
+  side: "YES" | "NO";
+}
+export interface SmartMoneyFlow {
+  net_yes_usd: number;
+  followed_active: WalletFlow[];
+  top_active: WalletFlow[];
+  whale_prints: { wallet: string; side: string; outcome: string; notional_usd: number }[];
+  trades_scanned: number;
+  note: string;
 }
 
 // Per-step run cost, aligned with ExecuteOut.steps by index (GUI-only, not graded).

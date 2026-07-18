@@ -201,7 +201,8 @@ def mocked_pipeline(monkeypatch):
 
 
 LLM_MODULES = {"QueryPlanner", "SearchQueryGenerator", "SentimentScorer", "BullAnalyst", "BearAnalyst", "QuantAnalyst", "ResolutionSkeptic", "Judge"}
-TOOL_MODULES = {"MarketResolver", "EvidenceRetriever", "SocialScanner", "CrossVenueScanner"}
+TOOL_MODULES = {"MarketResolver", "EvidenceRetriever", "SocialScanner", "CrossVenueScanner",
+                "MicrostructureScanner", "SmartMoneyScanner"}
 
 
 async def test_full_run_envelope_and_steps(mocked_pipeline):

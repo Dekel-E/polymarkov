@@ -64,6 +64,8 @@ def build_shared_context(
     pulse: SocialPulse,
     precedents: list[Precedent],
     cross_venue: dict | None = None,
+    microstructure: dict | None = None,
+    smart_money: dict | None = None,
 ) -> str:
     """Identical input for all four personas, built once."""
     lines = [
@@ -77,6 +79,33 @@ def build_shared_context(
         f" | 24h volume ${market.volume24h:,.0f}",
         f"7-day price: {_trend(market.price_history_7d)}",
     ]
+    if microstructure:
+        from backend.agent import microstructure as _micro
+
+        lines += [
+            "",
+            "== MARKET MICROSTRUCTURE (order-book + price technicals; primarily for the Quant) ==",
+            _micro.summarize(microstructure),
+            "These are mechanical signals, not fundamentals: order-book imbalance and "
+            "momentum can front-run news but also mislead in thin books — weight them as "
+            "microstructure, and note in your thesis if they diverge from the fundamentals.",
+        ]
+    if smart_money and (smart_money.get("followed_active") or smart_money.get("top_active")
+                        or smart_money.get("whale_prints")):
+        lines += ["", "== SMART-MONEY FLOW (tracked & top wallets active in THIS market) =="]
+        for w in (smart_money.get("followed_active") or [])[:5]:
+            label = w.get("label") or w["wallet"][:10]
+            lines.append(f"- FOLLOWED {label}: net {w['side']} ${abs(w['yes_lean_usd']):,.0f}")
+        for w in (smart_money.get("top_active") or [])[:5]:
+            label = w.get("label") or w["wallet"][:10]
+            rank = f"#{w['rank']}" if w.get("rank") else "top"
+            lines.append(f"- {rank} WALLET {label}: net {w['side']} ${abs(w['yes_lean_usd']):,.0f}")
+        for wh in (smart_money.get("whale_prints") or [])[:3]:
+            lines.append(f"- WHALE PRINT: {wh.get('side')} {wh.get('outcome')} ${wh['notional_usd']:,.0f}")
+        lines.append(
+            f"Net tracked flow: {smart_money.get('note')}. Smart-money positioning is a "
+            "prior, not proof — sharp wallets can be wrong; weight it, don't follow blindly."
+        )
     if cross_venue:
         lines += [
             "",

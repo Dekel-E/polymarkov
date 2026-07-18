@@ -24,9 +24,11 @@ MarketResolver ── URL / text search / vector match      (tool)
   ▼
 SearchQueryGenerator ── targeted news/web search queries  (LLM #2)
   │
-  ├─▶ EvidenceRetriever ─┐  news: GDELT · Google News · RSS · Wikipedia · web
-  ├─▶ SocialScanner ─────┤  social: Polymarket comments · Bluesky · Reddit   (concurrent tools)
-  └─▶ CrossVenueScanner ─┘  same event priced on Kalshi
+  ├─▶ EvidenceRetriever ────┐  news: GDELT · Google News · RSS · Wikipedia · web
+  ├─▶ SocialScanner ────────┤  social: Polymarket comments · Bluesky · Reddit
+  ├─▶ CrossVenueScanner ────┤  same event priced on Kalshi              (concurrent tools)
+  ├─▶ MicrostructureScanner ┤  order-book imbalance, momentum, RSI → Quant
+  └─▶ SmartMoneyScanner ────┘  followed/top wallets active in this market
   │
   ▼
 SentimentScorer ── ONE batched call over all evidence   (LLM #3)

@@ -255,6 +255,37 @@ MODULES: list[dict] = [
         "data_sources": ["Kalshi"],
     },
     {
+        "name": "MicrostructureScanner",
+        "kind": "tool",
+        "prompt_file": None,
+        "implementation": "backend/agent/microstructure.py",
+        "description": (
+            "Deterministic order-book + price-action indicators for the Quant: "
+            "book imbalance and micro-price from the full ladder, banded depth, "
+            "spread %, 24h/7d momentum, volatility, trend (SMA), and RSI. Code "
+            "computes every number; the QuantAnalyst only interprets them."
+        ),
+        "inputs": "MarketState (order-book ladder + 7d price history)",
+        "outputs": "microstructure/technical indicator dict",
+        "data_sources": ["Polymarket CLOB"],
+    },
+    {
+        "name": "SmartMoneyScanner",
+        "kind": "tool",
+        "prompt_file": None,
+        "implementation": "backend/agent/pipeline.py",
+        "description": (
+            "Checks whether tracked (followed) wallets or top-leaderboard "
+            "wallets are active in THIS market and which way they lean, by "
+            "cross-referencing recent on-chain fills against the followed set "
+            "and the profit leaderboard. Hands the council a smart-money prior "
+            "plus any whale prints."
+        ),
+        "inputs": "MarketState (condition_id) + followed wallets + leaderboard",
+        "outputs": "net flow + active tracked/top wallets + whale prints",
+        "data_sources": ["Polymarket Data API", "Supabase"],
+    },
+    {
         "name": "MarketIndexer",
         "kind": "job",
         "prompt_file": None,

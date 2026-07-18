@@ -4,6 +4,7 @@ import Link from "next/link";
 import CouncilCards from "@/components/CouncilCards";
 import Markdown from "@/components/Markdown";
 import NewsSentiment from "@/components/NewsSentiment";
+import { MicrostructureCard, SmartMoneyCard } from "@/components/SignalCards";
 import SocialPulse from "@/components/SocialPulse";
 import StepsTrace from "@/components/StepsTrace";
 import Verdict from "@/components/Verdict";
@@ -72,6 +73,8 @@ export default function DossierView({
 
       {ui?.news && ui.news.length > 0 && <NewsSentiment clusters={ui.news} />}
       {ui?.social && <SocialPulse data={ui.social} />}
+      {ui?.microstructure && <MicrostructureCard m={ui.microstructure} />}
+      {ui?.smart_money && <SmartMoneyCard s={ui.smart_money} />}
       {ui?.council && <CouncilCards council={ui.council} />}
 
       {ui?.fill && (

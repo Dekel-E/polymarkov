@@ -204,17 +204,21 @@ async def _run(ctx: RunContext, user_prompt: str, started: float, history: list[
         if cached:
             return _serve_cached(cached)
 
-    # Evidence, social and cross-venue tools run concurrently.
-    evidence, pulse, venue = await asyncio.gather(
+    # Evidence, social, cross-venue, microstructure and smart-money tools run
+    # concurrently (the last two are deterministic — no LLM calls).
+    evidence, pulse, venue, micro, flow = await asyncio.gather(
         pipeline.retrieve_evidence(ctx, plan, market),
         pipeline.scan_social(ctx, plan, market),
         pipeline.scan_cross_venue(ctx, market),
+        pipeline.scan_microstructure(ctx, market),
+        pipeline.scan_smart_money(ctx, market),
     )
 
     await pipeline.score_sentiment(ctx, market, evidence.clusters, pulse)
 
     shared_context = council.build_shared_context(
-        market, evidence.clusters, pulse, evidence.precedents, cross_venue=venue
+        market, evidence.clusters, pulse, evidence.precedents,
+        cross_venue=venue, microstructure=micro, smart_money=flow,
     )
     opinions = await council.run_council(ctx, shared_context)
 
@@ -235,6 +239,8 @@ async def _run(ctx: RunContext, user_prompt: str, started: float, history: list[
     response = _dossier_markdown(market, verdict, priced, evidence.clusters, pulse, opinions, trade_note, fill)
     ui = _ui_payload(market, verdict, priced, evidence.clusters, pulse, opinions, fill)
     ui["step_metrics"] = list(ctx.step_metrics)  # per-step latency/tokens for the run log (GUI only)
+    ui["microstructure"] = micro
+    ui["smart_money"] = flow
 
     # cache the analysis for repeat requests; the fill is not replayed
     await asyncio.to_thread(

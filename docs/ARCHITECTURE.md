@@ -146,6 +146,16 @@ Then three tools run in parallel:
   scrapes run thin.
 - **CrossVenueScanner** — finds the same event priced on Kalshi, giving the
   council a second market-consensus prior.
+- **MicrostructureScanner** *(deterministic — no LLM)* — computes order-book and
+  price-action indicators from the full ladder MarketResolver already fetched:
+  book imbalance, micro-price, banded depth, spread %, 24h/7d momentum,
+  volatility, trend (SMA), RSI. Code does every number; the QuantAnalyst only
+  interprets them.
+- **SmartMoneyScanner** *(deterministic — no LLM)* — checks whether tracked
+  (followed) wallets or top-leaderboard wallets are active in *this* market and
+  which way they lean, by cross-referencing recent on-chain fills against the
+  followed set and the profit leaderboard; surfaces net flow + whale prints as
+  a council prior.
 
 **4. SentimentScorer (LLM #3).** **One batched call** scores every news item
 and social post at once (never one call per item). If there's no evidence,

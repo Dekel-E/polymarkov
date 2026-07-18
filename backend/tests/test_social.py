@@ -65,6 +65,24 @@ def test_parse_reddit_rss_bad_xml_returns_empty():
     assert social.parse_reddit_rss("<not xml", limit=10) == []
 
 
+def test_parse_reddit_search_extracts_subreddit_and_filters():
+    results = [
+        {"url": "https://www.reddit.com/r/Economics/comments/a/fed_cut/", "title": "Fed set to cut", "domain": "reddit.com"},
+        {"url": "https://www.cnbc.com/x", "title": "not reddit", "domain": "cnbc.com"},  # dropped
+        {"url": "https://www.reddit.com/user/someone", "title": "no subreddit", "domain": "reddit.com"},  # no /r/ -> dropped
+    ]
+    posts = social.parse_reddit_search(results, limit=10)
+    assert len(posts) == 1
+    assert posts[0]["source"] == "reddit"
+    assert posts[0]["subreddit"] == "Economics"
+    assert posts[0]["text"] == "Fed set to cut"
+
+
+def test_subreddit_from_url():
+    assert social._subreddit_from_url("https://www.reddit.com/r/CryptoCurrency/comments/x/") == "CryptoCurrency"
+    assert social._subreddit_from_url("https://www.reddit.com/") == ""
+
+
 @respx.mock
 async def test_polymarket_comments_parsed():
     respx.get("https://gamma-api.polymarket.com/comments").mock(

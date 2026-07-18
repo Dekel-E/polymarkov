@@ -395,6 +395,7 @@ async def get_market_state(slug_or_id: str) -> Optional[MarketState]:
         resolution_criteria=market["description"],
         category=market["category"] if market["category"] in config.FEE_RATE else "other",
         yes_token_id=market["yes_token_id"],
+        condition_id=market.get("condition_id", ""),
         mid=mid,
         best_bid=best_bid,
         best_ask=best_ask,
@@ -402,4 +403,6 @@ async def get_market_state(slug_or_id: str) -> Optional[MarketState]:
         depth_at_ask_usd=round(depth_usd(book["asks"]), 2),
         volume24h=market["volume24h"],
         price_history_7d=history,
+        bids=book["bids"],
+        asks=book["asks"],
     )

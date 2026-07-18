@@ -119,6 +119,12 @@ bear = box(26.5, 40.5, 11.5, 5.5, "BearAnalyst", kind="llm", sub="LLM #5", title
 quant = box(39.5, 40.5, 11.5, 5.5, "QuantAnalyst", kind="llm", sub="LLM #6", title_size=10)
 skep = box(52.5, 40.5, 11.0, 5.5, "ResolutionSkeptic", kind="llm", sub="LLM #7", title_size=9.5)
 
+# deterministic signal tools feeding the council (left of it)
+micro = box(0.5, 46.5, 11, 5, "Microstructure\nScanner", kind="tool",
+            sub="book imbalance,\nmomentum, RSI", title_size=8)
+smon = box(0.5, 39.5, 11, 5, "SmartMoney\nScanner", kind="tool",
+           sub="tracked/top\nwallet flow", title_size=8)
+
 judge = box(28, 28.5, 20, 6.5, "Judge", kind="llm",
             sub="LLM #8 · deterministic pricing engine\ncomputes verdict/edge/size (code)")
 
@@ -140,6 +146,9 @@ arrow((24, 61 - 0.4), top(sc), connection="arc3,rad=0.2")
 arrow((45, 61 - 0.4), top(sc), connection="arc3,rad=-0.1")
 arrow((62.5, 61 - 0.4), top(sc), connection="arc3,rad=-0.3")
 arrow(bottom(sc), (38, 49.6))
+arrow(right(micro), (12 - 0.4, 45), color=STEEL)   # microstructure -> council
+arrow(right(smon), (12 - 0.4, 42), color=STEEL)    # smart money -> council
+arrow(left(mr), (11.5, 49), color=GRAY, connection="arc3,rad=0.3", dashed=True)  # market data feeds them
 arrow((38, 39 - 0.5), top(judge))
 arrow(bottom(judge), top(out), connection="arc3,rad=0.12")
 arrow(bottom(judge), top(pb), connection="arc3,rad=-0.12")
