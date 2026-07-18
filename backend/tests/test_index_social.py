@@ -80,7 +80,7 @@ async def test_scan_social_tops_up_from_indexed_cache(monkeypatch):
     from backend.llm.client import RunContext
     from backend.tests.test_market_chat import make_market
 
-    async def thin_gather(event_id, query, limit=20):
+    async def thin_gather(event_id, query, limit=20, category=""):
         return {
             "posts": [{"text": "live post", "source": "reddit",
                        "url": "https://www.reddit.com/r/x/live", "created_at": None}],

@@ -396,7 +396,9 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
 # SocialScanner: recent posts + mention velocity.
 async def scan_social(ctx: RunContext, plan: QueryPlan, market: MarketState) -> SocialPulse:
     query = plan.market_query or market.question
-    data = await social.gather_social(market.event_id, query, limit=config.MAX_SOCIAL_POSTS)
+    data = await social.gather_social(
+        market.event_id, query, limit=config.MAX_SOCIAL_POSTS, category=market.category
+    )
 
     # top up from the RedditIndexer's warm cache; live scrapes run thin when
     # sources rate-limit

@@ -156,7 +156,7 @@ def mocked_pipeline(monkeypatch):
     async def fake_articles(query, timespan=None, max_records=None, **kw):
         return ARTICLES
 
-    async def fake_social(event_id, query, limit=20):
+    async def fake_social(event_id, query, limit=20, category=""):
         return {"posts": POSTS, "mention_velocity": 1.5, "note": "1 post from polymarket_comments."}
 
     monkeypatch.setattr(RunContext, "call_llm", fake_call_llm)

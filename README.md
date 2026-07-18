@@ -62,7 +62,7 @@ Judge ── writes the narrative around the computed numbers   (LLM #8)
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/chat` | **DeskChat** — global chat; routes to a market, the portfolio, the agent's self-description, or a helpful refusal with market suggestions |
+| `POST /api/chat` | **DeskChat** — the single omni-chat (used on every page). Routes a message to market Q&A, a **paper trade**, a **watchlist** change, the portfolio, desk control, the agent's self-description, or a helpful refusal. Pass an optional `slug` so "buy $50 yes" / "watch this" scope to the market in view |
 | `POST /api/market/chat` | **MarketChat** — grounded Q&A on one market (≤2 LLM calls); searches + indexes fresh intel, answers with citations |
 | `POST /api/strategy/chat` | **StrategyChat** — plain-language control of the desk; instructions become a whitelisted, clamped settings patch |
 | `GET /api/markets`, `/api/market`, `/api/search` | Live Polymarket data for the GUI |

@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import DossierView from "@/components/DossierView";
 import Markdown from "@/components/Markdown";
-import MarketChat from "@/components/MarketChat";
+import DeskChat from "@/components/DeskChat";
 import MarketNews from "@/components/MarketNews";
 import PipelineProgress from "@/components/PipelineProgress";
 import ProbabilityGauge from "@/components/ProbabilityGauge";
@@ -184,8 +184,8 @@ export default function MarketPage() {
 
       {result?.status === "ok" && result.ui && <TradePanel slug={slug} ui={result.ui} />}
 
-      {/* grounded Q&A over the dossier, indexing fresh evidence when needed */}
-      <MarketChat slug={slug} />
+      {/* the omni-chat, scoped to this market: Q&A, paper trades, watchlist */}
+      <DeskChat slug={slug} />
     </div>
   );
 }

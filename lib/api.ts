@@ -345,13 +345,22 @@ export async function marketChat(
 
 export interface DeskChatResult extends MarketChatResult {
   market?: { slug: string; question: string } | null;
+  // action side-effects the omni-chat can produce
+  settings?: AgentSettings | null; // control instruction applied
+  applied?: Record<string, { from: unknown; to: unknown }> | null;
+  fill?: FillReport | null; // paper trade placed
+  watchlisted?: { slug: string; action: "add" | "remove" } | null;
 }
 
-export async function deskChat(question: string, history: ChatTurn[]): Promise<DeskChatResult> {
+export async function deskChat(
+  question: string,
+  history: ChatTurn[],
+  slug?: string,
+): Promise<DeskChatResult> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, history }),
+    body: JSON.stringify({ question, history, slug: slug ?? null }),
   });
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
   const data = (await res.json()) as DeskChatResult;

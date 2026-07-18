@@ -133,6 +133,86 @@ async def test_desk_chat_routes_market_to_market_chat(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_desk_chat_trade_route_places_paper_trade(monkeypatch):
+    _stub_llm(monkeypatch, [{"route": "trade", "side": "BUY_YES", "size_usd": 25, "market_query": "fed"}])
+    from backend.agent.types import FillReport
+    from backend.sim import paper_broker
+
+    async def fake_search(query, limit=10):
+        return [{"slug": "fed-cut", "question": "Fed cut?"}]
+
+    async def fake_state(slug):
+        return make_market("fed-cut")
+
+    captured: dict = {}
+
+    async def fake_exec(ctx, market, priced, size_usd=50.0, strategy="manual"):
+        captured.update(side=priced.verdict, size=size_usd, strategy=strategy)
+        return FillReport(
+            position_id="p1", market_id=market.slug, side=priced.verdict, size_usd=size_usd,
+            vwap=0.5, slippage_bps=10.0, fee_paid=0.1, levels_consumed=1,
+        )
+
+    monkeypatch.setattr(polymarket, "search_markets", fake_search)
+    monkeypatch.setattr(polymarket, "get_market_state", fake_state)
+    monkeypatch.setattr(paper_broker, "execute_paper_trade", fake_exec)
+
+    result = await chat.desk_chat("buy 25 yes on the fed market", [])
+    assert captured == {"side": "BUY_YES", "size": 25.0, "strategy": "manual"}
+    assert result["fill"]["side"] == "BUY_YES"
+    assert "Paper trade filled" in result["answer"]
+
+
+@pytest.mark.asyncio
+async def test_desk_chat_trade_uses_current_market_slug(monkeypatch):
+    # On a market page the user says "buy $50 yes" without naming the market.
+    _stub_llm(monkeypatch, [{"route": "trade", "side": "BUY_NO", "size_usd": None}])
+    from backend.agent.types import FillReport
+    from backend.sim import paper_broker
+
+    seen: dict = {}
+
+    async def fake_state(slug):
+        seen["slug"] = slug
+        return make_market(slug)
+
+    async def fake_exec(ctx, market, priced, size_usd=50.0, strategy="manual"):
+        seen["size"] = size_usd
+        return FillReport(position_id="p2", market_id=market.slug, side=priced.verdict,
+                          size_usd=size_usd, vwap=0.5, slippage_bps=5.0, fee_paid=0.05, levels_consumed=1)
+
+    monkeypatch.setattr(polymarket, "get_market_state", fake_state)
+    monkeypatch.setattr(paper_broker, "execute_paper_trade", fake_exec)
+
+    result = await chat.desk_chat("buy no here", [], slug="live-market")
+    assert seen["slug"] == "live-market"  # scoped to the market in view, no search
+    assert seen["size"] == config.CHAT_DEFAULT_TRADE_USD  # default applied when omitted
+    assert result["fill"]["side"] == "BUY_NO"
+
+
+@pytest.mark.asyncio
+async def test_desk_chat_watchlist_route_adds(monkeypatch):
+    _stub_llm(monkeypatch, [{"route": "watchlist", "watch_action": "add"}])
+    added: list[str] = []
+    monkeypatch.setattr(chat.supabase_client, "add_watch", lambda slug: added.append(slug))
+
+    result = await chat.desk_chat("watch this", [], slug="fed-cut")
+    assert added == ["fed-cut"]
+    assert result["watchlisted"] == {"slug": "fed-cut", "action": "add"}
+
+
+@pytest.mark.asyncio
+async def test_desk_chat_watchlist_route_removes(monkeypatch):
+    _stub_llm(monkeypatch, [{"route": "watchlist", "watch_action": "remove"}])
+    removed: list[str] = []
+    monkeypatch.setattr(chat.supabase_client, "remove_watch", lambda slug: removed.append(slug))
+
+    result = await chat.desk_chat("stop watching this", [], slug="fed-cut")
+    assert removed == ["fed-cut"]
+    assert result["watchlisted"] == {"slug": "fed-cut", "action": "remove"}
+
+
+@pytest.mark.asyncio
 async def test_desk_chat_routes_portfolio_with_facts(monkeypatch):
     calls = _stub_llm(
         monkeypatch,

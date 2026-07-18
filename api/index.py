@@ -625,17 +625,19 @@ async def cancel_quote(body: CancelQuoteIn) -> dict:
 class DeskChatIn(BaseModel):
     question: str
     history: list[dict] = []
+    slug: Optional[str] = None  # market in view, so "buy $50 yes"/"watch this" scope to it
 
 
 @app.post("/api/chat")
 async def desk_chat_endpoint(body: DeskChatIn) -> dict:
-    """Global chat (DeskChat module): routes a question to the right market
-    (via MarketChat), to the desk's own portfolio/state, to the agent's
-    self-description, or to a helpful refusal with market suggestions."""
+    """Global chat (DeskChat module): the single omni-chat. Routes a message to
+    the right market (Q&A via MarketChat), a paper trade, a watchlist change,
+    the desk's own portfolio/state, strategy control, the agent's
+    self-description, or a helpful refusal with market suggestions."""
     try:
         from backend.agent import chat
 
-        return await chat.desk_chat(body.question, body.history[:24])
+        return await chat.desk_chat(body.question, body.history[:24], slug=body.slug)
     except Exception as exc:
         return {"answer": None, "citations": [], "market": None, "error": str(exc)}
 

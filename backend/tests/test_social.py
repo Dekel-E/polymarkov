@@ -34,6 +34,37 @@ async def test_reddit_disabled_returns_empty(monkeypatch):
     assert await social.fetch_reddit_posts("fed rate cut") == []
 
 
+def test_relevant_subreddits_scopes_by_category():
+    subs = social.relevant_subreddits("crypto")
+    assert "CryptoCurrency" in subs and "PredictionMarkets" in subs
+    assert len(subs) <= 6
+    # unknown category still yields the general prediction-market subs
+    assert social.relevant_subreddits("nonsense") == ["PredictionMarkets", "Polymarket"]
+
+
+def test_parse_reddit_rss_normalizes_and_drops_empty():
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<feed xmlns="http://www.w3.org/2005/Atom">'
+        "<entry><title>Fed likely to cut in September</title>"
+        '<link href="https://www.reddit.com/r/Economics/comments/a/x/"/>'
+        "<updated>2026-07-15T10:00:00+00:00</updated>"
+        '<category term="Economics"/></entry>'
+        '<entry><title></title><link href="https://x/y"/></entry>'  # empty title -> dropped
+        "</feed>"
+    )
+    posts = social.parse_reddit_rss(xml, limit=10)
+    assert len(posts) == 1
+    assert posts[0]["source"] == "reddit"
+    assert posts[0]["subreddit"] == "Economics"
+    assert posts[0]["text"] == "Fed likely to cut in September"
+
+
+def test_parse_reddit_rss_bad_xml_returns_empty():
+    assert social.parse_reddit_rss("", limit=10) == []
+    assert social.parse_reddit_rss("<not xml", limit=10) == []
+
+
 @respx.mock
 async def test_polymarket_comments_parsed():
     respx.get("https://gamma-api.polymarket.com/comments").mock(

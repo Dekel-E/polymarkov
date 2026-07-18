@@ -6,6 +6,7 @@ Primary: Polymarket market comments. Secondary: Bluesky search and Reddit
 
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -15,6 +16,38 @@ from backend import config
 
 GAMMA_BASE = "https://gamma-api.polymarket.com"
 _HEADERS = {"User-Agent": "polymarkov/0.1"}
+
+# Reddit blocks datacenter IPs on its JSON endpoints (403) and on generic
+# User-Agents. The public search *RSS* feed still serves with a browser UA,
+# which is what the keyless scraper uses.
+_REDDIT_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
+_ATOM = {"a": "http://www.w3.org/2005/Atom"}
+
+# Subreddits where prediction-market-relevant discussion actually happens,
+# by market category. The scraper restricts its search to these so it reads
+# signal (traders, domain communities) rather than the whole of Reddit.
+_SUBREDDITS_BY_CATEGORY = {
+    "politics": ["politics", "PoliticalDiscussion", "moderatepolitics"],
+    "geopolitics": ["geopolitics", "worldnews", "anime_titties"],
+    "economics": ["Economics", "economy", "finance"],
+    "finance": ["finance", "investing", "wallstreetbets", "stocks"],
+    "crypto": ["CryptoCurrency", "Bitcoin", "ethfinance"],
+    "tech": ["technology", "artificial", "singularity"],
+    "sports": ["sportsbook", "sports", "soccer"],
+}
+_GENERAL_SUBREDDITS = ["PredictionMarkets", "Polymarket"]
+
+
+def relevant_subreddits(category: str) -> list[str]:
+    """The subreddits the scraper searches for a market of this category."""
+    subs = list(_GENERAL_SUBREDDITS)
+    for s in _SUBREDDITS_BY_CATEGORY.get((category or "").lower(), []):
+        if s not in subs:
+            subs.append(s)
+    return subs[:6]
 
 
 def _parse_ts(value: str) -> Optional[datetime]:
@@ -116,31 +149,79 @@ def parse_reddit_children(children: list[dict], limit: int) -> list[dict]:
     return posts
 
 
-async def fetch_reddit_posts(query: str, limit: int = config.MAX_SOCIAL_POSTS) -> list[dict]:
-    """Recent Reddit posts matching query; OAuth when configured, else public JSON. [] on failure."""
+def _subreddit_query(query: str, category: str) -> str:
+    """Scope the search to the category's relevant subreddits."""
+    subs = relevant_subreddits(category)
+    scope = " OR ".join(f"subreddit:{s}" for s in subs)
+    return f"({scope}) {query.strip()}" if subs else query.strip()
+
+
+def parse_reddit_rss(xml_text: str, limit: int) -> list[dict]:
+    """Reddit search Atom feed -> normalized posts (pure)."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+    posts: list[dict] = []
+    for entry in root.findall("a:entry", _ATOM):
+        title = (entry.findtext("a:title", default="", namespaces=_ATOM) or "").strip()
+        if not title:
+            continue
+        link = entry.find("a:link", _ATOM)
+        href = link.get("href", "") if link is not None else ""
+        cat = entry.find("a:category", _ATOM)
+        sub = cat.get("term", "") if cat is not None else ""
+        posts.append(
+            {
+                "text": title[:500],
+                "source": "reddit",
+                "url": href,
+                "created_at": entry.findtext("a:updated", default=None, namespaces=_ATOM),
+                "subreddit": sub,
+            }
+        )
+        if len(posts) >= limit:
+            break
+    return posts
+
+
+async def fetch_reddit_posts(
+    query: str, limit: int = config.MAX_SOCIAL_POSTS, category: str = ""
+) -> list[dict]:
+    """Recent Reddit posts about `query`, restricted to the category's relevant
+    subreddits. Uses OAuth JSON when credentials are set (reliable from any IP),
+    otherwise the keyless search RSS feed (the JSON endpoints 403 datacenter
+    IPs). [] on any failure — Reddit rate-limits keyless access hard."""
     if not config.ENABLE_REDDIT or not query.strip():
         return []
+    scoped = _subreddit_query(query, category)
     try:
-        async with httpx.AsyncClient(timeout=config.HTTP_TIMEOUT_S, headers=_HEADERS) as client:
-            if config.REDDIT_CLIENT_ID and config.REDDIT_CLIENT_SECRET:
+        if config.REDDIT_CLIENT_ID and config.REDDIT_CLIENT_SECRET:
+            async with httpx.AsyncClient(timeout=config.HTTP_TIMEOUT_S, headers=_HEADERS) as client:
                 token = await _reddit_token(client)
                 if not token:
                     return []
                 resp = await client.get(
                     "https://oauth.reddit.com/search",
-                    params={"q": query, "sort": "new", "t": "week", "limit": limit},
+                    params={"q": scoped, "sort": "new", "t": "week", "limit": limit},
                     headers={**_HEADERS, "Authorization": f"Bearer {token}"},
                 )
-            else:  # keyless public endpoint, same listing schema
-                resp = await client.get(
-                    "https://www.reddit.com/search.json",
-                    params={"q": query, "sort": "new", "t": "week", "limit": limit},
-                )
+                resp.raise_for_status()
+                children = resp.json().get("data", {}).get("children", [])
+            return parse_reddit_children(children, limit)
+
+        # keyless: the search RSS feed serves where JSON is IP-blocked
+        async with httpx.AsyncClient(
+            timeout=config.HTTP_TIMEOUT_S, headers={"User-Agent": _REDDIT_UA}, follow_redirects=True
+        ) as client:
+            resp = await client.get(
+                "https://www.reddit.com/search.rss",
+                params={"q": scoped, "sort": "new", "t": "week", "limit": limit},
+            )
             resp.raise_for_status()
-            children = resp.json().get("data", {}).get("children", [])
+            return parse_reddit_rss(resp.text, limit)
     except (httpx.HTTPError, ValueError):
         return []
-    return parse_reddit_children(children, limit)
 
 
 # api.bsky.app serves searchPosts keyless; the public.api.bsky.app mirror 403s some clients.
@@ -187,13 +268,15 @@ async def fetch_bluesky_posts(query: str, limit: int = config.MAX_SOCIAL_POSTS) 
         return []
 
 
-async def gather_social(event_id: str, query: str, limit: int = config.MAX_SOCIAL_POSTS) -> dict:
+async def gather_social(
+    event_id: str, query: str, limit: int = config.MAX_SOCIAL_POSTS, category: str = ""
+) -> dict:
     """Collect posts from all enabled sources + compute mention velocity."""
     posts = await fetch_polymarket_comments(event_id, limit)
     if len(posts) < limit:
         posts += await fetch_bluesky_posts(query, limit - len(posts))
     if len(posts) < limit:
-        posts += await fetch_reddit_posts(query, limit - len(posts))
+        posts += await fetch_reddit_posts(query, limit - len(posts), category)
 
     timestamps = [ts for p in posts if (ts := _parse_ts(p.get("created_at") or ""))]
     velocity = mention_velocity(timestamps)

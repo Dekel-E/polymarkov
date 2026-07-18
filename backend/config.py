@@ -283,3 +283,5 @@ CHAT_NEWS_RESULTS = 6
 CHAT_WEB_RESULTS = 5
 CHAT_SOCIAL_POSTS = 12
 CHAT_DOSSIER_MAX_AGE_S = 24 * 3600  # a stale dossier is still usable context
+CHAT_DEFAULT_TRADE_USD = 50.0     # paper size when a chat trade omits an amount
+CHAT_MAX_TRADE_USD = 1000.0       # clamp on chat-directed paper trades

@@ -348,8 +348,88 @@ async def strategy_chat(question: str, history: list[dict]) -> dict:
     return {"answer": answer, "applied": applied, "settings": settings, "error": None}
 
 
-async def desk_chat(question: str, history: list[dict]) -> dict:
-    """Answer one global chat question. Never raises for expected cases."""
+async def _resolve_slug(query: str, slug: Optional[str]) -> Optional[str]:
+    """The current market (slug context) wins; else search for the named one."""
+    if slug:
+        return slug
+    if not query.strip():
+        return None
+    try:
+        hits = await polymarket.search_markets(query, limit=1)
+    except Exception:
+        hits = []
+    return hits[0]["slug"] if hits else None
+
+
+async def _desk_trade(ctx: RunContext, route_raw: dict, slug: Optional[str]) -> dict:
+    """Place a chat-directed paper trade immediately (paper only)."""
+    query = str(route_raw.get("market_query") or "")
+    target = await _resolve_slug(query, slug)
+    if not target:
+        return {"answer": f"I couldn't find a market to trade for *{query or 'that'}* — "
+                "name it more specifically or open its page and try again.",
+                "citations": [], "market": None, "error": None}
+    side = route_raw.get("side")
+    if side not in ("BUY_YES", "BUY_NO"):
+        return {"answer": "Tell me which side — **BUY YES** or **BUY NO** — and I'll place the paper trade.",
+                "citations": [], "market": None, "error": None}
+    try:
+        size_usd = float(route_raw.get("size_usd") or config.CHAT_DEFAULT_TRADE_USD)
+    except (TypeError, ValueError):
+        size_usd = config.CHAT_DEFAULT_TRADE_USD
+    size_usd = max(1.0, min(size_usd, config.CHAT_MAX_TRADE_USD))
+
+    market = await polymarket.get_market_state(target)
+    if market is None:
+        return {"answer": f"No live market found for `{target}`.", "citations": [], "market": None, "error": None}
+
+    from backend.agent.types import PricingResult
+    from backend.sim import paper_broker
+
+    priced = PricingResult(
+        prior=market.mid, fair=market.mid, fair_adj=market.mid,
+        gross_edge_pts=0.0, half_spread=(market.spread or 0) / 2, taker_fee=0.0,
+        net_edge_pts=0.0, verdict=side, suggested_size_pct_bankroll=0.0,
+        resolution_risk="medium",
+    )
+    fill = await paper_broker.execute_paper_trade(ctx, market, priced, size_usd=size_usd, strategy="manual")
+    market_ref = {"slug": target, "question": market.question}
+    if fill is None:
+        return {"answer": "The order book had no fillable liquidity, so no paper trade was opened.",
+                "citations": [], "market": market_ref, "error": None}
+    f = fill.model_dump()
+    answer = (
+        f"✅ Paper trade filled: **{side.replace('_', ' ')}** ${f['size_usd']:.2f} on "
+        f"*{market.question}* at {f['vwap'] * 100:.1f}% "
+        f"(slippage {f['slippage_bps']:.0f} bps · fee ${f['fee_paid']:.2f}). "
+        "Paper trading only — not financial advice."
+    )
+    return {"answer": answer, "citations": [], "market": market_ref, "fill": f, "error": None}
+
+
+async def _desk_watchlist(route_raw: dict, slug: Optional[str]) -> dict:
+    """Add/remove a market from the desk's watchlist immediately."""
+    query = str(route_raw.get("market_query") or "")
+    target = await _resolve_slug(query, slug)
+    if not target:
+        return {"answer": f"I couldn't find a market to watch for *{query or 'that'}*.",
+                "citations": [], "market": None, "error": None}
+    action = "remove" if route_raw.get("watch_action") == "remove" else "add"
+    if action == "remove":
+        await asyncio.to_thread(supabase_client.remove_watch, target)
+        answer = f"Removed **{target}** from the watchlist."
+    else:
+        await asyncio.to_thread(supabase_client.add_watch, target)
+        answer = (f"Added **{target}** to the watchlist — the desk will re-analyze it "
+                  "as its dossier cache expires.")
+    return {"answer": answer, "citations": [], "market": {"slug": target, "question": target},
+            "watchlisted": {"slug": target, "action": action}, "error": None}
+
+
+async def desk_chat(question: str, history: list[dict], slug: Optional[str] = None) -> dict:
+    """Answer one global chat question. `slug` is the market the user is viewing
+    (if any) so "buy $50 yes" / "watch this" / "what's the latest?" scope to it.
+    Never raises for expected cases."""
     ctx = RunContext()
     question = question.strip()[: config.CHAT_MAX_QUESTION_CHARS]
     if not question:
@@ -357,10 +437,13 @@ async def desk_chat(question: str, history: list[dict]) -> dict:
 
     recent = _clip_history(history)
 
+    router_input: dict = {"question": question, "chat_history": recent}
+    if slug:
+        router_input["CURRENT_MARKET"] = slug
     route_raw = await ctx.call_llm(
         DESK_CHAT,
         load_prompt("desk_chat_router"),
-        json.dumps({"question": question, "chat_history": recent}, ensure_ascii=False),
+        json.dumps(router_input, ensure_ascii=False),
     )
     route_raw = route_raw if isinstance(route_raw, dict) else {}
     route = route_raw.get("route")
@@ -370,23 +453,35 @@ async def desk_chat(question: str, history: list[dict]) -> dict:
 
         return {"answer": self_description(), "citations": [], "market": None, "error": None}
 
+    if route == "trade":
+        return await _desk_trade(ctx, route_raw, slug)
+
+    if route == "watchlist":
+        return await _desk_watchlist(route_raw, slug)
+
     if route == "market":
-        query = str(route_raw.get("market_query") or question)
-        try:
-            hits = await polymarket.search_markets(query, limit=1)
-        except Exception:
-            hits = []
-        if not hits:
-            return {
-                "answer": (
-                    f"I couldn't find an active Polymarket market for *{query}* — "
-                    "try naming the market more specifically or paste its URL."
-                ),
-                "citations": [], "market": None, "error": None,
-            }
-        slug = hits[0]["slug"]
-        result = await market_chat(slug, question, history)
-        result["market"] = {"slug": slug, "question": hits[0].get("question", slug)}
+        # On a market page, answer about the market in view without re-searching;
+        # otherwise search and keep the matched market's question.
+        if slug:
+            target, market_question = slug, slug
+        else:
+            query = str(route_raw.get("market_query") or question)
+            try:
+                hits = await polymarket.search_markets(query, limit=1)
+            except Exception:
+                hits = []
+            if not hits:
+                return {
+                    "answer": (
+                        f"I couldn't find an active Polymarket market for *{query}* — "
+                        "try naming the market more specifically or paste its URL."
+                    ),
+                    "citations": [], "market": None, "error": None,
+                }
+            target = hits[0]["slug"]
+            market_question = hits[0].get("question", target)
+        result = await market_chat(target, question, history)
+        result["market"] = {"slug": target, "question": market_question}
         return result
 
     if route == "control":

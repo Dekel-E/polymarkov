@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import ActivityFeed from "@/components/ActivityFeed";
 import DeskBriefing from "@/components/DeskBriefing";
-import StrategyChat from "@/components/StrategyChat";
+import DeskChat from "@/components/DeskChat";
 import { executeArbitrage, fetchArbitrage, fetchSettings, updateSettings } from "@/lib/api";
 import type { AgentSettings, ArbOpportunity } from "@/lib/types";
 
@@ -224,7 +224,7 @@ export default function StrategiesPage() {
         </div>
       )}
 
-      <StrategyChat
+      <DeskChat
         onApplied={(s) => {
           setSettings(s);
           setRiskDraft(s.risk);

@@ -137,9 +137,13 @@ Then three tools run in parallel:
   reads the underlying pages, and **indexes everything it fetches** back into
   Supabase tagged with the market slug — so future runs and the vector index
   can retrieve it.
-- **SocialScanner** — Polymarket comments, Bluesky (keyless), Reddit (keyless
-  search), plus mention-velocity signal. Tops up from the warm `social_posts`
-  cache when live scrapes run thin.
+- **SocialScanner** — Polymarket comments, Bluesky (keyless), and Reddit, plus
+  mention-velocity signal. Reddit is scraped from the category's relevant
+  subreddits (e.g. r/Economics, r/CryptoCurrency, r/PredictionMarkets) via the
+  keyless search **RSS** feed with a browser User-Agent — Reddit hard-403s its
+  JSON endpoints from datacenter IPs — or the OAuth JSON API when Reddit
+  credentials are set. Tops up from the warm `social_posts` cache when live
+  scrapes run thin.
 - **CrossVenueScanner** — finds the same event priced on Kalshi, giving the
   council a second market-consensus prior.
 
@@ -203,18 +207,24 @@ vector store at all. This is deliberate; preserve it when editing.
 
 ---
 
-## Conversational layer (outside the 7-call pipeline)
+## Conversational layer (outside the 8-call pipeline)
 
-- **MarketChat** (`POST /api/market/chat`, ≤2 LLM calls) — grounded Q&A on one
-  market: a planner decides whether the question needs fresh intel; if so it
-  searches web/news and scrapes socials, indexes what it finds, then answers
-  with citations. Articles it gathers are embedded by the NewsIndexer on its
-  next pass.
-- **DeskChat** (`POST /api/chat`) — the global entry point on the home page. It
-  routes any question to the right market (via MarketChat), to the desk's own
-  portfolio/state, to the agent's self-description, or to a helpful refusal
-  that suggests related markets instead of dead-ending. Control instructions
-  are forwarded to StrategyChat, so the whole desk is steerable from one chat.
+**DeskChat is the single omni-chat** — the same component is used on every page
+(home, a market page, the strategy desk). The user can type anything, and if
+the agent can do it, it does it. A router LLM classifies each message and the
+matching handler acts:
+
+- **DeskChat** (`POST /api/chat`) — routes a message to one of: market Q&A (via
+  MarketChat), a **paper trade** (places the fill immediately via PaperBroker),
+  a **watchlist** add/remove, the desk's portfolio/state, desk **control** (via
+  StrategyChat), the agent's self-description, or a helpful refusal that
+  suggests related markets. An optional `slug` (the market in view) scopes
+  "buy $50 yes" / "watch this" / "what's the latest?" to that market.
+- **MarketChat** (`POST /api/market/chat`, ≤2 LLM calls) — the market-Q&A engine
+  DeskChat delegates to: a planner decides whether the question needs fresh
+  intel; if so it searches web/news and scrapes socials, indexes what it finds,
+  then answers with citations. Articles it gathers are embedded by the
+  NewsIndexer on its next pass.
 - **StrategyChat** (`POST /api/strategy/chat`, 1 LLM call/turn) — the control
   channel. "Turn off copy trading", "set stop loss to 30%", "halt everything"
   become a settings patch: the LLM only *proposes*; deterministic code
