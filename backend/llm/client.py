@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from functools import lru_cache
 from typing import Any
 
@@ -46,6 +47,10 @@ class RunContext:
         self.steps: list[Step] = []
         self.tokens_in = 0
         self.tokens_out = 0
+        # Per-step {kind, latency_ms, tokens_in, tokens_out}, index-aligned with
+        # `steps`. Kept OFF the graded Step object (which must stay exactly
+        # {module, prompt, response}); surfaced only via the GUI `ui` payload.
+        self.step_metrics: list[dict] = []
 
     def add_tool_step(self, module: str, inputs: str, outputs: Any) -> None:
         self.steps.append(
@@ -54,6 +59,9 @@ class RunContext:
                 prompt=StepPrompt(system_prompt=TOOL_SYSTEM_PROMPT, user_prompt=inputs),
                 response=outputs,
             )
+        )
+        self.step_metrics.append(
+            {"kind": "tool", "latency_ms": None, "tokens_in": 0, "tokens_out": 0}
         )
 
     async def _completion(self, system_prompt: str, messages: list[dict]) -> str:
@@ -82,6 +90,17 @@ class RunContext:
                 "LLM is not configured — set LLMOD_API_KEY and LLMOD_BASE_URL in .env"
             )
         messages = [{"role": "user", "content": user_prompt}]
+        t0 = time.monotonic()
+        tin0, tout0 = self.tokens_in, self.tokens_out
+
+        def _metric() -> dict:
+            return {
+                "kind": "llm",
+                "latency_ms": int((time.monotonic() - t0) * 1000),
+                "tokens_in": self.tokens_in - tin0,
+                "tokens_out": self.tokens_out - tout0,
+            }
+
         try:
             text = await self._completion(system_prompt, messages)
             try:
@@ -107,6 +126,7 @@ class RunContext:
                     response={"error": f"{type(exc).__name__}: {exc}"},
                 )
             )
+            self.step_metrics.append(_metric())
             raise
 
         self.steps.append(
@@ -116,6 +136,7 @@ class RunContext:
                 response=parsed,
             )
         )
+        self.step_metrics.append(_metric())
         return parsed
 
 

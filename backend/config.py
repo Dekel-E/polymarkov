@@ -64,7 +64,9 @@ TEAM_INFO = {
     "group_batch_order_number": "batch1_order1",
     "team_name": "Polymarkov Team",
     "students": [
-        {"name": "John Doe", "email": "korikata8@protonmail.com"},
+        {"name": "Dekel Elimelech", "email": "korikata8@protonmail.com"},
+        {"name": "Rom Katav", "email": "TODO_rom_katav@example.com"},
+        {"name": "Omer Perchuk", "email": "TODO_omer_perchuk@example.com"},
     ],
 }
 
@@ -124,7 +126,7 @@ KELLY_FRACTION = 0.25            # quarter Kelly
 MAX_SIZE_PCT_BANKROLL = 0.05     # hard cap: 5% of bankroll
 PAPER_BANKROLL_USD = 10_000
 
-# Serve a recent dossier for the same market instead of re-running 7 LLM calls.
+# Serve a recent dossier for the same market instead of re-running 8 LLM calls.
 # Trades always bypass the cache.
 INTEL_CACHE_TTL_S = 900
 

@@ -114,6 +114,15 @@ export interface DossierUi {
     skeptic?: PersonaOpinion;
   };
   fill?: FillReport | null;
+  step_metrics?: StepMetric[]; // per-step latency/tokens, index-aligned with steps
+}
+
+// Per-step run cost, aligned with ExecuteOut.steps by index (GUI-only, not graded).
+export interface StepMetric {
+  kind: "llm" | "tool";
+  latency_ms: number | null;
+  tokens_in: number;
+  tokens_out: number;
 }
 
 // Portfolio (GET /api/portfolio)

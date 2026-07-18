@@ -100,25 +100,27 @@ sc2 = box(3, 79.5, 22, 5, "StrategyChat", kind="llm",
 qp = box(28, 79.5, 20, 5, "QueryPlanner", kind="llm", sub="LLM #1 · intent, market query, entities")
 mr = box(28, 71, 20, 5, "MarketResolver", kind="tool", sub="URL / text search / vector match")
 
+sqg = box(1.5, 61, 11, 6, "SearchQuery\nGenerator", kind="llm",
+          sub="LLM #2 · news +\nweb search queries", title_size=8.5)
 er = box(14, 61, 20, 6, "EvidenceRetriever", kind="tool",
          sub="news search + web fallback,\ndedup · cluster ≤8 · read pages")
 ss = box(36.5, 61, 17, 6, "SocialScanner", kind="tool", sub="comments + mention\nvelocity")
 cvs = box(56, 61, 13.5, 6, "CrossVenueScanner", kind="tool", sub="same event on Kalshi", title_size=8.5)
 
-sc = box(28, 52.5, 20, 5, "SentimentScorer", kind="llm", sub="LLM #2 · ONE batched call")
+sc = box(28, 52.5, 20, 5, "SentimentScorer", kind="llm", sub="LLM #3 · ONE batched call")
 
 # council container
 ax.add_patch(FancyBboxPatch((12, 39), 52, 10, boxstyle="round,pad=0.4,rounding_size=1.2",
                             facecolor="none", edgecolor=LINE, linewidth=1.2,
                             linestyle=(0, (5, 3))))
 ax.text(38, 50.1, "COUNCIL — concurrent, identical context", fontsize=8.5, color=DIM, ha="center")
-bull = box(13.5, 40.5, 11.5, 5.5, "BullAnalyst", kind="llm", sub="LLM #3", title_size=10)
-bear = box(26.5, 40.5, 11.5, 5.5, "BearAnalyst", kind="llm", sub="LLM #4", title_size=10)
-quant = box(39.5, 40.5, 11.5, 5.5, "QuantAnalyst", kind="llm", sub="LLM #5", title_size=10)
-skep = box(52.5, 40.5, 11.0, 5.5, "ResolutionSkeptic", kind="llm", sub="LLM #6", title_size=9.5)
+bull = box(13.5, 40.5, 11.5, 5.5, "BullAnalyst", kind="llm", sub="LLM #4", title_size=10)
+bear = box(26.5, 40.5, 11.5, 5.5, "BearAnalyst", kind="llm", sub="LLM #5", title_size=10)
+quant = box(39.5, 40.5, 11.5, 5.5, "QuantAnalyst", kind="llm", sub="LLM #6", title_size=10)
+skep = box(52.5, 40.5, 11.0, 5.5, "ResolutionSkeptic", kind="llm", sub="LLM #7", title_size=9.5)
 
 judge = box(28, 28.5, 20, 6.5, "Judge", kind="llm",
-            sub="LLM #7 · deterministic pricing engine\ncomputes verdict/edge/size (code)")
+            sub="LLM #8 · deterministic pricing engine\ncomputes verdict/edge/size (code)")
 
 out = box(15, 17.5, 22, 6, "Response + Steps", kind="io",
           sub="dossier markdown + full trace\n(every LLM call logged in order)")
@@ -132,6 +134,8 @@ arrow(bottom(qp), top(mr))
 arrow(bottom(mr), (24, 67.4), connection="arc3,rad=0.2")
 arrow(bottom(mr), (45, 67.4), connection="arc3,rad=-0.1")
 arrow(bottom(mr), (62.5, 67.4), connection="arc3,rad=-0.3")
+arrow(bottom(mr), top(sqg), connection="arc3,rad=0.35")  # plan → search queries
+arrow(right(sqg), left(er), color=DIM)                    # queries feed the retriever
 arrow((24, 61 - 0.4), top(sc), connection="arc3,rad=0.2")
 arrow((45, 61 - 0.4), top(sc), connection="arc3,rad=-0.1")
 arrow((62.5, 61 - 0.4), top(sc), connection="arc3,rad=-0.3")
@@ -169,7 +173,7 @@ arrow((84, 58.5 + 0.5), (84, 79 - 0.5), color=GRAY, dashed=True, style="-")
 
 # storage + background jobs (bottom left)
 store = box(4, 2.5, 38, 7, "Supabase + Pinecone", kind="store",
-            sub="markets · articles · precedents · positions · runs\nvector namespaces: markets / news / precedents")
+            sub="markets · articles · precedents · positions · runs\nvector namespaces: markets / news / precedents / social")
 jobs = box(50, 2.5, 46, 7, "MarketIndexer · NewsIndexer · RedditIndexer", kind="store",
            sub="cron (Actions or local autopilot): markets + news + Reddit posts\nevery 2h, resolve positions daily → precedents")
 

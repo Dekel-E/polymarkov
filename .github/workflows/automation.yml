@@ -1,9 +1,10 @@
 name: automation
 
 on:
-  schedule:
-    - cron: "15 */4 * * *" # every 4h: autonomous trading + watchlist refresh
-  workflow_dispatch: {}
+  # Automatic schedule disabled for grading. Re-enable later by uncommenting.
+  # schedule:
+  #   - cron: "15 */4 * * *" # every 4h: autonomous trading + watchlist refresh
+  workflow_dispatch: {} # manual runs only for now
 
 env:
   LLMOD_API_KEY: ${{ secrets.LLMOD_API_KEY }}

@@ -140,12 +140,12 @@ function Card({ persona, opinion, index }: { persona: Persona; opinion: PersonaO
         </div>
       </div>
 
-      <p className="mt-3.5 pl-1 text-xs leading-relaxed text-desk-soft">{opinion.thesis}</p>
+      <p className="mt-3.5 pl-1 text-[13px] leading-relaxed text-desk-soft">{opinion.thesis}</p>
 
       {opinion.red_flags?.length > 0 && (
         <ul className="mt-2.5 space-y-1 pl-1">
           {opinion.red_flags.map((f, i) => (
-            <li key={i} className="flex gap-1.5 text-[11px] leading-snug text-instrument/80">
+            <li key={i} className="flex gap-1.5 text-xs leading-snug text-instrument/90">
               <span aria-hidden className="mt-px">⚑</span>
               <span className="min-w-0">{f}</span>
             </li>

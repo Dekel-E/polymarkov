@@ -1,10 +1,11 @@
 name: autonomy
 
 on:
-  schedule:
-    - cron: "17 * * * *" # hourly: sentinel notices -> worker investigates/acts
-    - cron: "0 6 * * *" # daily 06:00 UTC: the agent writes its briefing
-  workflow_dispatch: {}
+  # Automatic schedule disabled for grading. Re-enable later by uncommenting.
+  # schedule:
+  #   - cron: "17 * * * *" # hourly: sentinel notices -> worker investigates/acts
+  #   - cron: "0 6 * * *" # daily 06:00 UTC: the agent writes its briefing
+  workflow_dispatch: {} # manual runs only for now
 
 env:
   LLMOD_API_KEY: ${{ secrets.LLMOD_API_KEY }}

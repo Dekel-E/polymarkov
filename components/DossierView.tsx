@@ -112,13 +112,15 @@ export default function DossierView({
                 <Markdown>{result.response}</Markdown>
               </div>
             )}
-            <StepsTrace steps={result.steps} />
+            <StepsTrace steps={result.steps} metrics={ui?.step_metrics} />
           </div>
         </details>
       )}
 
       {/* runs without sections still need the graded trace visible */}
-      {result.steps.length > 0 && !hasSections && <StepsTrace steps={result.steps} />}
+      {result.steps.length > 0 && !hasSections && (
+        <StepsTrace steps={result.steps} metrics={ui?.step_metrics} />
+      )}
     </div>
   );
 }

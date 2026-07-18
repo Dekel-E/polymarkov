@@ -58,7 +58,7 @@ export default function Home() {
             className="desk-rise flex flex-wrap gap-x-5 gap-y-1 font-mono text-[11px] text-desk-faint"
             style={{ "--i": 3 } as React.CSSProperties}
           >
-            <span>7 model calls / run</span>
+            <span>8 model calls / run</span>
             <span>· deterministic pricing</span>
             <span>· paper trading only</span>
           </div>

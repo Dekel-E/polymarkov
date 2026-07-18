@@ -21,16 +21,16 @@ export default function Markdown({ children }: { children: string }) {
           <h3 className="mb-1.5 mt-4 text-sm font-bold text-desk-ink">{children}</h3>
         ),
         p: ({ children }) => (
-          <p className="mb-3 text-sm leading-relaxed text-desk-soft">{children}</p>
+          <p className="mb-3 text-[15px] leading-7 text-desk-soft">{children}</p>
         ),
         ul: ({ children }) => <ul className="mb-3 space-y-1.5 pl-1">{children}</ul>,
         ol: ({ children }) => (
-          <ol className="mb-3 list-inside list-decimal space-y-1.5 pl-1 text-sm text-desk-soft">
+          <ol className="mb-3 list-inside list-decimal space-y-1.5 pl-1 text-[15px] text-desk-soft">
             {children}
           </ol>
         ),
         li: ({ children }) => (
-          <li className="flex gap-2 text-sm leading-relaxed text-desk-soft">
+          <li className="flex gap-2 text-[15px] leading-7 text-desk-soft">
             <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-instrument" />
             <span className="min-w-0">{children}</span>
           </li>
@@ -48,7 +48,7 @@ export default function Markdown({ children }: { children: string }) {
         strong: ({ children }) => (
           <strong className="font-semibold text-desk-ink">{children}</strong>
         ),
-        em: ({ children }) => <em className="text-desk-dim">{children}</em>,
+        em: ({ children }) => <em className="text-desk-soft">{children}</em>,
         hr: () => <hr className="my-4 border-desk-line" />,
         code: ({ children }) => (
           <code className="rounded bg-desk-deep px-1.5 py-0.5 font-mono text-xs text-desk-soft">
@@ -56,7 +56,7 @@ export default function Markdown({ children }: { children: string }) {
           </code>
         ),
         blockquote: ({ children }) => (
-          <blockquote className="mb-3 border-l-2 border-instrument/50 pl-3 text-sm text-desk-dim">
+          <blockquote className="mb-3 border-l-2 border-instrument/50 pl-3 text-sm text-desk-soft">
             {children}
           </blockquote>
         ),

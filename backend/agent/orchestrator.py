@@ -234,6 +234,7 @@ async def _run(ctx: RunContext, user_prompt: str, started: float, history: list[
 
     response = _dossier_markdown(market, verdict, priced, evidence.clusters, pulse, opinions, trade_note, fill)
     ui = _ui_payload(market, verdict, priced, evidence.clusters, pulse, opinions, fill)
+    ui["step_metrics"] = list(ctx.step_metrics)  # per-step latency/tokens for the run log (GUI only)
 
     # cache the analysis for repeat requests; the fill is not replayed
     await asyncio.to_thread(

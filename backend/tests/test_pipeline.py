@@ -1,6 +1,6 @@
 """End-to-end pipeline test with a mocked LLM and mocked external APIs.
 
-Verifies the Phase 5 contract offline: ok/error envelope, exactly 7 LLM
+Verifies the Phase 5 contract offline: ok/error envelope, exactly 8 LLM
 steps with canonical module names, tool steps in the trace, citations
 flowing through, and the dossier/ui assembly.
 """
@@ -30,6 +30,10 @@ CANNED = {
         "wants_trade": False,
         "language": "English",
         "reason": None,
+    },
+    "SearchQueryGenerator": {
+        "news_query": "Federal Reserve September rate cut",
+        "gnews_queries": ["FOMC September decision", "Fed rate cut odds"],
     },
     "SentimentScorer": {
         "items": [
@@ -196,7 +200,7 @@ def mocked_pipeline(monkeypatch):
     return llm_calls
 
 
-LLM_MODULES = {"QueryPlanner", "SentimentScorer", "BullAnalyst", "BearAnalyst", "QuantAnalyst", "ResolutionSkeptic", "Judge"}
+LLM_MODULES = {"QueryPlanner", "SearchQueryGenerator", "SentimentScorer", "BullAnalyst", "BearAnalyst", "QuantAnalyst", "ResolutionSkeptic", "Judge"}
 TOOL_MODULES = {"MarketResolver", "EvidenceRetriever", "SocialScanner", "CrossVenueScanner"}
 
 
@@ -210,7 +214,7 @@ async def test_full_run_envelope_and_steps(mocked_pipeline):
     llm_steps = [s for s in result.steps if s.prompt.system_prompt != TOOL_SYSTEM_PROMPT]
     tool_steps = [s for s in result.steps if s.prompt.system_prompt == TOOL_SYSTEM_PROMPT]
     assert {s.module for s in llm_steps} == LLM_MODULES
-    assert len(llm_steps) == 7, "exactly 7 LLM calls per execute"
+    assert len(llm_steps) == 8, "exactly 8 LLM calls per execute"
     assert {s.module for s in tool_steps} == TOOL_MODULES
     assert all(s.module in config.CANONICAL_MODULES for s in result.steps)
     assert result.steps[0].module == "QueryPlanner"
@@ -269,7 +273,7 @@ async def test_repeat_request_served_from_cache(mocked_pipeline):
     first = await orchestrator.run_pipeline("analyze the fed september rate cut market")
     assert first.status == "ok"
     calls_after_first = llm_calls["count"]
-    assert calls_after_first == 7
+    assert calls_after_first == 8
 
     # same market again (free text) -> cached; only QueryPlanner runs (1 call)
     second = await orchestrator.run_pipeline("analyze the fed september rate cut market")

@@ -71,10 +71,10 @@ export default function Verdict({
             <Metric label="confidence" value={data.confidence} />
           </div>
           {data.summary && (
-            <p className="mt-4 text-sm leading-relaxed text-desk-soft">{data.summary}</p>
+            <p className="mt-4 text-[15px] leading-7 text-desk-soft">{data.summary}</p>
           )}
           {data.key_risks?.length > 0 && (
-            <ul className="mt-3 space-y-1 text-xs text-desk-dim">
+            <ul className="mt-3 space-y-1 text-[13px] text-desk-soft">
               {data.key_risks.map((r, i) => (
                 <li key={i} className="flex gap-2">
                   <span className="text-instrument">▲</span>
