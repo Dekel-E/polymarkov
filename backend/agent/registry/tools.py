@@ -41,6 +41,16 @@ MODULES: list[dict] = [
         "data_sources": ["Polymarket Gamma", "Polymarket CLOB", "Pinecone (markets)"],
     },
     {
+        "name": "SearchQueryGenerator",
+        "kind": "llm",
+        "prompt_file": "query_generator",
+        "implementation": "backend/agent/pipeline.py",
+        "description": "Generates optimal search queries for news, web, and Wikipedia based on the market.",
+        "inputs": "Market question + resolution criteria + entities",
+        "outputs": "{news_query, gnews_queries[], wiki_query, web_query}",
+        "data_sources": [],
+    },
+    {
         "name": "EvidenceRetriever",
         "kind": "tool",
         "prompt_file": None,

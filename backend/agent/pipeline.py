@@ -254,16 +254,35 @@ async def _precedents(question: str) -> list[Precedent]:
 
 
 async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> EvidencePack:
-    news_query = " ".join(plan.entities[:3]) or market.question
+    generator_prompt = (
+        f"Market Question: {market.question}\n"
+        f"Market Category: {market.category}\n"
+        f"Resolution Criteria: {market.resolution_criteria[:500]}\n"
+        f"Extracted Entities: {', '.join(plan.entities)}\n"
+    )
+    
+    try:
+        raw_queries = await ctx.call_llm("SearchQueryGenerator", load_prompt("query_generator"), generator_prompt)
+        if not isinstance(raw_queries, dict):
+            raw_queries = {}
+    except Exception as exc:
+        print(f"SearchQueryGenerator failed, falling back to basic queries: {exc}")
+        raw_queries = {}
 
-    # two Google News angles: the planner's entities and the literal question
-    gnews_queries = [news_query]
-    if market.question and market.question.lower() != news_query.lower():
-        gnews_queries.append(market.question)
+    default_news_query = " ".join(plan.entities[:3]) or market.question
+    news_query = raw_queries.get("news_query") or default_news_query
+
+    gnews_queries = raw_queries.get("gnews_queries")
+    if not isinstance(gnews_queries, list) or not gnews_queries:
+        gnews_queries = [default_news_query]
+        if market.question and market.question.lower() != default_news_query.lower():
+            gnews_queries.append(market.question)
+            
+    wiki_query = raw_queries.get("wiki_query") or market.question or default_news_query
+    web_query = raw_queries.get("web_query") or news_query
 
     # keyless RSS + Wikipedia fallback for when GDELT's IP block bites
     rss_feeds = news.rss_feeds_for(market.category) if config.RSS_ENABLED else []
-    wiki_query = market.question or news_query
 
     gdelt_live, cached, precedents, rss_live, wiki_live, *gnews_batches = await asyncio.gather(
         news.gdelt_articles(news_query),
@@ -283,7 +302,7 @@ async def retrieve_evidence(ctx: RunContext, plan: QueryPlan, market) -> Evidenc
     # web fallback when the news feeds run thin
     web_results: list[dict] = []
     if config.WEB_SEARCH_ENABLED and len(by_url) < config.WEB_SEARCH_MIN_ARTICLES:
-        web_results = await news.web_search(news_query)
+        web_results = await news.web_search(web_query)
         for a in web_results:
             by_url.setdefault(a["url"], a)
 
