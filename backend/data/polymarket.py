@@ -255,11 +255,18 @@ async def search_markets(query: str, limit: int = 10) -> list[dict]:
         resp.raise_for_status()
         events = resp.json().get("events") or []
         markets: list[dict] = []
+        # Gamma returns events sorted by relevance. We should preserve that order
+        # but pick the highest-volume market within each relevant event.
         for event in events:
+            event_markets = []
             for m in event.get("markets") or []:
                 m.setdefault("events", [{k: event.get(k) for k in ("id", "title", "category")}])
-                markets.append(normalize_market(m))
-        markets.sort(key=lambda m: m["volume24h"], reverse=True)
+                event_markets.append(normalize_market(m))
+            if event_markets:
+                # Pick the highest volume market from this specific event
+                best_in_event = max(event_markets, key=lambda m: m["volume24h"])
+                markets.append(best_in_event)
+                
         return markets[:limit]
 
 
