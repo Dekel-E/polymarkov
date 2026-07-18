@@ -111,7 +111,7 @@ async def markets(limit: int = 20) -> dict:
     try:
         import time as _time
 
-        limit = min(limit, 300)
+        limit = min(limit, 500)
         if _time.time() - _markets_cache["ts"] < 30 and _markets_cache["limit"] >= limit:
             return {"markets": _markets_cache["markets"][:limit], "error": None}
         rows = await polymarket.get_trending_markets(limit)

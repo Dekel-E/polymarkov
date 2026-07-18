@@ -33,7 +33,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: MarketIndexer
-        run: python -m jobs.index_markets --top 300
+        run: python -m jobs.index_markets --top 500
       - name: NewsIndexer
         run: python -m jobs.index_news --markets 20
       - name: RedditIndexer

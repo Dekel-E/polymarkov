@@ -18,10 +18,19 @@ const usd = (v: number) =>
   v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 const pct = (v: number | null | undefined) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
 
-function Pnl({ value }: { value: number | null | undefined }) {
+function Pnl({ value, size }: { value: number | null | undefined; size?: number }) {
   if (value === null || value === undefined) return <span className="text-desk-faint">—</span>;
   const cls = value > 0 ? "text-emerald-400" : value < 0 ? "text-red-400" : "text-desk-dim";
-  return <span className={`font-semibold ${cls}`}>{value >= 0 ? "+" : ""}{usd(value)}</span>;
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={`font-semibold ${cls}`}>{value >= 0 ? "+" : ""}{usd(value)}</span>
+      {size && size > 0 ? (
+        <span className={`font-mono text-[10px] ${cls}`}>
+          ({value >= 0 ? "+" : ""}{((value / size) * 100).toFixed(1)}%)
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 function SideChip({ side }: { side: Position["side"] }) {
@@ -444,7 +453,7 @@ export default function PortfolioPage() {
                             <td className="px-4 py-3 tabular-nums text-desk-soft">{pct(p.entry_price)}</td>
                             <td className="px-4 py-3 tabular-nums text-desk-soft">{usd(p.size_usd)}</td>
                             <td className="px-4 py-3 font-mono text-xs font-semibold text-desk-dim">{p.resolved_outcome}</td>
-                            <td className="px-4 py-3 tabular-nums"><Pnl value={p.pnl} /></td>
+                            <td className="px-4 py-3 tabular-nums"><Pnl value={p.pnl} size={p.size_usd} /></td>
                           </tr>
                         ))}
                       </tbody>
@@ -503,7 +512,7 @@ function PositionRow({
         <td className="px-4 py-3 tabular-nums text-desk-soft">{pct(p.entry_price)}</td>
         <td className="px-4 py-3 tabular-nums text-desk-soft">{pct(p.current_price)}</td>
         <td className="px-4 py-3 tabular-nums text-desk-soft">{usd(p.size_usd)}</td>
-        <td className="px-4 py-3 tabular-nums"><Pnl value={p.unrealized_pnl} /></td>
+        <td className="px-4 py-3 tabular-nums"><Pnl value={p.unrealized_pnl} size={p.size_usd} /></td>
         <td className="px-4 py-3 font-mono text-[11px] tabular-nums text-desk-dim">
           {p.sl_price != null ? pct(p.sl_price) : "—"} / {p.tp_price != null ? pct(p.tp_price) : "—"}
         </td>
@@ -545,7 +554,7 @@ function PositionRow({
               </div>
 
               <div className="flex items-center gap-2">
-                {[0.25, 0.5, 1].map((f) => (
+                {[0.1, 0.25, 0.5, 0.75, 1].map((f) => (
                   <button
                     key={f}
                     onClick={() => onClose(f)}

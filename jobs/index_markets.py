@@ -37,7 +37,7 @@ def embed_markets(markets: list[dict]) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--top", type=int, default=300)
+    parser.add_argument("--top", type=int, default=500)
     parser.add_argument("--dry-run", action="store_true", help="fetch and report, write nothing")
     args = parser.parse_args()
 

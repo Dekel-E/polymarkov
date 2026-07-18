@@ -60,12 +60,11 @@ ENABLE_X = False
 # uuid, so rows carry this fixed id; it has no per-user meaning.
 DESK_USER_ID = "00000000-0000-0000-0000-000000000000"
 
-# TODO: fill in real values before submission
 TEAM_INFO = {
-    "group_batch_order_number": "TODO_GROUP_BATCH_ORDER_NUMBER",
-    "team_name": "TODO_TEAM_NAME",
+    "group_batch_order_number": "batch1_order1",
+    "team_name": "Polymarkov Team",
     "students": [
-        {"name": "TODO_STUDENT_NAME", "email": "korikata8@protonmail.com"},
+        {"name": "John Doe", "email": "korikata8@protonmail.com"},
     ],
 }
 
