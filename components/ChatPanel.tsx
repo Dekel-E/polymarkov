@@ -25,6 +25,8 @@ export default function ChatPanel<E>({
   busyLabel = "thinking…",
   footer = "educational tool · paper trading only · not financial advice",
   sendLabel = "Ask",
+  storageKey,
+  summarizeExtras,
   send,
   renderExtrasTop,
   renderExtrasBottom,
@@ -36,6 +38,11 @@ export default function ChatPanel<E>({
   busyLabel?: string;
   footer?: string;
   sendLabel?: string;
+  /** sessionStorage key; when set the transcript survives navigation/reload. */
+  storageKey?: string;
+  /** One line describing what an assistant turn DID (traded, cited, watched),
+   *  appended to that turn when it is replayed as history. */
+  summarizeExtras?: (extras: E) => string | null;
   send: (
     question: string,
     history: { role: "user" | "assistant"; content: string }[],
@@ -49,6 +56,29 @@ export default function ChatPanel<E>({
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
+  // Restore before first paint of the list. Without this, navigating from the
+  // desk to a market page and back drops the whole conversation, so follow-ups
+  // ("buy $50 of that") arrive with no antecedent.
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      const saved = sessionStorage.getItem(storageKey);
+      if (saved) setMessages(JSON.parse(saved) as ChatMessage<E>[]);
+    } catch {
+      /* corrupt or unavailable storage: start empty */
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      // Cap what we persist so a long session can't blow the quota.
+      sessionStorage.setItem(storageKey, JSON.stringify(messages.slice(-40)));
+    } catch {
+      /* quota or private mode: persistence is best-effort */
+    }
+  }, [messages, storageKey]);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, busy]);
@@ -59,7 +89,13 @@ export default function ChatPanel<E>({
     setInput("");
     setError(null);
     setBusy(true);
-    const history = messages.map((m) => ({ role: m.role, content: m.content }));
+    // Replay each assistant turn with what it DID, not just what it said — the
+    // model otherwise has no memory of the trade it placed or the market it
+    // resolved, and re-asks for details it already established.
+    const history = messages.map((m) => {
+      const note = m.extras !== undefined && summarizeExtras ? summarizeExtras(m.extras) : null;
+      return { role: m.role, content: note ? `${m.content}\n[${note}]` : m.content };
+    });
     setMessages((prev) => [...prev, { role: "user", content: question }]);
     try {
       const res = await send(question, history);
@@ -69,8 +105,24 @@ export default function ChatPanel<E>({
       ]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      // Roll the failed turn back and restore the text. Leaving it stranded
+      // would put an unanswered user turn into every later request's history.
+      setMessages((prev) => prev.slice(0, -1));
+      setInput(question);
     } finally {
       setBusy(false);
+    }
+  }
+
+  function handleClear() {
+    setMessages([]);
+    setError(null);
+    if (storageKey) {
+      try {
+        sessionStorage.removeItem(storageKey);
+      } catch {
+        /* best-effort */
+      }
     }
   }
 
@@ -78,7 +130,17 @@ export default function ChatPanel<E>({
     <section className="rounded-2xl border border-desk-line bg-desk-panel/60 p-4">
       <div className="flex items-baseline justify-between gap-4">
         <h2 className="text-sm font-bold uppercase tracking-wider text-desk-dim">{title}</h2>
-        <span className="font-mono text-[10px] text-desk-faint">{hint}</span>
+        <div className="flex items-baseline gap-3">
+          <span className="font-mono text-[10px] text-desk-faint">{hint}</span>
+          {messages.length > 0 && (
+            <button
+              onClick={handleClear}
+              className="font-mono text-[10px] uppercase tracking-wider text-desk-faint transition hover:text-instrument"
+            >
+              clear
+            </button>
+          )}
+        </div>
       </div>
 
       {messages.length === 0 && <p className="mt-2 text-xs text-desk-dim">{emptyText}</p>}

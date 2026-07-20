@@ -122,14 +122,22 @@ async def test_desk_chat_routes_market_to_market_chat(monkeypatch):
     async def fake_search(query, limit=10):
         return [{"slug": "fed-cut", "question": "Fed cut?"}]
 
-    async def fake_market_chat(slug, question, history):
+    seen: dict = {}
+
+    async def fake_market_chat(slug, question, history, resolved_question=None):
+        seen.update(history=history, resolved=resolved_question)
         return {"answer": f"about {slug}", "citations": [], "error": None}
 
     monkeypatch.setattr(polymarket, "search_markets", fake_search)
     monkeypatch.setattr(chat, "market_chat", fake_market_chat)
-    result = await chat.desk_chat("latest on the fed?", [])
+    prior = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
+    result = await chat.desk_chat("latest on the fed?", prior)
     assert result["answer"] == "about fed-cut"
     assert result["market"] == {"slug": "fed-cut", "question": "Fed cut?"}
+    # the router's resolved phrasing and the clipped history both reach the
+    # sub-module, so follow-ups can be planned against prior turns
+    assert seen["resolved"] == "fed cut"
+    assert [t["content"] for t in seen["history"]] == ["hi", "hello"]
 
 
 @pytest.mark.asyncio
@@ -273,3 +281,95 @@ async def test_desk_chat_routes_control_to_strategy_chat(monkeypatch):
     assert result["applied"] == {"strategies.copy_trading": {"from": True, "to": False}}
     assert result["market"] is None
     assert result["citations"] == []
+
+
+@pytest.mark.asyncio
+async def test_desk_chat_trade_refuses_while_halted(monkeypatch):
+    """The circuit breaker is enforced by jobs, not by the broker — so chat has
+    to check it itself or it can arm the halt and trade through it next turn."""
+    _stub_llm(monkeypatch, [{"route": "trade", "side": "BUY_YES", "size_usd": 25}])
+    from backend.data import supabase_client
+    from backend.sim import paper_broker
+
+    monkeypatch.setattr(
+        supabase_client, "get_agent_settings",
+        lambda: {"halt": {"active": True, "reason": "daily loss limit"}},
+    )
+
+    async def boom(*a, **k):  # must never be reached
+        raise AssertionError("placed a trade while halted")
+
+    monkeypatch.setattr(paper_broker, "execute_paper_trade", boom)
+    result = await chat.desk_chat("buy 25 yes", [], slug="fed-cut")
+    assert "halted" in result["answer"].lower()
+    assert "daily loss limit" in result["answer"]
+    assert result.get("fill") is None
+
+
+@pytest.mark.asyncio
+async def test_desk_chat_analyze_route_runs_pipeline(monkeypatch):
+    """'what's your verdict on X' used to fall through to market_chat and come
+    back as a news summary with no verdict — it must run the real pipeline."""
+    _stub_llm(monkeypatch, [{"route": "analyze", "market_query": "fed cut"}])
+    from backend.agent.types import ExecuteOut
+
+    seen: dict = {}
+
+    async def fake_run_pipeline(prompt, history=None):
+        seen["prompt"] = prompt
+        return ExecuteOut(
+            status="ok", response="## Dossier\nfair 62%", steps=[],
+            ui={"verdict": {"verdict": "BUY_YES"},
+                "market": {"question": "Fed cut?"},
+                "news": [{"headline": "H", "url": "https://x.test/a"}]},
+        )
+
+    monkeypatch.setattr(orchestrator, "run_pipeline", fake_run_pipeline)
+    result = await chat.desk_chat("what's your verdict here?", [], slug="fed-cut")
+    assert "fed-cut" in seen["prompt"]
+    assert result["analyzed"] == {"slug": "fed-cut", "verdict": "BUY_YES"}
+    assert "fair 62%" in result["answer"]
+    assert result["citations"] == [{"title": "H", "url": "https://x.test/a"}]
+
+
+@pytest.mark.asyncio
+async def test_desk_chat_close_route_closes_position(monkeypatch):
+    _stub_llm(monkeypatch, [{"route": "close", "fraction": 0.5}])
+    from backend.sim import paper_broker, portfolio
+
+    monkeypatch.setattr(portfolio, "get_portfolio", lambda: {
+        "open": [{"id": "p1", "market_id": "fed-cut", "side": "BUY_YES", "size_usd": 100.0}],
+        "resolved": [], "stats": {}, "equity_history": [],
+    })
+    seen: dict = {}
+
+    async def fake_close(position_id, fraction=1.0):
+        seen.update(position_id=position_id, fraction=fraction)
+        return {"error": None, "position_id": position_id,
+                "closed_fraction": fraction, "exit_price": 0.61, "pnl": 8.25}
+
+    monkeypatch.setattr(paper_broker, "close_position", fake_close)
+    result = await chat.desk_chat("close half of this", [], slug="fed-cut")
+    assert seen == {"position_id": "p1", "fraction": 0.5}
+    assert result["closed"]["pnl"] == 8.25
+    assert "+$8.25" in result["answer"]
+
+
+@pytest.mark.asyncio
+async def test_desk_chat_close_route_without_matching_position(monkeypatch):
+    _stub_llm(monkeypatch, [{"route": "close", "market_query": "election"}])
+    from backend.sim import portfolio
+
+    monkeypatch.setattr(portfolio, "get_portfolio", lambda: {
+        "open": [{"id": "p1", "market_id": "fed-cut", "side": "BUY_YES", "size_usd": 100.0}],
+        "resolved": [], "stats": {}, "equity_history": [],
+    })
+
+    async def fake_search(query, limit=10):
+        return []
+
+    monkeypatch.setattr(polymarket, "search_markets", fake_search)
+    result = await chat.desk_chat("close my election position", [])
+    assert "couldn't match" in result["answer"]
+    assert "fed-cut" in result["answer"]  # tells the user what IS open
+    assert result.get("closed") is None

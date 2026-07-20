@@ -5,7 +5,22 @@ import ChatPanel, { CitationsList, GatheredBadge } from "@/components/ChatPanel"
 import { deskChat, type DeskChatResult } from "@/lib/api";
 import type { AgentSettings } from "@/lib/types";
 
-type Extras = Pick<DeskChatResult, "citations" | "gathered" | "market" | "fill" | "watchlisted">;
+type Extras = Pick<
+  DeskChatResult,
+  "citations" | "gathered" | "market" | "fill" | "watchlisted" | "analyzed" | "closed"
+>;
+
+// Replayed into history so the model remembers what it actually did, not just
+// what it wrote — "close that one" needs the earlier trade to be on the record.
+function summarizeExtras(e: Extras): string | null {
+  const parts: string[] = [];
+  if (e.market) parts.push(`market: ${e.market.slug}`);
+  if (e.analyzed) parts.push(`ran full analysis · verdict ${e.analyzed.verdict ?? "n/a"}`);
+  if (e.fill) parts.push(`placed paper trade: ${e.fill.side} $${e.fill.size_usd.toFixed(0)}`);
+  if (e.closed) parts.push(`closed position ${e.closed.position_id} · pnl $${e.closed.pnl.toFixed(2)}`);
+  if (e.watchlisted) parts.push(`watchlist ${e.watchlisted.action}: ${e.watchlisted.slug}`);
+  return parts.length ? parts.join(" · ") : null;
+}
 
 // The single omni-chat. Talks about markets, runs paper trades, edits the
 // watchlist, reports the portfolio, controls the desk, and describes itself.
@@ -26,20 +41,24 @@ export default function DeskChat({
         emptyText={
           <>
             One chat for everything the agent can do. Ask about a market
-            (&ldquo;what&apos;s the latest on the Fed cutting in September?&rdquo;), place a
-            paper trade (&ldquo;buy $50 yes on the election&rdquo;), manage the watchlist
-            (&ldquo;watch this market&rdquo;), check the paper book (&ldquo;how&apos;s the
-            portfolio?&rdquo;), or steer the desk (&ldquo;set stop loss to 30%&rdquo;,
-            &ldquo;halt everything&rdquo;). If it can do it, it does it — paper trading
-            only, not financial advice.
+            (&ldquo;what&apos;s the latest on the Fed cutting in September?&rdquo;), run the
+            full workup (&ldquo;analyze this&rdquo;, &ldquo;what&apos;s your verdict?&rdquo;),
+            place a paper trade (&ldquo;buy $50 yes on the election&rdquo;), close one
+            (&ldquo;exit half my Fed position&rdquo;), manage the watchlist (&ldquo;watch this
+            market&rdquo;), check the paper book (&ldquo;how&apos;s the portfolio?&rdquo;,
+            &ldquo;how accurate have you been?&rdquo;), or steer the desk (&ldquo;set stop loss
+            to 30%&rdquo;, &ldquo;halt everything&rdquo;). If it can do it, it does it — paper
+            trading only, not financial advice.
           </>
         }
         placeholder={
           slug
-            ? "Ask about this market, or say “buy $50 yes” / “watch this”…"
-            : "Ask, analyze, trade, watch, or instruct the agent…"
+            ? "Ask, analyze, “buy $50 yes”, “close it”, “watch this”…"
+            : "Ask, analyze, trade, close, watch, or instruct the agent…"
         }
-        busyLabel="working — may search, index, or trade…"
+        busyLabel="working — may search, index, analyze, or trade…"
+        storageKey={slug ? `polymarkov.chat.${slug}` : "polymarkov.chat.desk"}
+        summarizeExtras={summarizeExtras}
         send={async (question, history) => {
           const res = await deskChat(question, history, slug);
           if (res.settings && onApplied) onApplied(res.settings);
@@ -51,6 +70,8 @@ export default function DeskChat({
               market: res.market,
               fill: res.fill,
               watchlisted: res.watchlisted,
+              analyzed: res.analyzed,
+              closed: res.closed,
             },
           };
         }}
@@ -64,9 +85,26 @@ export default function DeskChat({
                 ↳ {e.market.question}
               </Link>
             )}
+            {e.analyzed && (
+              <div className="mb-1.5 inline-block rounded bg-instrument/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-instrument">
+                full analysis{e.analyzed.verdict ? ` · ${e.analyzed.verdict.replace("_", " ")}` : ""}
+              </div>
+            )}
             {e.fill && (
               <div className="mb-1.5 inline-block rounded bg-emerald-400/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-emerald-400">
                 paper fill · {e.fill.side.replace("_", " ")} ${e.fill.size_usd.toFixed(0)}
+              </div>
+            )}
+            {e.closed && (
+              <div
+                className={`mb-1.5 inline-block rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+                  e.closed.pnl >= 0
+                    ? "bg-emerald-400/15 text-emerald-400"
+                    : "bg-red-400/15 text-red-400"
+                }`}
+              >
+                closed{e.closed.fraction < 0.999 ? ` ${(e.closed.fraction * 100).toFixed(0)}%` : ""} ·
+                pnl ${e.closed.pnl.toFixed(2)}
               </div>
             )}
             {e.watchlisted && (

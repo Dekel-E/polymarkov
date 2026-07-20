@@ -27,18 +27,55 @@ def _dossier_context(payload: Optional[dict]) -> Optional[dict]:
         {k: c.get(k) for k in ("id", "headline", "source", "date", "url", "sentiment", "stance", "excerpt")}
         for c in (ui.get("news") or [])
     ]
+    social = ui.get("social") or {}
     return {
         "age_minutes": age_min,
         "verdict": ui.get("verdict"),
         "council": ui.get("council"),
         "news_clusters": news_items,
-        "social_note": (ui.get("social") or {}).get("note"),
+        "social_note": social.get("note"),
+        "social_pulse": {
+            k: social.get(k) for k in ("score", "volume", "bullish", "bearish", "neutral")
+            if social.get(k) is not None
+        } or None,
+        "paper_fill": ui.get("fill"),
+        # The rendered dossier carries the blocks the ui payload has no slot for
+        # — precedents, cross-venue, microstructure, smart money. Without it the
+        # chat can only see the verdict and council, and answers "the analysis
+        # doesn't cover that" for sections that in fact ran.
+        "analysis_markdown": (payload.get("response") or "")[: config.CHAT_DOSSIER_MD_CHARS] or None,
+    }
+
+
+def _price_history_summary(history) -> Optional[dict]:
+    """First/last/min/max of the 7d (ts, price) series. The full series is far
+    too noisy to carry into a prompt, but dropping it entirely makes the chat
+    blind to "why did this move?" — the shape is what the question is about."""
+    points: list[float] = []
+    for row in history or []:
+        if isinstance(row, (list, tuple)) and len(row) == 2:
+            price = row[1]
+        elif isinstance(row, (int, float)):  # bare price series
+            price = row
+        else:
+            continue
+        if isinstance(price, (int, float)):
+            points.append(float(price))
+    if not points:
+        return None
+    return {
+        "points": len(points),
+        "start": round(points[0], 4),
+        "latest": round(points[-1], 4),
+        "min": round(min(points), 4),
+        "max": round(max(points), 4),
+        "change_pts": round((points[-1] - points[0]) * 100, 2),
     }
 
 
 def _market_context(market) -> dict:
     m = market.model_dump()
-    m.pop("price_history_7d", None)  # too noisy for Q&A
+    m["price_history_7d_summary"] = _price_history_summary(m.pop("price_history_7d", None))
     m.pop("yes_token_id", None)
     return m
 
@@ -131,12 +168,23 @@ async def _gather(
     return articles, posts, indexed
 
 
-async def market_chat(slug: str, question: str, history: list[dict]) -> dict:
-    """Answer one chat question about `slug`. Never raises for expected cases."""
+async def market_chat(
+    slug: str,
+    question: str,
+    history: list[dict],
+    resolved_question: Optional[str] = None,
+) -> dict:
+    """Answer one chat question about `slug`. Never raises for expected cases.
+
+    `resolved_question` is the router's pronoun-resolved reading of the message
+    ("the other candidate" -> "Newsom 2028 nomination"); it steers the search
+    planner while the user's literal words still drive the answer.
+    """
     ctx = RunContext()
     question = question.strip()[: config.CHAT_MAX_QUESTION_CHARS]
     if not question:
         return {"answer": None, "citations": [], "error": "empty question"}
+    recent = _clip_history(history)
 
     market = await polymarket.get_market_state(slug)
     dossier_payload = await asyncio.to_thread(
@@ -166,6 +214,11 @@ async def market_chat(slug: str, question: str, history: list[dict]) -> dict:
             "resolution_criteria": (market_ctx.get("resolution_criteria") or "")[:400],
             "time": time_context(market_ctx.get("end_date")),
             "user_question": question,
+            # A follow-up ("and last week?", "what about the other one?") is
+            # unplannable in isolation — the planner needs the same history the
+            # answer call gets, or it writes searches for the wrong subject.
+            "chat_history": recent,
+            "resolved_question": resolved_question,
             "held_context": held,
         },
         ensure_ascii=False,
@@ -197,7 +250,7 @@ async def market_chat(slug: str, question: str, history: list[dict]) -> dict:
                 {"text": str(p.get("text", ""))[:280], "source": p.get("source"), "url": p.get("url")}
                 for p in posts
             ],
-            "chat_history": _clip_history(history),
+            "chat_history": recent,
             "question": question,
         },
         ensure_ascii=False,
@@ -233,27 +286,64 @@ def _portfolio_facts() -> dict:
 
     p = get_portfolio()
     open_rows = [
-        {k: r.get(k) for k in ("market_id", "side", "strategy", "size_usd",
-                               "entry_price", "current_price", "unrealized_pnl", "opened_at")}
-        for r in p["open"][:15]
+        # `id` is what makes a position closeable from chat — without it the
+        # model can name a position it has no way to act on.
+        {k: r.get(k) for k in ("id", "market_id", "side", "strategy", "size_usd",
+                               "entry_price", "current_price", "unrealized_pnl",
+                               "sl_price", "tp_price", "opened_at")}
+        for r in p["open"][:20]
     ]
     resolved = [
         {k: r.get(k) for k in ("market_id", "side", "strategy", "size_usd",
                                "pnl", "resolved_outcome", "resolved_at")}
-        for r in p["resolved"][:15]
+        for r in p["resolved"][:20]
     ]
     runs = [
         {k: r.get(k) for k in ("market_id", "verdict", "fair_prob", "mid_at_run", "created_at")}
         for r in supabase_client.get_recent_runs(10)
     ]
     briefing = supabase_client.latest_briefing()
+
+    # equity curve: the endpoints and extremes answer "how are we doing over
+    # time?" without pouring 90 daily rows into the prompt
+    curve = p.get("equity_history") or []
+    equity = None
+    if curve:
+        values = [float(r.get("equity_usd") or 0) for r in curve]
+        equity = {
+            "points": len(curve),
+            "first": {"at": curve[0].get("captured_at"), "equity_usd": values[0]},
+            "latest": {"at": curve[-1].get("captured_at"), "equity_usd": values[-1]},
+            "min_usd": round(min(values), 2),
+            "max_usd": round(max(values), 2),
+            "change_usd": round(values[-1] - values[0], 2),
+        }
+
+    try:
+        from backend.agent.report_card import get_report_card
+
+        card = get_report_card()
+        report_card = {
+            k: card.get(k) for k in ("total_runs", "verdicts", "avg_latency_s", "calibration")
+        }
+    except Exception:  # noqa: BLE001 — self-knowledge is best-effort like every source
+        report_card = None
+
+    try:
+        watchlist = supabase_client.get_watchlist()[:20]
+    except Exception:  # noqa: BLE001
+        watchlist = []
+
     return {
         "stats": p["stats"],
         "open_positions": open_rows,
         "recent_resolved": resolved,
+        "equity_curve": equity,
+        "report_card": report_card,
         "settings": supabase_client.get_agent_settings(),
         "recent_analyses": runs,
         "pending_agenda": supabase_client.get_pending_agenda(8),
+        "watchlist": watchlist,
         "latest_briefing": (briefing or {}).get("content", "")[:1200] or None,
     }
 
@@ -373,6 +463,17 @@ async def _desk_trade(ctx: RunContext, route_raw: dict, slug: Optional[str]) -> 
     if side not in ("BUY_YES", "BUY_NO"):
         return {"answer": "Tell me which side — **BUY YES** or **BUY NO** — and I'll place the paper trade.",
                 "citations": [], "market": None, "error": None}
+
+    # The broker's halt gate lives in backend/sim/risk.py and is consulted by
+    # jobs, not by execute_paper_trade — so without this check the chat can arm
+    # the circuit breaker in one turn and trade through it in the next.
+    settings = await asyncio.to_thread(supabase_client.get_agent_settings)
+    if (settings.get("halt") or {}).get("active"):
+        reason = (settings.get("halt") or {}).get("reason") or "no reason recorded"
+        return {"answer": f"Trading is halted ({reason}) — no paper trade was placed. "
+                          "Say **resume trading** to lift the circuit breaker first.",
+                "citations": [], "market": None, "error": None}
+
     try:
         size_usd = float(route_raw.get("size_usd") or config.CHAT_DEFAULT_TRADE_USD)
     except (TypeError, ValueError):
@@ -405,6 +506,97 @@ async def _desk_trade(ctx: RunContext, route_raw: dict, slug: Optional[str]) -> 
         "Paper trading only — not financial advice."
     )
     return {"answer": answer, "citations": [], "market": market_ref, "fill": f, "error": None}
+
+
+async def _desk_analyze(route_raw: dict, slug: Optional[str]) -> dict:
+    """Run the real analysis pipeline and hand back the dossier.
+
+    Before this route existed, "run a full analysis on X" classified as `market`
+    and came back as a news summary with no verdict, no fair value and no sign
+    that the council had never actually run.
+    """
+    query = str(route_raw.get("market_query") or "")
+    target = await _resolve_slug(query, slug)
+    if not target:
+        return {"answer": f"I couldn't find a market to analyze for *{query or 'that'}* — "
+                "name it more specifically or paste its Polymarket URL.",
+                "citations": [], "market": None, "error": None}
+
+    from backend.agent.orchestrator import run_pipeline
+
+    # `Market: <slug>` is the templated form intel_cache.slug_from_prompt reads,
+    # so a fresh dossier is served from cache with zero LLM calls.
+    out = await run_pipeline(f"Market: {target}\nTrade: no")
+    if out.status != "ok" or not out.response:
+        return {"answer": f"The analysis failed: {out.error or 'unknown error'}",
+                "citations": [], "market": {"slug": target, "question": target}, "error": None}
+
+    ui = out.ui or {}
+    market_ref = {"slug": target, "question": (ui.get("market") or {}).get("question", target)}
+    return {
+        "answer": out.response,
+        "citations": [
+            {"title": str(c.get("headline", ""))[:200], "url": str(c.get("url", ""))}
+            for c in (ui.get("news") or [])[:8]
+            if isinstance(c, dict) and c.get("url")
+        ],
+        "market": market_ref,
+        "analyzed": {"slug": target, "verdict": (ui.get("verdict") or {}).get("verdict")},
+        "error": None,
+    }
+
+
+async def _desk_close(route_raw: dict, slug: Optional[str]) -> dict:
+    """Close all or part of an open paper position named in chat."""
+    from backend.sim import paper_broker
+    from backend.sim.portfolio import get_portfolio
+
+    portfolio = await asyncio.to_thread(get_portfolio)
+    open_rows = portfolio.get("open") or []
+    if not open_rows:
+        return {"answer": "There are no open paper positions to close.",
+                "citations": [], "market": None, "error": None}
+
+    query = str(route_raw.get("market_query") or "")
+    target = slug or None
+    if not target and query:
+        target = await _resolve_slug(query, None)
+    matches = [r for r in open_rows if r.get("market_id") == target] if target else []
+    if not matches:
+        names = ", ".join(sorted({str(r.get("market_id")) for r in open_rows})[:8])
+        return {"answer": f"I couldn't match *{query or target or 'that'}* to an open position. "
+                          f"Currently open: {names}.",
+                "citations": [], "market": None, "error": None}
+
+    try:
+        fraction = float(route_raw.get("fraction") or 1.0)
+    except (TypeError, ValueError):
+        fraction = 1.0
+    fraction = max(0.01, min(1.0, fraction))
+
+    # Several rows can share a market (different strategies); close the largest
+    # rather than guessing, and say so.
+    position = max(matches, key=lambda r: float(r.get("size_usd") or 0))
+    report = await paper_broker.close_position(str(position["id"]), fraction=fraction)
+    market_ref = {"slug": str(position["market_id"]), "question": str(position["market_id"])}
+    if report.get("error"):
+        return {"answer": f"Couldn't close that position: {report['error']}.",
+                "citations": [], "market": market_ref, "error": None}
+
+    pnl = float(report.get("pnl") or 0)
+    portion = "in full" if fraction >= 0.999 else f"{fraction * 100:.0f}% of it"
+    extra = f" ({len(matches)} positions share this market — I closed the largest.)" if len(matches) > 1 else ""
+    return {
+        "answer": (
+            f"✅ Closed {portion}: **{position.get('side', '')}** on *{position['market_id']}* "
+            f"at {float(report.get('exit_price') or 0) * 100:.1f}% — "
+            f"realized PnL **{'+' if pnl >= 0 else '-'}${abs(pnl):,.2f}**.{extra} "
+            "Paper trading only — not financial advice."
+        ),
+        "citations": [], "market": market_ref,
+        "closed": {"position_id": str(position["id"]), "fraction": fraction, "pnl": pnl},
+        "error": None,
+    }
 
 
 async def _desk_watchlist(route_raw: dict, slug: Optional[str]) -> dict:
@@ -456,16 +648,25 @@ async def desk_chat(question: str, history: list[dict], slug: Optional[str] = No
     if route == "trade":
         return await _desk_trade(ctx, route_raw, slug)
 
+    if route == "analyze":
+        return await _desk_analyze(route_raw, slug)
+
+    if route == "close":
+        return await _desk_close(route_raw, slug)
+
     if route == "watchlist":
         return await _desk_watchlist(route_raw, slug)
 
     if route == "market":
         # On a market page, answer about the market in view without re-searching;
         # otherwise search and keep the matched market's question.
+        query = str(route_raw.get("market_query") or question)
         if slug:
-            target, market_question = slug, slug
+            target = slug
+            # Resolve the real title rather than showing the raw slug back.
+            live = await polymarket.get_market_state(slug)
+            market_question = live.question if live is not None else slug
         else:
-            query = str(route_raw.get("market_query") or question)
             try:
                 hits = await polymarket.search_markets(query, limit=1)
             except Exception:
@@ -480,12 +681,15 @@ async def desk_chat(question: str, history: list[dict], slug: Optional[str] = No
                 }
             target = hits[0]["slug"]
             market_question = hits[0].get("question", target)
-        result = await market_chat(target, question, history)
+        # `recent`, not raw history: the router saw 8 clipped turns and the
+        # sub-module must reason over the same window. `query` is the router's
+        # pronoun-resolved reading, which is what makes follow-ups searchable.
+        result = await market_chat(target, question, recent, resolved_question=query)
         result["market"] = {"slug": target, "question": market_question}
         return result
 
     if route == "control":
-        result = await strategy_chat(question, history)
+        result = await strategy_chat(question, recent)
         return {**result, "citations": [], "market": None}
 
     if route == "portfolio":

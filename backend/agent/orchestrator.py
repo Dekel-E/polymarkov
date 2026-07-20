@@ -64,6 +64,17 @@ def self_description() -> str:
         "- Answer follow-up questions about an analyzed market in the chat on "
         "its page, fetching fresh sources when needed",
         "",
+        "Everything above is also drivable from the chat box, in plain language:",
+        "- **Ask** about a market (\"why did this move?\") or **analyze** it "
+        "outright (\"what's your verdict?\") to run the full council and pricing",
+        "- **Trade** (\"buy $50 yes\") and **close** (\"exit half my Fed "
+        "position\") paper positions against the live book",
+        "- **Watch** markets (\"watch this\") to queue them for re-analysis",
+        "- **Report** on the paper book — positions, PnL, equity over time, "
+        "forecast calibration, agenda, morning briefing",
+        "- **Steer** the desk (\"set stop loss to 30%\", \"halt everything\") — "
+        "every settings change is whitelisted and clamped by code",
+        "",
         "## What I CANNOT do",
         "- Trade real money, hold funds, or give financial advice — every fill "
         "here is simulated",

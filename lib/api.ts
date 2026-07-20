@@ -350,6 +350,8 @@ export interface DeskChatResult extends MarketChatResult {
   applied?: Record<string, { from: unknown; to: unknown }> | null;
   fill?: FillReport | null; // paper trade placed
   watchlisted?: { slug: string; action: "add" | "remove" } | null;
+  analyzed?: { slug: string; verdict: string | null } | null; // full pipeline run
+  closed?: { position_id: string; fraction: number; pnl: number } | null; // position exited
 }
 
 export async function deskChat(

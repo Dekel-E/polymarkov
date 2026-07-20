@@ -194,3 +194,23 @@ async def test_chat_errors_without_market_or_dossier(monkeypatch):
 async def test_chat_rejects_empty_question():
     result = await chat.market_chat("test-market", "   ", [])
     assert result["error"] == "empty question"
+
+
+def test_price_history_summary_reads_ts_price_tuples():
+    """MarketState.price_history_7d is [(ts, price)]; a summary that expected
+    bare floats would return None for every real market and the chat would be
+    silently blind to "how has this moved this week"."""
+    summary = chat._price_history_summary([(1.0, 0.40), (2.0, 0.55), (3.0, 0.48)])
+    assert summary == {
+        "points": 3, "start": 0.4, "latest": 0.48,
+        "min": 0.4, "max": 0.55, "change_pts": 8.0,
+    }
+    assert chat._price_history_summary([]) is None
+    assert chat._price_history_summary(None) is None
+
+
+def test_market_context_summarizes_history_instead_of_dropping_it():
+    ctx = chat._market_context(make_market("fed-cut"))
+    assert "price_history_7d" not in ctx  # raw series stays out of the prompt
+    assert "price_history_7d_summary" in ctx
+    assert "yes_token_id" not in ctx
