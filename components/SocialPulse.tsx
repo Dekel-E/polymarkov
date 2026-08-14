@@ -19,7 +19,7 @@ export default function SocialPulse({ data }: { data: SocialPulseData }) {
       <div className="rounded-lg border border-desk-line bg-desk-panel p-4">
         <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
           <div>
-            <span className="text-desk-dim">Aggregate sentiment: </span>
+          <span className="text-desk-dim">Average scored sentiment: </span>
             <span className="font-semibold text-desk-ink">
               {avg === null ? "n/a" : `${avg > 0 ? "+" : ""}${avg.toFixed(2)}`}
             </span>

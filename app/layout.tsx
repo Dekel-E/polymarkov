@@ -24,9 +24,9 @@ const display = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Polymarkov — Market Intelligence",
+  title: "Polymarkov — Polymarket Research & Paper Trading",
   description:
-    "AI pre-trade intelligence dossiers for Polymarket — news, sentiment, AI council, deterministic verdict, paper trading.",
+    "Research active Polymarket markets with live prices, cited evidence, multiple analyst views, deterministic fair value, and paper trades.",
 };
 
 export default function RootLayout({
@@ -42,7 +42,7 @@ export default function RootLayout({
         <main className="min-w-0">{children}</main>
         <footer className="mx-auto max-w-7xl px-4 py-8 md:px-8">
           <div className="border-t border-desk-line/60 pt-4 font-mono text-[11px] text-desk-faint">
-            Polymarkov · educational tool · paper trading only — not financial advice
+          Polymarkov · educational research · paper trading only · not financial advice
           </div>
         </footer>
       </body>

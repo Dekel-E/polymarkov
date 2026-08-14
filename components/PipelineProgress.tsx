@@ -19,7 +19,7 @@ export default function PipelineProgress({ elapsed }: { elapsed: number }) {
       <div className="mb-2.5 flex items-center justify-between font-mono text-[11px] uppercase tracking-wider text-desk-dim">
         <span className="flex items-center gap-2">
           <span className="h-1.5 w-1.5 rounded-full bg-instrument desk-breathe" />
-          compiling dossier
+          Building the analysis
         </span>
         <span className="tabular-nums">{elapsed}s · typical ~1 min</span>
       </div>

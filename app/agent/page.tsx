@@ -45,23 +45,23 @@ function ReportCard() {
         Report card
       </h2>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Tile label="analyses run" value={stats.total_runs} />
+        <Tile label="Analyses" value={stats.total_runs} />
         <Tile
-          label="verdicts"
+          label="Verdicts"
           value={`${buys} buy / ${stats.verdicts["PASS"] ?? 0} pass`}
-          sub="pass is a first-class outcome"
+          sub="PASS means the safeguards found no trade"
         />
         <Tile
-          label="avg run time"
+          label="Average runtime"
           value={stats.avg_latency_s !== null ? `${stats.avg_latency_s}s` : "—"}
         />
         <Tile
-          label="calibration"
+          label="Calibration"
           value={cal ? `${cal.agent_brier} vs ${cal.market_brier}` : "pending"}
           sub={
             cal
-              ? `Brier score over ${cal.scored_runs} resolved runs (lower is better)`
-              : "scores appear once analyzed markets resolve"
+              ? `agent vs market Brier over ${cal.scored_runs} resolved runs; lower is better`
+              : "available after analyzed markets resolve"
           }
         />
       </div>
@@ -134,7 +134,7 @@ export default function AgentPage() {
           The <span className="text-instrument">Agent</span>
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-desk-dim">
-          What Polymarkov is, how it thinks, and the exact prompts each module runs on.
+          What Polymarkov does, how the pipeline works, and the prompts behind each LLM module.
         </p>
       </header>
 
@@ -152,7 +152,7 @@ export default function AgentPage() {
         <>
           <section className="rounded-2xl border border-desk-line bg-desk-panel/60 p-5">
             <h2 className="text-sm font-bold uppercase tracking-wider text-desk-dim">
-              What it does
+              Purpose and limits
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-desk-soft">{info.description}</p>
             <h2 className="mt-5 text-sm font-bold uppercase tracking-wider text-desk-dim">

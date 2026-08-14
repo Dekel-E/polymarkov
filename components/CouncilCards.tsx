@@ -171,7 +171,7 @@ export default function CouncilCards({ council }: { council: NonNullable<Dossier
           The council
         </h2>
         <span className="font-mono text-[11px] text-desk-faint">
-          four analysts · one context ·{" "}
+          four analyst views · shared evidence ·{" "}
           <span className={spread > 25 ? "text-instrument" : "text-desk-dim"}>
             {spread} pt spread
           </span>

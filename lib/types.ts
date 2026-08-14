@@ -270,6 +270,7 @@ export interface AgentSettings {
     daily_loss_halt_usd: number;
   };
   halt: { active: boolean; reason: string; at: string };
+  funds: { bankroll_usd: number };
 }
 
 export interface ArbLeg {
@@ -280,7 +281,7 @@ export interface ArbLeg {
 }
 
 export interface ArbOpportunity {
-  type: "spread" | "dutch_book";
+  type: "spread" | "dutch_book" | "correlation";
   question: string;
   event_title: string;
   cost_per_share: number;

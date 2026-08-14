@@ -33,32 +33,30 @@ export default function Home() {
             style={{ "--i": 0 } as React.CSSProperties}
           >
             <span className="h-1.5 w-1.5 rounded-full bg-instrument desk-breathe" />
-            live · pre-trade intelligence
+            live research · paper trading
           </div>
           <h1
             className="desk-rise font-display text-4xl font-bold leading-[1.02] tracking-tight text-balance md:text-6xl"
             style={{ "--i": 1 } as React.CSSProperties}
           >
-            Point the desk at
+            Research a market.
             <br />
-            any market.
-            <br />
-            <span className="text-desk-dim">It returns a verdict.</span>
+            <span className="text-desk-dim">See the case for and against.</span>
           </h1>
           <p
             className="desk-rise max-w-lg text-sm leading-relaxed text-desk-soft md:text-base"
             style={{ "--i": 2 } as React.CSSProperties}
           >
-            News, social sentiment, a four-analyst council and a deterministic fair-value
-            engine — compiled into one dossier with a{" "}
-            <span className="text-emerald-400">BUY</span> /{" "}
-            <span className="text-desk-dim">PASS</span> call and a paper-trade size.
+            Polymarkov combines live prices, recent evidence, social signals, and four
+            analyst views. Deterministic risk rules turn that research into{" "}
+            <span className="text-emerald-400">BUY YES</span>, BUY NO, or{" "}
+            <span className="text-desk-dim">PASS</span>—with an optional paper trade.
           </p>
           <div
             className="desk-rise flex flex-wrap gap-x-5 gap-y-1 font-mono text-[11px] text-desk-faint"
             style={{ "--i": 3 } as React.CSSProperties}
           >
-            <span>8 model calls / run</span>
+            <span>8 LLM modules in a full run</span>
             <span>· deterministic pricing</span>
             <span>· paper trading only</span>
           </div>
@@ -90,7 +88,7 @@ export default function Home() {
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && prompt.trim()) run(prompt);
                 }}
                 rows={3}
-                placeholder={'Ask about any market — "Analyze the Fed September rate cut" — or paste a Polymarket URL'}
+                placeholder={'Name an active Polymarket market, ask a question, or paste its URL'}
                 className="w-full resize-y bg-transparent py-2.5 font-mono text-sm text-desk-ink placeholder-desk-faint focus:outline-none"
               />
             </div>
@@ -122,7 +120,7 @@ export default function Home() {
                 )}
               </button>
               <span className="font-mono text-[11px] text-desk-faint">
-                ⌘↵ to run · ~1 min · cached on repeat
+                Ctrl/⌘ + Enter · usually under a minute · repeats may use cache
               </span>
             </div>
 
@@ -160,7 +158,7 @@ export default function Home() {
             Trending markets
           </h2>
           <span className="font-mono text-[11px] text-desk-faint">
-            top by 24h volume · live from Polymarket
+            active markets ranked by 24h volume
           </span>
         </div>
         <MarketGrid />

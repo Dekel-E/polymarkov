@@ -15,20 +15,37 @@ def get_portfolio() -> dict:
         return {"open": [], "resolved": [], "stats": _stats([], []), "equity_history": []}
 
     client = supabase_client.get_client()
-    rows = (
-        client.table("positions").select("*").order("opened_at", desc=True).limit(200)
-        .execute().data or []
-    )
+    rows = _fetch_all_positions(client)
 
     open_rows = [r for r in rows if r.get("status") == "open"]
     resolved = [r for r in rows if r.get("status") == "resolved"]
     _enrich_open(client, open_rows)
     return {
         "open": open_rows,
-        "resolved": resolved,
+        "resolved": resolved[:200],
         "stats": _stats(open_rows, resolved),
         "equity_history": supabase_client.get_equity_history(),
     }
+
+
+def _fetch_all_positions(client, page_size: int = 1_000) -> list[dict]:
+    """Fetch every position so lifetime P&L is not truncated to a UI page."""
+    rows: list[dict] = []
+    start = 0
+    while True:
+        page = (
+            client.table("positions")
+            .select("*")
+            .order("opened_at", desc=True)
+            .range(start, start + page_size - 1)
+            .execute()
+            .data
+            or []
+        )
+        rows.extend(page)
+        if len(page) < page_size:
+            return rows
+        start += page_size
 
 
 def _enrich_open(client, open_rows: list[dict]) -> None:

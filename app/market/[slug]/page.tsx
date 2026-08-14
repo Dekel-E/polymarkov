@@ -153,7 +153,7 @@ export default function MarketPage() {
                 <Stat label="ask" value={pct(market.best_ask)} />
                 <Stat label="spread" value={pct(market.spread)} />
                 <Stat
-                  label="ask depth"
+                  label="YES ask depth"
                   value={`$${Math.round(market.depth_at_ask_usd).toLocaleString()}`}
                 />
                 <Stat
@@ -175,7 +175,7 @@ export default function MarketPage() {
                 className="btn-primary px-6 py-2.5"
               >
                 <span className="h-1.5 w-1.5 rounded-full bg-desk-deep/70" />
-                Generate intel
+                Run full analysis
               </button>
             )}
           </div>
@@ -185,7 +185,7 @@ export default function MarketPage() {
       {market?.resolution_criteria && (
         <details className="group rounded-xl border border-desk-line bg-desk-panel/60">
           <summary className="cursor-pointer select-none px-4 py-3 font-mono text-xs font-semibold uppercase tracking-wider text-desk-dim transition hover:text-desk-ink">
-            resolution terms
+            Resolution criteria
           </summary>
           <div className="border-t border-desk-line px-4 py-3">
             <Markdown>{market.resolution_criteria}</Markdown>

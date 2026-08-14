@@ -21,36 +21,36 @@ const STRATEGY_CARDS: {
   {
     key: "arbitrage",
     name: "Arbitrage",
-    how: "Scans order books for pricing violations: YES + NO asks summing under $1, and mutually exclusive event outcomes summing under $1. Buys every leg for a guaranteed payout.",
-    risk: "Lowest risk — profit is locked at fill, no directional exposure.",
+    how: "Looks for complete YES/NO or mutually exclusive outcome baskets priced below their $1 payout. Before recording a paper trade, it refreshes every book and requires the full basket to remain fillable.",
+    risk: "Execution risk remains: stale or incomplete baskets are aborted with no positions recorded.",
     available: true,
   },
   {
     key: "ai_signal",
     name: "AI signal",
-    how: "The full intel pipeline: news, socials, the four-analyst council, deterministic fair value. Trades only when net edge survives spread, fees and the safety margin.",
-    risk: "Directional risk — sized by quarter-Kelly, gated by PASS rules.",
+    how: "Runs the full research pipeline, then applies deterministic pricing rules. It trades only when estimated edge survives spread, modeled fees, and the safety margin.",
+    risk: "Directional model risk; sizing uses quarter-Kelly and hard risk gates.",
     available: true,
   },
   {
     key: "copy_trading",
     name: "Copy trading",
-    how: "Mirrors new positions from wallets you follow in the Smart Money League — sized to the whale's conviction (their position's share of their book, applied to our bankroll, $5–$100), each whale position copied once. Exits use OUR risk rules, not the whale's.",
-    risk: "Inherits the whale's judgment — diversify who you follow.",
+    how: "Mirrors newly observed positions from followed wallets, scaled to our paper bankroll and capped at $100. Each source position is copied once; exits follow our risk rules.",
+    risk: "Late-entry and source-selection risk; a copied wallet may already have changed its view.",
     available: true,
   },
   {
     key: "market_making",
     name: "Market making",
-    how: "Quotes both sides of eligible markets (mid ±2¢, $25/side, 2 markets); a quote fills only when the market actually trades through it. Inventory capped at $100/market, quotes skew against inventory, and it never quotes within 72h of resolution.",
-    risk: "Inventory risk — filled longs can decay; the risk manager still applies.",
+    how: "Simulates two-sided quotes on up to two eligible markets. Quotes fill only after a trade-through; inventory is capped and quoting stops within 72 hours of resolution.",
+    risk: "Inventory and adverse-selection risk; one side can fill without the other.",
     available: true,
   },
   {
     key: "correlation",
     name: "Correlation graph",
-    how: "A daily LLM pass classifies strict logical relations between similar markets (implies / excludes); every arb scan then checks the graph for pricing violations and executes the risk-free basket.",
-    risk: "Model risk on inferred relations — only high-confidence links are stored.",
+    how: "An LLM proposes strict implication or exclusion links between similar markets. The scanner checks high-confidence links for pricing inconsistencies.",
+    risk: "Not risk-free: projected profit depends on the inferred logical relationship being correct.",
     available: true,
   },
 ];
@@ -63,11 +63,12 @@ const RISK_FIELDS: { key: keyof AgentSettings["risk"]; label: string; hint: stri
   { key: "daily_loss_halt_usd", label: "Daily loss halt $", hint: "circuit breaker: halt all strategies" },
 ];
 
-function Toggle({ on, onChange, disabled }: { on: boolean; onChange: () => void; disabled?: boolean }) {
+function Toggle({ label, on, onChange, disabled }: { label: string; on: boolean; onChange: () => void; disabled?: boolean }) {
   return (
     <button
       role="switch"
       aria-checked={on}
+      aria-label={label}
       disabled={disabled}
       onClick={onChange}
       className={`relative h-6 w-11 shrink-0 rounded-full transition ${
@@ -129,7 +130,7 @@ export default function StrategiesPage() {
       const saved = await updateSettings({ risk: riskDraft });
       setSettings(saved);
       setRiskDraft(saved.risk);
-      setNote("Risk rules saved — the next scheduled run uses them.");
+      setNote("Risk rules saved. Manual and scheduled strategy runs now use them.");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -166,10 +167,11 @@ export default function StrategiesPage() {
     try {
       const reports = await executeArbitrage(opp);
       const filled = reports.filter((r) => r.filled).length;
+      const failure = reports.find((r) => !r.filled)?.error;
       setNote(
-        filled === reports.length
-          ? `Executed: all ${filled} legs filled — check the portfolio.`
-          : `Partial fill: ${filled}/${reports.length} legs — one side is unhedged, review the portfolio.`,
+        reports.length > 0 && filled === reports.length
+          ? `Paper basket recorded: all ${filled} legs filled at refreshed prices.`
+          : `Not executed: ${failure ?? "the complete basket could not be verified"}. No legs were recorded.`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -185,8 +187,8 @@ export default function StrategiesPage() {
           Strategy <span className="text-instrument">Desk</span>
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-desk-dim">
-          Choose what the agent runs autonomously, set the risk rules it must obey, and
-          fire scans by hand. Everything here is paper trading against live books.
+          Configure paper-trading strategies, set their risk limits, and run scans by hand.
+          Autonomous runs require the local autopilot or an enabled workflow schedule.
         </p>
       </header>
 
@@ -256,6 +258,7 @@ export default function StrategiesPage() {
                   </span>
                   {card.available ? (
                     <Toggle
+                      label={`${enabled ? "Disable" : "Enable"} ${card.name}`}
                       on={enabled}
                       onChange={() => toggleStrategy(card.key as keyof AgentSettings["strategies"])}
                       disabled={!settings}
@@ -275,7 +278,7 @@ export default function StrategiesPage() {
           })}
         </div>
         <p className="mt-2 font-mono text-[11px] text-desk-faint">
-          Autonomous runs happen through the local autopilot or after enabling the GitHub workflow schedule;
+          These switches configure strategies; they do not start a schedule. Autonomous runs require the local autopilot or an enabled GitHub workflow;
           copy trading mirrors wallets followed in the{" "}
           <Link href="/league" className="text-instrument hover:underline">Smart Money League</Link>.
         </p>
@@ -335,16 +338,16 @@ export default function StrategiesPage() {
 
         {opps === null && !scanning && (
           <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-5 text-sm text-desk-dim">
-            Checks ~20 top markets for YES+NO ask violations and ~10 mutually exclusive
-            events for dutch books. Run a scan — and expect empty results most of the
-            time: these windows close in seconds, which is why the scheduled job also runs it.
+            Checks top markets for complete YES/NO baskets, mutually exclusive outcome baskets,
+            and high-confidence logical-relation mismatches. Empty results are normal; a scan
+            reports only baskets that clear the configured edge and liquidity checks.
           </div>
         )}
         {scanning && <div className="h-24 animate-pulse rounded-2xl bg-desk-panel" />}
 
         {opps !== null && !scanning && opps.length === 0 && (
           <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-5 text-sm text-desk-dim">
-            No pricing violations right now — the books are efficient at the moment.
+            No qualifying pricing violations were found at the current books.
           </div>
         )}
 
@@ -354,7 +357,7 @@ export default function StrategiesPage() {
               <div key={i} className="rounded-2xl border border-emerald-800/50 bg-emerald-950/20 p-4">
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="rounded bg-desk-deep px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-instrument">
-                    {opp.type === "spread" ? "spread arb" : "dutch book"}
+                    {opp.type === "spread" ? "YES / NO basket" : opp.type === "dutch_book" ? "outcome basket" : "relation hedge"}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold text-desk-ink">
                     {opp.question}
@@ -366,7 +369,11 @@ export default function StrategiesPage() {
                   <span className="text-emerald-400">
                     profit {opp.profit_per_share}/share ({opp.roi_pct}%)
                   </span>
-                  <span>up to {usd(opp.guaranteed_profit_usd)} guaranteed</span>
+                  <span>
+                    {opp.type === "correlation"
+                      ? `projected ${usd(opp.guaranteed_profit_usd)} if the relation holds`
+                      : `${usd(opp.guaranteed_profit_usd)} locked if fully filled`}
+                  </span>
                   <span>{opp.legs.length} legs</span>
                 </div>
                 <button
@@ -374,7 +381,7 @@ export default function StrategiesPage() {
                   disabled={executing !== null}
                   className="mt-3 rounded-xl bg-emerald-500 px-4 py-1.5 text-xs font-bold text-desk-deep transition hover:bg-emerald-400 disabled:opacity-40"
                 >
-                  {executing === opp.question ? "Filling legs…" : "Execute paper legs"}
+                  {executing === opp.question ? "Rechecking every leg…" : "Record complete paper basket"}
                 </button>
               </div>
             ))}

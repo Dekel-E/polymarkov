@@ -70,13 +70,13 @@ export default function ActivityFeed() {
       <h2 className="mb-3 font-display text-lg font-bold uppercase tracking-wide">
         Activity
         <span className="ml-2 font-mono text-[11px] font-normal normal-case tracking-normal text-desk-faint">
-          what the agent has been doing
+          analyses, paper trades, and settlements
         </span>
       </h2>
       {events === null && <div className="h-24 animate-pulse rounded-2xl bg-desk-panel" />}
       {events !== null && events.length === 0 && (
         <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-5 text-sm text-desk-dim">
-          Nothing yet — activity appears here after the first analysis or scheduled run.
+          No activity yet. Analyses, paper trades, and scheduled jobs will appear here.
         </div>
       )}
       {events !== null && events.length > 0 && (

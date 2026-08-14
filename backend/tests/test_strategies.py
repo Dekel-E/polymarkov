@@ -2,7 +2,12 @@ import pytest
 
 from backend import config
 from backend.data.supabase_client import _merge_settings
-from backend.sim.arbitrage import dutch_book_opportunity, spread_opportunity
+from backend.sim.arbitrage import (
+    dutch_book_opportunity,
+    execute_legs,
+    opportunity_signature,
+    spread_opportunity,
+)
 from backend.sim.risk import evaluate_position
 
 
@@ -79,6 +84,86 @@ def test_dutch_book_rejected_when_sum_at_or_above_one():
     e = event(2)
     asks = [(e["markets"][0], [(0.55, 50)]), (e["markets"][1], [(0.50, 50)])]
     assert dutch_book_opportunity(e, asks) is None
+
+
+def test_opportunity_signature_ignores_leg_order_but_not_basket_kind():
+    legs = [
+        {"slug": "m", "side": "BUY_YES"},
+        {"slug": "m", "side": "BUY_NO"},
+    ]
+    assert opportunity_signature({"type": "spread", "legs": legs}) == opportunity_signature(
+        {"type": "spread", "legs": list(reversed(legs))}
+    )
+    assert opportunity_signature({"type": "spread", "legs": legs}) != opportunity_signature(
+        {"type": "correlation", "legs": legs}
+    )
+
+
+@pytest.mark.asyncio
+async def test_execute_legs_records_complete_basket_atomically(monkeypatch):
+    from backend.data import polymarket, supabase_client
+
+    async def fake_market(_slug):
+        return {
+            "yes_token_id": "yes", "no_token_id": "no", "category": "geopolitics",
+            "mid": 0.5,
+        }
+
+    async def fake_book(token):
+        return {"asks": [(0.4, 20.0)] if token == "yes" else [(0.45, 20.0)], "bids": []}
+
+    written = []
+    monkeypatch.setattr(polymarket, "get_market", fake_market)
+    monkeypatch.setattr(polymarket, "get_order_book", fake_book)
+    monkeypatch.setattr(
+        supabase_client,
+        "insert_positions",
+        lambda rows: written.extend(rows) or ["p1", "p2"],
+    )
+    reports = await execute_legs(
+        {
+            "type": "spread", "max_shares": 10,
+            "legs": [
+                {"slug": "m", "side": "BUY_YES", "price": 0.4},
+                {"slug": "m", "side": "BUY_NO", "price": 0.45},
+            ],
+        }
+    )
+    assert all(report["filled"] for report in reports)
+    assert len(written) == 2
+    assert {row["side"] for row in written} == {"BUY_YES", "BUY_NO"}
+
+
+@pytest.mark.asyncio
+async def test_execute_legs_writes_nothing_when_one_leg_is_too_thin(monkeypatch):
+    from backend.data import polymarket, supabase_client
+
+    async def fake_market(_slug):
+        return {
+            "yes_token_id": "yes", "no_token_id": "no", "category": "geopolitics",
+            "mid": 0.5,
+        }
+
+    async def fake_book(token):
+        size = 20.0 if token == "yes" else 2.0
+        return {"asks": [(0.4, size)], "bids": []}
+
+    writes = []
+    monkeypatch.setattr(polymarket, "get_market", fake_market)
+    monkeypatch.setattr(polymarket, "get_order_book", fake_book)
+    monkeypatch.setattr(supabase_client, "insert_positions", lambda rows: writes.append(rows))
+    reports = await execute_legs(
+        {
+            "type": "spread", "max_shares": 10,
+            "legs": [
+                {"slug": "m", "side": "BUY_YES", "price": 0.4},
+                {"slug": "m", "side": "BUY_NO", "price": 0.4},
+            ],
+        }
+    )
+    assert not any(report["filled"] for report in reports)
+    assert writes == []
+    assert "no longer fillable" in reports[0]["error"]
 
 
 # ---------------------------------------------------------------------------

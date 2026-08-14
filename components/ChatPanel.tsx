@@ -22,8 +22,8 @@ export default function ChatPanel<E>({
   hint,
   emptyText,
   placeholder,
-  busyLabel = "thinking…",
-  footer = "educational tool · paper trading only · not financial advice",
+  busyLabel = "Working…",
+  footer = "Educational research · paper trading only · not financial advice",
   sendLabel = "Ask",
   storageKey,
   summarizeExtras,
@@ -235,7 +235,7 @@ export function GatheredBadge({
   if (!gathered?.searched) return null;
   return (
     <div className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-instrument">
-      searched fresh intel · {gathered.articles} article{gathered.articles === 1 ? "" : "s"}
+      searched current sources · {gathered.articles} article{gathered.articles === 1 ? "" : "s"}
       {gathered.articles_indexed > 0 && ` (${gathered.articles_indexed} indexed)`}
       {gathered.social_posts > 0 && ` · ${gathered.social_posts} social posts`}
     </div>

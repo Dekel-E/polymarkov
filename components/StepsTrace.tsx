@@ -81,7 +81,7 @@ export default function StepsTrace({
       <h2 className="mb-3 font-display text-lg font-bold uppercase tracking-wide text-desk-ink">
         Run log
         <span className="ml-2 font-mono text-[11px] font-normal normal-case tracking-normal text-desk-faint">
-          {steps.length} steps · every model call, verbatim
+          {steps.length} steps · LLM calls and tool outputs, in order
           {totalTokens > 0 && <> · {fmtTokens(totalTokens)} tokens total</>}
         </span>
       </h2>

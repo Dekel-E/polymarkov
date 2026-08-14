@@ -1,22 +1,41 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { executeTrade } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { executeTrade, fetchSettings } from "@/lib/api";
 import type { DossierUi, FillReport } from "@/lib/types";
 
 export default function TradePanel({ slug, ui }: { slug: string; ui: DossierUi }) {
   const verdict = ui.verdict;
   const recommended = verdict && verdict.verdict !== "PASS" ? verdict.verdict : null;
-  const suggestedUsd = verdict
-    ? Math.max(10, Math.round(verdict.suggested_size_pct_bankroll * 100))
-    : 50;
-
   const [side, setSide] = useState<"BUY_YES" | "BUY_NO">(recommended ?? "BUY_YES");
-  const [amount, setAmount] = useState<number>(recommended ? suggestedUsd : 50);
+  const [amount, setAmount] = useState<number>(50);
+  const [bankroll, setBankroll] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [fill, setFill] = useState<FillReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchSettings()
+      .then(({ settings }) => {
+        if (!active) return;
+        const currentBankroll = settings.funds.bankroll_usd;
+        setBankroll(currentBankroll);
+        if (recommended && verdict) {
+          setAmount(
+            Math.max(
+              1,
+              Math.round(currentBankroll * verdict.suggested_size_pct_bankroll / 100),
+            ),
+          );
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [recommended, verdict]);
 
   if (ui.fill || !verdict) return null; // agent already traded, or no verdict
 
@@ -56,13 +75,13 @@ export default function TradePanel({ slug, ui }: { slug: string; ui: DossierUi }
   return (
     <section className="rounded-2xl border border-desk-line bg-desk-panel/60 p-5">
       <h2 className="text-sm font-bold uppercase tracking-wider text-desk-dim">
-        {recommended ? "Execute the agent's trade" : "Override: trade anyway"}
+        {recommended ? "Place the suggested paper trade" : "Manual paper trade"}
       </h2>
       <p className="mt-1 text-xs text-desk-dim">
         {recommended
-          ? `The verdict is ${recommended.replace("_", " ")} with a suggested ${verdict.suggested_size_pct_bankroll.toFixed(1)}% of the $10k paper bankroll.`
-          : "The agent says PASS — you can still direct a paper trade at your own discretion."}{" "}
-        Fills land in the desk book on the portfolio page.
+          ? `The verdict is ${recommended.replace("_", " ")}. Suggested size: ${verdict.suggested_size_pct_bankroll.toFixed(1)}% of the paper bankroll${bankroll !== null ? ` ($${Math.max(1, Math.round(bankroll * verdict.suggested_size_pct_bankroll / 100)).toLocaleString()})` : ""}.`
+          : "The agent returned PASS. A manual trade overrides its evidence, liquidity, and risk safeguards."}{" "}
+        Any fill appears in the paper portfolio.
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">

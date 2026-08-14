@@ -32,7 +32,7 @@ export default function NewsSentiment({ clusters }: { clusters: EvidenceCluster[
   return (
     <section>
       <h2 className="mb-3 font-display text-lg font-bold uppercase tracking-wide text-desk-ink">
-        Evidence exhibits
+        Evidence reviewed
       </h2>
       <div className="space-y-2">
         {clusters.map((c) => (

@@ -7,6 +7,29 @@ from backend.data import supabase_client
 from backend.sim import paper_broker, portfolio, risk
 
 
+def test_portfolio_fetches_all_pages_for_lifetime_stats():
+    pages = [[{"id": str(i)} for i in range(2)], [{"id": "2"}]]
+
+    class Query:
+        def table(self, _name):
+            return self
+
+        def select(self, _fields):
+            return self
+
+        def order(self, _field, desc=False):
+            return self
+
+        def range(self, start, _end):
+            self.start = start
+            return self
+
+        def execute(self):
+            return type("Response", (), {"data": pages[self.start // 2]})()
+
+    assert [row["id"] for row in portfolio._fetch_all_positions(Query(), page_size=2)] == ["0", "1", "2"]
+
+
 def test_portfolio_stats_include_open_entry_fees(monkeypatch):
     monkeypatch.setattr(supabase_client, "current_bankroll", lambda: 1_000.0)
     stats = portfolio._stats(

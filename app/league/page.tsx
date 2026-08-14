@@ -197,8 +197,8 @@ export default function LeaguePage() {
             Smart Money <span className="text-instrument">League</span>
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-desk-dim">
-            Polymarket&apos;s most profitable wallets, live from the public data API. Open a
-            row to see holdings; star a wallet to follow it.
+            Top wallets by reported profit for the selected period, from Polymarket&apos;s public
+            data API. Open a row for current holdings or star it to follow future positions.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -295,7 +295,7 @@ export default function LeaguePage() {
 
       {!loading && !error && leaders.length === 0 && (
         <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-6 text-sm text-desk-dim">
-          The leaderboard came back empty — Polymarket&apos;s data API may be unavailable.
+          No leaderboard data is available right now. Polymarket&apos;s public API may be unavailable.
           <button onClick={load} className="ml-2 text-instrument hover:underline">
             Retry
           </button>

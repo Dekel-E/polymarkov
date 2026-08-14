@@ -24,7 +24,7 @@ export function MicrostructureCard({ m }: { m: Microstructure }) {
         <h2 className="font-display text-lg font-bold uppercase tracking-wide text-desk-ink">
           Microstructure
         </h2>
-        <span className="font-mono text-[11px] text-desk-faint">order book · price action · for the Quant</span>
+        <span className="font-mono text-[11px] text-desk-faint">order-book and price-action signals</span>
       </div>
       <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
         <Stat
@@ -69,7 +69,7 @@ export function SmartMoneyCard({ s }: { s: SmartMoneyFlow }) {
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="font-display text-lg font-bold uppercase tracking-wide text-desk-ink">Smart money</h2>
         <span className="font-mono text-[11px] text-desk-faint">
-          net{" "}
+          net YES flow{" "}
           <span className={s.net_yes_usd >= 0 ? "text-emerald-400" : "text-red-400"}>
             {netSide} {money(Math.abs(s.net_yes_usd))}
           </span>{" "}

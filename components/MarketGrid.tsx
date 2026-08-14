@@ -153,7 +153,7 @@ export default function MarketGrid() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search any market — team, candidate, event…  ( / )"
+        placeholder="Search active markets by topic, person, team, or event…  ( / )"
           className="w-full max-w-md rounded-xl border border-desk-line bg-desk-deep/80 px-4 py-2 text-sm text-desk-ink placeholder-desk-faint focus:border-instrument/60 focus:outline-none"
         />
       </div>
@@ -167,7 +167,7 @@ export default function MarketGrid() {
           </div>
           {!searching && results && results.length === 0 && (
             <div className="rounded-xl border border-desk-line bg-desk-panel p-5 text-sm text-desk-dim">
-              No active markets match. Try fewer or different words.
+              No active markets match that search. Try fewer or broader terms.
             </div>
           )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">

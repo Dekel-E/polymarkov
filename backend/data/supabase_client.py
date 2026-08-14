@@ -193,6 +193,20 @@ def insert_position(position: dict) -> Optional[str]:
     return rows[0]["id"] if rows else None
 
 
+def insert_positions(positions: list[dict]) -> list[Optional[str]]:
+    """Insert a paper basket in one PostgREST request.
+
+    PostgreSQL treats the multi-row insert atomically, which prevents an
+    arbitrage simulation from leaving one leg recorded without its hedge.
+    """
+    if not positions:
+        return []
+    if not is_configured():
+        return [None] * len(positions)
+    rows = get_client().table("positions").insert(positions).execute().data or []
+    return [str(row["id"]) for row in rows]
+
+
 def get_open_positions() -> list[dict]:
     if not is_configured():
         return []

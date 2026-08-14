@@ -40,15 +40,9 @@ export default function DeskChat({
         hint="ask · analyze · trade · watch · control"
         emptyText={
           <>
-            One chat for everything the agent can do. Ask about a market
-            (&ldquo;what&apos;s the latest on the Fed cutting in September?&rdquo;), run the
-            full workup (&ldquo;analyze this&rdquo;, &ldquo;what&apos;s your verdict?&rdquo;),
-            place a paper trade (&ldquo;buy $50 yes on the election&rdquo;), close one
-            (&ldquo;exit half my Fed position&rdquo;), manage the watchlist (&ldquo;watch this
-            market&rdquo;), check the paper book (&ldquo;how&apos;s the portfolio?&rdquo;,
-            &ldquo;how accurate have you been?&rdquo;), or steer the desk (&ldquo;set stop loss
-            to 30%&rdquo;, &ldquo;halt everything&rdquo;). If it can do it, it does it — paper
-            trading only, not financial advice.
+            Ask for market research, a full analysis, or portfolio status. You can also
+            place and close paper trades, manage the watchlist, or change risk settings—for
+            example, &ldquo;analyze this market&rdquo; or &ldquo;set the stop-loss to 30%.&rdquo;
           </>
         }
         placeholder={
@@ -56,7 +50,7 @@ export default function DeskChat({
             ? "Ask, analyze, “buy $50 yes”, “close it”, “watch this”…"
             : "Ask, analyze, trade, close, watch, or instruct the agent…"
         }
-        busyLabel="working — may search, index, analyze, or trade…"
+        busyLabel="Working—complex research may take about a minute…"
         storageKey={slug ? `polymarkov.chat.${slug}` : "polymarkov.chat.desk"}
         summarizeExtras={summarizeExtras}
         send={async (question, history) => {

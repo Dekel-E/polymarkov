@@ -63,8 +63,8 @@ export default function WatchlistPage() {
           Watchlist
         </h1>
         <p className="mt-1 text-sm text-desk-dim">
-          Markets you follow. The agent re-analyzes them when autopilot or the GitHub schedule is enabled, so the
-          verdict here stays current.
+          Follow markets and reopen their latest analysis. Automatic refreshes run only when
+          local autopilot or the GitHub schedule is enabled.
         </p>
       </header>
 
@@ -81,7 +81,7 @@ export default function WatchlistPage() {
 
           {!loading && !error && items.length === 0 && (
             <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-6 text-sm text-desk-dim">
-              Nothing watched yet. Star a market on the{" "}
+              Your watchlist is empty. Star a market on the{" "}
               <Link href="/" className="text-instrument hover:underline">
                 dashboard
               </Link>{" "}

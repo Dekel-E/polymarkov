@@ -7,7 +7,7 @@ import type { MarketSummary } from "@/lib/types";
 
 const NAV = [
   { label: "Markets", href: "/", hint: "browse & analyze" },
-  { label: "Strategy Desk", href: "/strategies", hint: "autonomous trading" },
+  { label: "Strategy Desk", href: "/strategies", hint: "automation and risk" },
   { label: "Watchlist", href: "/watchlist", hint: "tracked markets" },
   { label: "Portfolio", href: "/portfolio", hint: "paper positions" },
   { label: "Smart Money League", href: "/league", hint: "top wallets" },
@@ -143,7 +143,7 @@ export default function CommandPalette() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search markets or jump to a page…"
+            placeholder="Find a market or open a page…"
             className="w-full bg-transparent py-3.5 text-sm text-desk-ink placeholder-desk-faint focus:outline-none"
           />
           {searching && <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-desk-line border-t-instrument" />}
@@ -153,7 +153,7 @@ export default function CommandPalette() {
         <ul className="max-h-[52vh] overflow-y-auto p-2">
           {items.length === 0 && (
             <li className="px-3 py-6 text-center text-sm text-desk-dim">
-              {query.trim() ? "No matches." : "Type to search live markets…"}
+              {query.trim() ? "No active markets or pages match." : "Type to search active markets."}
             </li>
           )}
           {items.map((item, i) => (

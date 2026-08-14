@@ -465,16 +465,23 @@ class ArbExecuteIn(BaseModel):
 
 @app.post("/api/arbitrage/execute")
 async def arbitrage_execute(body: ArbExecuteIn) -> dict:
-    """Paper-fill all legs of a scanned opportunity (desk book)."""
+    """Revalidate and atomically paper-fill a server-scanned opportunity."""
     try:
         from backend.sim import arbitrage
 
         legs = body.opportunity.get("legs") or []
         if not legs or len(legs) > 16:
             return {"reports": [], "error": "opportunity has no executable legs"}
-        for leg in legs:
-            leg["size_usd"] = max(1.0, min(float(leg.get("size_usd", 0)), config.ARB_MAX_SIZE_USD))
-        reports = await arbitrage.execute_legs(body.opportunity)
+        signature = arbitrage.opportunity_signature(body.opportunity)
+        fresh_opportunities = await arbitrage.scan(n_markets=20, n_events=10)
+        matched = next(
+            (opp for opp in fresh_opportunities if arbitrage.opportunity_signature(opp) == signature),
+            None,
+        )
+        if matched is None:
+            reports = arbitrage.failed_reports(legs, "basket no longer qualifies in a fresh scan")
+        else:
+            reports = await arbitrage.execute_legs(matched)
         return {"reports": reports, "error": None}
     except Exception as exc:
         return {"reports": [], "error": str(exc)}

@@ -104,9 +104,9 @@ export default function DossierView({
       {(result.response || result.steps.length > 0) && hasSections && (
         <details open={appendixOpen} className="group rounded-2xl border border-desk-line bg-desk-panel/40">
           <summary className="cursor-pointer select-none px-5 py-3.5 font-mono text-xs font-semibold uppercase tracking-wider text-desk-dim transition hover:text-desk-ink">
-            appendix — full report &amp; run log
+            Full report and execution trace
             <span className="ml-2 font-normal normal-case text-desk-faint">
-              the verbatim dossier and every model call
+              complete narrative, prompts, LLM responses, and tool outputs
             </span>
           </summary>
           <div className="space-y-6 border-t border-desk-line px-5 py-4">

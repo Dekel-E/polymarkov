@@ -166,3 +166,36 @@ def test_api_rejects_invalid_numeric_inputs():
         headers={"Content-Type": "application/json"},
     )
     assert response.status_code == 422
+
+
+def test_arbitrage_execute_rejects_basket_missing_from_fresh_scan(monkeypatch):
+    from backend.sim import arbitrage
+
+    async def empty_scan(n_markets, n_events):
+        assert (n_markets, n_events) == (20, 10)
+        return []
+
+    executed = []
+
+    async def should_not_execute(opportunity):
+        executed.append(opportunity)
+        return []
+
+    monkeypatch.setattr(arbitrage, "scan", empty_scan)
+    monkeypatch.setattr(arbitrage, "execute_legs", should_not_execute)
+    data = client.post(
+        "/api/arbitrage/execute",
+        json={
+            "opportunity": {
+                "type": "spread",
+                "legs": [
+                    {"slug": "a", "side": "BUY_YES"},
+                    {"slug": "b", "side": "BUY_YES"},
+                ],
+            }
+        },
+    ).json()
+    assert data["error"] is None
+    assert executed == []
+    assert all(not report["filled"] for report in data["reports"])
+    assert "fresh scan" in data["reports"][0]["error"]

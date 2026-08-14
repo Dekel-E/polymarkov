@@ -111,7 +111,7 @@ export default function MarketCard({
           {market.category || "other"}
         </span>
         <span className="rounded-lg border border-instrument/50 px-3 py-1 text-xs font-semibold text-instrument transition group-hover:bg-instrument/10">
-          Full analysis →
+        Open market →
         </span>
       </div>
     </Link>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-// 0-100 probability axis: market price below the track, council fair value
+// 0-100 probability axis: market price below the track, deterministic agent fair value
 // above it, the shaded span between them is the edge.
 export default function ProbabilityGauge({
   market,
@@ -30,7 +30,7 @@ export default function ProbabilityGauge({
   return (
     <div className="select-none" role="img" aria-label={
       hasFair
-        ? `Market ${Math.round(market * 100)} percent, council fair value ${Math.round(fair! * 100)} percent`
+    ? `Market ${Math.round(market * 100)} percent, agent fair value ${Math.round(fair! * 100)} percent`
         : `Market ${Math.round(market * 100)} percent, fair value not yet assessed`
     }>
       {/* fair value label, above the track */}
@@ -40,7 +40,7 @@ export default function ProbabilityGauge({
             className="absolute -translate-x-1/2 whitespace-nowrap font-mono text-[11px] font-semibold uppercase tracking-wider text-instrument text-glow transition-[left] duration-700 ease-out motion-reduce:transition-none"
             style={{ left: `${clampLabel(fPct)}%` }}
           >
-            council fair {(fairPos * 100).toFixed(1)}%
+          agent fair {(fairPos * 100).toFixed(1)}%
           </div>
         ) : (
           <div className="absolute left-0 font-mono text-[11px] uppercase tracking-wider text-desk-faint">

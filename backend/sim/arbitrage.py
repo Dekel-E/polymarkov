@@ -8,6 +8,8 @@ so no latency race against real HFT bots.
 from __future__ import annotations
 
 import asyncio
+import math
+import uuid
 from typing import Optional
 
 from backend import config
@@ -177,29 +179,155 @@ async def scan(
     return opportunities
 
 
+def opportunity_signature(opportunity: dict) -> tuple[str, tuple[tuple[str, str], ...]]:
+    """Stable identity for matching a client selection to a server scan."""
+    legs = opportunity.get("legs") or []
+    return (
+        str(opportunity.get("type") or ""),
+        tuple(sorted((str(leg.get("slug") or ""), str(leg.get("side") or "")) for leg in legs)),
+    )
+
+
 async def execute_legs(opportunity: dict) -> list[dict]:
-    """Paper-fill every leg, reporting each so an unfilled leg stays visible."""
-    from backend.agent.types import PricingResult
-    from backend.llm.client import RunContext
-    from backend.sim import paper_broker
+    """Atomically simulate a complete basket against freshly fetched books.
+
+    Every leg is preflighted for the same share count and the edge is
+    recomputed after modeled fees. Nothing is recorded unless the whole basket
+    remains liquid and profitable. The eventual database write is one atomic
+    multi-row insert.
+    """
+    from backend.data import supabase_client
+
+    legs = opportunity.get("legs") or []
+    kind = opportunity.get("type")
+    if kind not in {"spread", "dutch_book", "correlation"} or not (2 <= len(legs) <= 16):
+        return failed_reports(legs, "invalid basket")
+    try:
+        requested_shares = float(opportunity.get("max_shares") or 0)
+        scanned_prices = [float(leg["price"]) for leg in legs]
+    except (KeyError, TypeError, ValueError):
+        return failed_reports(legs, "invalid basket size or price")
+    if not math.isfinite(requested_shares) or requested_shares <= 0:
+        return failed_reports(legs, "invalid basket size")
+    if any(not math.isfinite(price) or not 0 < price < 1 for price in scanned_prices):
+        return failed_reports(legs, "invalid scanned price")
+    requested_shares = min(
+        requested_shares,
+        *(config.ARB_MAX_SIZE_USD / price for price in scanned_prices),
+    )
+
+    prepared = await asyncio.gather(
+        *(_prepare_leg(leg, requested_shares) for leg in legs)
+    )
+    failures = [item["error"] for item in prepared if item.get("error")]
+    if failures:
+        return failed_reports(legs, failures[0])
+
+    total_cost_per_share = sum(
+        item["vwap"] + item["fee_per_share"] for item in prepared
+    )
+    fresh_profit_per_share = 1.0 - total_cost_per_share
+    if fresh_profit_per_share < config.ARB_MIN_EDGE:
+        return failed_reports(legs, "edge disappeared at fresh executable prices")
+
+    positions = [item["position"] for item in prepared]
+    try:
+        ids = await asyncio.to_thread(supabase_client.insert_positions, positions)
+    except Exception as exc:
+        return failed_reports(legs, f"basket write failed: {exc}")
+    if len(ids) != len(positions):
+        return failed_reports(legs, "basket write returned an incomplete result")
 
     reports = []
-    for leg in opportunity["legs"]:
-        market = await polymarket.get_market_state(leg["slug"])
-        if market is None:
-            reports.append({"slug": leg["slug"], "filled": False, "error": "market gone"})
-            continue
-        priced = PricingResult(
-            prior=market.mid, fair=market.mid, fair_adj=market.mid,
-            gross_edge_pts=0.0, half_spread=(market.spread or 0) / 2, taker_fee=0.0,
-            net_edge_pts=0.0, verdict=leg["side"], suggested_size_pct_bankroll=0.0,
-            resolution_risk="low",
-        )
-        fill = await paper_broker.execute_paper_trade(
-            RunContext(), market, priced, size_usd=leg["size_usd"], strategy="arbitrage",
-        )
+    for item, position_id in zip(prepared, ids):
         reports.append(
-            {"slug": leg["slug"], "side": leg["side"], "filled": fill is not None,
-             **({"vwap": fill.vwap, "size_usd": fill.size_usd, "position_id": fill.position_id} if fill else {})}
+            {
+                "slug": item["slug"],
+                "side": item["side"],
+                "filled": True,
+                "vwap": item["vwap"],
+                "size_usd": item["filled_usd"],
+                "position_id": position_id or f"local-{uuid.uuid4()}",
+                "fresh_profit_per_share": round(fresh_profit_per_share, 6),
+            }
         )
     return reports
+
+
+def failed_reports(legs: list[dict], error: str) -> list[dict]:
+    return [
+        {
+            "slug": str(leg.get("slug") or ""),
+            "side": leg.get("side"),
+            "filled": False,
+            "error": error,
+        }
+        for leg in legs
+    ]
+
+
+def _walk_shares(asks: list[tuple[float, float]], requested_shares: float) -> Optional[dict]:
+    remaining = requested_shares
+    cost = 0.0
+    consumed = 0
+    for price, available in asks:
+        if not (math.isfinite(price) and math.isfinite(available) and 0 < price < 1 and available > 0):
+            continue
+        take = min(remaining, available)
+        cost += take * price
+        remaining -= take
+        consumed += 1
+        if remaining <= 1e-9:
+            break
+    if remaining > 1e-9 or requested_shares <= 0:
+        return None
+    return {
+        "shares": requested_shares,
+        "filled_usd": round(cost, 6),
+        "vwap": round(cost / requested_shares, 6),
+        "levels_consumed": consumed,
+    }
+
+
+async def _prepare_leg(leg: dict, shares: float) -> dict:
+    slug = str(leg.get("slug") or "")
+    side = leg.get("side")
+    if not slug or side not in {"BUY_YES", "BUY_NO"}:
+        return {"error": "invalid basket leg"}
+    market = await polymarket.get_market(slug)
+    if market is None:
+        return {"error": f"market {slug!r} is no longer available"}
+    token_id = market["yes_token_id"] if side == "BUY_YES" else market["no_token_id"]
+    if not token_id:
+        return {"error": f"{side.removeprefix('BUY_')} book unavailable for {slug!r}"}
+    try:
+        book = await polymarket.get_order_book(token_id)
+    except Exception as exc:
+        return {"error": f"book unavailable for {slug!r}: {exc}"}
+    fill = _walk_shares(book["asks"], shares)
+    if fill is None:
+        return {"error": f"full basket size is no longer fillable on {slug!r}"}
+
+    vwap = fill["vwap"]
+    fee_per_share = taker_fee(market["category"], vwap)
+    scanned = float(leg["price"])
+    reference_mid = market["mid"] if side == "BUY_YES" else 1 - market["mid"]
+    position = {
+        "market_id": slug,
+        "side": side,
+        "entry_price": vwap,
+        "size_usd": fill["filled_usd"],
+        "fee_paid": round(fee_per_share * shares, 4),
+        "slippage_bps": round((vwap - scanned) / scanned * 10_000, 2),
+        "fair_prob_at_entry": reference_mid,
+        "strategy": "arbitrage",
+    }
+    return {
+        "error": None,
+        "slug": slug,
+        "side": side,
+        "vwap": vwap,
+        "filled_usd": fill["filled_usd"],
+        "fee_per_share": fee_per_share,
+        "position": position,
+    }

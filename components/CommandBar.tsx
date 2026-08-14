@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 const NAV = [
   { href: "/", label: "Markets" },
-  { href: "/strategies", label: "Strategy" },
+  { href: "/strategies", label: "Strategies" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/portfolio", label: "Portfolio" },
   { href: "/league", label: "League" },
@@ -75,7 +75,7 @@ export default function CommandBar() {
             <circle cx="11" cy="11" r="7" />
             <path d="m21 21-4.3-4.3" />
           </svg>
-          <span className="hidden md:inline">Search…</span>
+          <span className="hidden md:inline">Find a market…</span>
           <kbd className="hidden rounded border border-desk-edge px-1.5 py-0.5 font-mono text-[10px] text-desk-faint transition-colors group-hover:border-instrument/40 group-hover:text-instrument md:inline">
             ⌘K
           </kbd>

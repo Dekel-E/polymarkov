@@ -29,10 +29,10 @@ export default function MarketNews({ slug }: { slug: string }) {
     <section className="rounded-2xl border border-desk-line bg-desk-panel/60">
       <div className="flex items-baseline gap-3 border-b border-desk-line px-4 py-2.5">
         <h2 className="font-mono text-[11px] font-semibold uppercase tracking-wider text-instrument">
-          related news
+          Recent headlines
         </h2>
         <span className="font-mono text-[10px] text-desk-faint">
-          latest indexed · sentiment-scored in the dossier
+          scored for relevance and stance during full analysis
         </span>
       </div>
       {articles.map((a, i) => (

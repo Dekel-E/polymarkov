@@ -45,8 +45,7 @@ export default function DeskBriefing() {
           <Markdown>{briefing.content}</Markdown>
         ) : (
           <p className="text-sm text-desk-dim">
-            No briefing yet — the agent writes one every morning at 06:00 UTC once the
-            autonomy schedule is running.
+            No briefing yet. A daily briefing appears here when the autonomy schedule is enabled.
           </p>
         )}
       </section>
@@ -57,8 +56,8 @@ export default function DeskBriefing() {
         </h2>
         {agendaItems.length === 0 ? (
           <p className="text-sm text-desk-dim">
-            Clear. The sentinel files items here when it notices price moves, positions
-            at risk, news bursts, or approaching resolutions.
+            No pending items. The sentinel adds work after material price moves, risk
+            alerts, news bursts, or approaching resolutions.
           </p>
         ) : (
           <div className="space-y-2">

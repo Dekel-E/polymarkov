@@ -222,8 +222,8 @@ export default function PortfolioPage() {
             Paper <span className="text-instrument">Portfolio</span>
           </h1>
           <p className="mt-1 text-sm text-desk-dim">
-            One book: the agent&apos;s strategy trades and your manual trades, every fill
-            simulated against the live order book. Filter by strategy below.
+            Track automated and manual paper trades in one book. Entries and exits are
+            simulated against live order books; open positions use the latest indexed price.
           </p>
         </div>
       </header>
@@ -237,12 +237,16 @@ export default function PortfolioPage() {
                 sub={
                   fundsDraft === null ? (
                     <button onClick={() => setFundsDraft(String(stats.bankroll_usd))} className="text-instrument hover:underline">
-                      bankroll {usd(stats.bankroll_usd)} · adjust
+                      starting bankroll {usd(stats.bankroll_usd)} · edit
                     </button>
                   ) : (
                     <span className="flex items-center gap-1.5">
                       $
                       <input
+                        type="number"
+                        min={100}
+                        max={1_000_000}
+                        step={100}
                         value={fundsDraft}
                         onChange={(e) => setFundsDraft(e.target.value)}
                         className="w-20 rounded border border-desk-line bg-desk-deep px-1.5 py-0.5 font-mono text-xs text-desk-ink"
@@ -250,9 +254,13 @@ export default function PortfolioPage() {
                       <button
                         onClick={() =>
                           act("Adjust funds", async () => {
-                            await updateSettings({ funds: { bankroll_usd: Number(fundsDraft) } });
+                            const requested = Number(fundsDraft);
+                            if (!Number.isFinite(requested) || requested < 100 || requested > 1_000_000) {
+                              throw new Error("enter a bankroll between $100 and $1,000,000");
+                            }
+                            const saved = await updateSettings({ funds: { bankroll_usd: requested } });
                             setFundsDraft(null);
-                            return `Bankroll set to ${usd(Number(fundsDraft))}.`;
+                            return `Starting bankroll set to ${usd(saved.funds.bankroll_usd)}. Existing positions and P&L were not reset.`;
                           })
                         }
                         className="text-instrument hover:underline"
@@ -269,9 +277,9 @@ export default function PortfolioPage() {
               <StatCard
                 label="Equity"
                 value={usd(stats.equity_usd)}
-                sub={<>unrealized <Pnl value={stats.unrealized_pnl_usd} /> after {usd(stats.open_fees_usd)} fees</>}
+                sub={<>includes unrealized <Pnl value={stats.unrealized_pnl_usd} /> after {usd(stats.open_fees_usd)} entry fees</>}
               />
-              <StatCard label="Available" value={usd(stats.available_usd)} sub="balance − exposure − entry fees" />
+              <StatCard label="Available cash" value={usd(stats.available_usd)} sub="balance minus open exposure and entry fees" />
               <StatCard
                 label="Open exposure"
                 value={usd(stats.open_exposure_usd)}
@@ -330,12 +338,12 @@ export default function PortfolioPage() {
                 <div className="mb-3 flex items-baseline justify-between gap-4">
                   <h2 className="text-lg font-bold tracking-tight">Open positions</h2>
                   <span className="font-mono text-[10px] text-desk-faint">
-                    prices from the last market index (≤2h) · click a row for controls
+                    reference prices may be up to 2h old · open a row for controls
                   </span>
                 </div>
                 {openRows.length === 0 ? (
                   <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-5 text-sm text-desk-dim">
-                    No open positions.
+                    No open positions. Analyze an active market and place a paper trade to start the book.
                   </div>
                 ) : (
                   <div className="overflow-x-auto rounded-2xl border border-desk-line bg-desk-panel/60">
@@ -369,13 +377,13 @@ export default function PortfolioPage() {
                             onLimits={(sl, tp) =>
                               act("Set limits", async () => {
                                 await setPositionLimits(p.id, sl, tp);
-                                return `Levels saved — the risk manager enforces them on its next pass.`;
+                                return `Levels saved. The risk manager checks them on its next scheduled pass.`;
                               })
                             }
                             onAdd={(amount) =>
                               act("Add", async () => {
                                 const fill = await executeTrade(p.market_id, p.side, amount);
-                                return `Added ${usd(fill.size_usd)} at ${(fill.vwap * 100).toFixed(1)}% (separate lot in Desk trades).`;
+                                return `Added ${usd(fill.size_usd)} at ${(fill.vwap * 100).toFixed(1)}% as a separate lot.`;
                               })
                             }
                           />
@@ -390,9 +398,9 @@ export default function PortfolioPage() {
               {quotes.length > 0 && (
                 <section>
                   <h2 className="mb-3 text-lg font-bold tracking-tight">
-                    Working quotes
+                    Open market-making quotes
                     <span className="ml-2 font-mono text-[11px] font-normal text-desk-faint">
-                      resting market-maker orders
+                      simulated orders waiting for a trade-through
                     </span>
                   </h2>
                   <div className="overflow-hidden rounded-2xl border border-desk-line bg-desk-panel/60">
@@ -424,7 +432,7 @@ export default function PortfolioPage() {
               {/* history */}
               <section>
                 <div className="mb-3 flex items-baseline justify-between">
-                  <h2 className="text-lg font-bold tracking-tight">History</h2>
+                  <h2 className="text-lg font-bold tracking-tight">Trade history</h2>
                   {portfolio.resolved.length > 0 && (
                     <button
                       onClick={() => exportCsv(byStrategy(portfolio.resolved))}
@@ -436,7 +444,7 @@ export default function PortfolioPage() {
                 </div>
                 {byStrategy(portfolio.resolved).length === 0 ? (
                   <div className="rounded-xl border border-desk-line bg-desk-panel/60 p-5 text-sm text-desk-dim">
-                    No resolved trades yet.
+                    No closed or resolved trades yet.
                   </div>
                 ) : (
                   <div className="overflow-x-auto rounded-2xl border border-desk-line bg-desk-panel/60">
