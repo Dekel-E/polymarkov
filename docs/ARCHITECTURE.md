@@ -104,7 +104,12 @@ The request path is orchestrated by [backend/agent/orchestrator.py](../backend/a
 each stage lives in [backend/agent/pipeline.py](../backend/agent/pipeline.py).
 Every LLM call goes through `RunContext.call_llm` ([backend/llm/client.py](../backend/llm/client.py)),
 which records the step (even on failure), retries invalid JSON exactly once,
-and enforces the timeout. Tool steps are recorded via `add_tool_step`.
+and enforces the timeout. Below that logical-call layer, every physical chat
+request, retry, compatibility fallback, and embedding batch atomically reserves
+one slot through [backend/llm/budget.py](../backend/llm/budget.py). PostgreSQL
+migration `0017` makes the quota shared across every web instance and job; a
+configured deployment fails closed if that shared counter is unavailable.
+Tool steps are recorded via `add_tool_step`.
 
 **0. Entry & envelope.** `POST /api/execute {prompt, history?}` calls
 `run_pipeline`, which wraps the whole thing so a pipeline exception becomes a

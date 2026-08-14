@@ -7,6 +7,7 @@ as a separate step, and tallies token usage.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
@@ -15,6 +16,7 @@ from typing import Any
 
 from backend import config
 from backend.agent.types import Step, StepPrompt
+from backend.llm import budget
 
 TOOL_SYSTEM_PROMPT = "N/A (deterministic tool)"
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
@@ -77,15 +79,37 @@ class RunContext:
             model=config.LLM_MODEL,
             messages=[{"role": "system", "content": system_prompt}, *messages],
         )
+
+        async def _provider_request(**request_kwargs):
+            # Reserve immediately before each paid request. This deliberately
+            # lives below the logical-call layer so JSON retries and gateway
+            # response_format fallbacks consume their own global quota slot.
+            await asyncio.to_thread(budget.reserve, "chat")
+            try:
+                response = await _client().chat.completions.create(**request_kwargs)
+            except Exception:
+                await asyncio.to_thread(budget.record_usage, "chat", failed=True)
+                raise
+            usage = response.usage
+            tokens_in = (usage.prompt_tokens or 0) if usage else 0
+            tokens_out = (usage.completion_tokens or 0) if usage else 0
+            await asyncio.to_thread(
+                budget.record_usage,
+                "chat",
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+            )
+            return response
+
         try:
-            resp = await _client().chat.completions.create(
+            resp = await _provider_request(
                 **kwargs, response_format={"type": "json_object"}
             )
         except Exception as exc:
             # some OpenAI-compatible gateways reject response_format
             if "response_format" not in str(exc):
                 raise
-            resp = await _client().chat.completions.create(**kwargs)
+            resp = await _provider_request(**kwargs)
         if resp.usage:
             self.tokens_in += resp.usage.prompt_tokens or 0
             self.tokens_out += resp.usage.completion_tokens or 0

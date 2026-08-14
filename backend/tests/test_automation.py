@@ -64,6 +64,35 @@ def test_score_runs_compares_agent_vs_market():
     # agent: (0.2^2 + 0.1^2)/2 = 0.025 ; market: (0.4^2 + 0.3^2)/2 = 0.125
     assert result["agent_brier"] == pytest.approx(0.025)
     assert result["market_brier"] == pytest.approx(0.125)
+    assert result["brier_skill_vs_market"] == pytest.approx(0.8)
+    assert result["resolved_markets"] == 2
+    assert result["resolution_coverage_pct"] == pytest.approx(2 / 3 * 100, abs=0.1)
+    assert result["sample_status"] == "early"
+    assert sum(bucket["count"] for bucket in result["buckets"]) == 2
+
+
+def test_score_runs_reports_latest_forecast_once_per_market():
+    runs = [
+        {"market_id": "a", "fair_prob": 0.9, "mid_at_run": 0.7, "created_at": "2026-02-02"},
+        {"market_id": "a", "fair_prob": 0.2, "mid_at_run": 0.6, "created_at": "2026-02-01"},
+        {"market_id": "b", "fair_prob": 0.1, "mid_at_run": 0.4, "created_at": "2026-02-02"},
+    ]
+    result = score_runs(runs, {"a": 1, "b": 0})
+
+    assert result["scored_runs"] == 3
+    assert result["latest_per_market"]["markets"] == 2
+    # Latest forecasts are 0.9 for YES and 0.1 for NO.
+    assert result["latest_per_market"]["agent_brier"] == pytest.approx(0.01)
+
+
+def test_score_runs_skips_invalid_probabilities():
+    runs = [
+        {"market_id": "a", "fair_prob": float("nan"), "mid_at_run": 0.5},
+        {"market_id": "a", "fair_prob": 1.2, "mid_at_run": 0.5},
+        {"market_id": "a", "fair_prob": 0.8, "mid_at_run": 0.6},
+    ]
+    result = score_runs(runs, {"a": 1})
+    assert result["scored_runs"] == 1
 
 
 def test_score_runs_none_when_nothing_resolved():

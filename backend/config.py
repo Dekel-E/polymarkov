@@ -75,6 +75,11 @@ HTTP_TIMEOUT_S = 10.0
 # TIMEOUT x (1 + retries) stays under EXECUTE_DEADLINE_S.
 LLM_TIMEOUT_S = 75.0
 LLM_MAX_RETRIES = 1
+# One provider-request quota shared by manual analysis, chat, automation,
+# retries, response-format fallbacks, and embedding batches. PostgreSQL makes
+# each reservation atomic across processes; env override supports deployments
+# with a different purchased allowance.
+LLM_GLOBAL_DAILY_REQUEST_LIMIT = int(_env("LLM_GLOBAL_DAILY_REQUEST_LIMIT", "150"))
 EXECUTE_DEADLINE_S = 270.0
 GDELT_MAX_RECORDS = 25
 GDELT_TIMESPAN = "7d"

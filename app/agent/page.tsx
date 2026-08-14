@@ -38,6 +38,7 @@ function ReportCard() {
   if (error || !stats) return null;
   const buys = (stats.verdicts["BUY_YES"] ?? 0) + (stats.verdicts["BUY_NO"] ?? 0);
   const cal = stats.calibration;
+  const primaryCal = cal?.latest_per_market;
 
   return (
     <section>
@@ -57,14 +58,80 @@ function ReportCard() {
         />
         <Tile
           label="Calibration"
-          value={cal ? `${cal.agent_brier} vs ${cal.market_brier}` : "pending"}
+          value={primaryCal ? primaryCal.agent_brier.toFixed(3) : "pending"}
           sub={
-            cal
-              ? `agent vs market Brier over ${cal.scored_runs} resolved runs; lower is better`
+            primaryCal
+              ? `Brier vs market ${primaryCal.market_brier.toFixed(3)} across ${primaryCal.markets} resolved markets`
               : "available after analyzed markets resolve"
           }
         />
       </div>
+
+      {cal && primaryCal && (
+        <div className="mt-4 rounded-2xl border border-desk-line bg-desk-panel/60 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-desk-ink">Calibration diagnostics</h3>
+              <p className="mt-0.5 text-xs text-desk-dim">
+                Latest forecast per resolved market; lower Brier, log loss, and calibration error are better.
+              </p>
+            </div>
+            <span className="rounded-full border border-desk-edge px-2 py-1 font-mono text-[10px] uppercase text-desk-dim">
+              {cal.sample_status} sample
+            </span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Tile
+              label="Skill vs market"
+              value={
+                primaryCal.brier_skill_vs_market === null
+                  ? "n/a"
+                  : `${primaryCal.brier_skill_vs_market >= 0 ? "+" : ""}${(
+                      primaryCal.brier_skill_vs_market * 100
+                    ).toFixed(1)}%`
+              }
+              sub="positive means a lower Brier score"
+            />
+            <Tile label="Log loss" value={primaryCal.agent_log_loss.toFixed(3)} sub={`market ${primaryCal.market_log_loss.toFixed(3)}`} />
+            <Tile label="Calibration error" value={primaryCal.expected_calibration_error.toFixed(3)} sub="weighted forecast/outcome gap" />
+            <Tile label="Resolution coverage" value={`${cal.resolution_coverage_pct.toFixed(1)}%`} sub={`${cal.scored_runs} of ${cal.forecast_runs} forecasts scored`} />
+          </div>
+
+          {cal.sample_warning && (
+            <p className="mt-3 rounded-lg border border-amber-900/50 bg-amber-950/20 px-3 py-2 text-xs text-amber-300">
+              {cal.sample_warning}
+            </p>
+          )}
+
+          {primaryCal.buckets.length > 0 && (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[480px] text-left text-xs">
+                <thead className="font-mono uppercase tracking-wide text-desk-faint">
+                  <tr>
+                    <th className="pb-2 font-normal">Forecast band</th>
+                    <th className="pb-2 font-normal">Forecasts</th>
+                    <th className="pb-2 font-normal">Mean forecast</th>
+                    <th className="pb-2 font-normal">Observed YES</th>
+                    <th className="pb-2 font-normal">Gap</th>
+                  </tr>
+                </thead>
+                <tbody className="font-mono tabular-nums text-desk-dim">
+                  {primaryCal.buckets.map((bucket) => (
+                    <tr key={bucket.range} className="border-t border-desk-line/60">
+                      <td className="py-2">{bucket.range}</td>
+                      <td className="py-2">{bucket.count}</td>
+                      <td className="py-2">{(bucket.mean_forecast * 100).toFixed(1)}%</td>
+                      <td className="py-2">{(bucket.outcome_rate * 100).toFixed(1)}%</td>
+                      <td className="py-2">{(bucket.absolute_gap * 100).toFixed(1)} pts</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {stats.recent.length > 0 && (
         <div className="mt-4 overflow-hidden rounded-2xl border border-desk-line bg-desk-panel/60">

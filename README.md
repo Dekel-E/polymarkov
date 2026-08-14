@@ -147,7 +147,7 @@ Short-circuits intentionally cost less:
 - Invalid model JSON gets at most one traced repair attempt.
 - Council personas run concurrently, reducing wall-clock latency.
 
-Every LLM call goes through `RunContext.call_llm`, which applies the timeout, records the prompts and response even on failure, and performs the single allowed JSON repair attempt. The entire `/api/execute` operation has a 270-second application deadline, below Vercel's 300-second function limit.
+Every LLM call goes through `RunContext.call_llm`, which applies the timeout, records the prompts and response even on failure, and performs the single allowed JSON repair attempt. Immediately before every physical provider request, `backend/llm/budget.py` atomically reserves one slot in Supabase. The counter is global across API instances, chats, jobs, concurrent council calls, JSON repairs, provider fallbacks, and embedding batches. A configured deployment fails closed if the counter is unavailable; standalone development without Supabase uses a clearly reported process-local fallback. The entire `/api/execute` operation has a 270-second application deadline, below Vercel's 300-second function limit.
 
 ## Deterministic pricing and risk gates
 
@@ -384,6 +384,9 @@ Unless noted otherwise, GUI support endpoints return a domain payload plus an `e
 | `GET` | `/api/briefing` | - | Latest daily briefing. |
 | `GET` | `/api/activity?limit=25` | `limit: 1..50` | Recent analyses, trades, and settlements. |
 | `GET` | `/api/agent/stats` | - | Run history, verdict distribution, latency, and calibration. |
+| `GET` | `/api/health` | - | Deployment readiness, schema version, dependency configuration, and current global LLM budget. Returns `503` when core dependencies are not ready. |
+
+Calibration reports both run-level metrics and a preferred latest-forecast-per-resolved-market view, so repeatedly analyzing one event cannot masquerade as many independent wins. It includes agent/market Brier and log loss, Brier skill versus the contemporaneous market, expected calibration error, fixed probability buckets, resolution coverage, and an explicit warning while the resolved-market sample is small.
 
 ## Prompting the agent
 
@@ -496,6 +499,7 @@ Never commit `.env` or service-role credentials.
 |---|---|---|---|
 | `LLMOD_API_KEY` | Full pipeline | - | Shared LLMod/OpenAI-compatible API key. |
 | `LLMOD_BASE_URL` | Full pipeline | - | OpenAI-compatible API base URL. |
+| `LLM_GLOBAL_DAILY_REQUEST_LIMIT` | No | `150` | Atomic UTC-day cap shared by all text requests, retries, and embedding batches. |
 | `LLM_MODEL` | No | Course text model | Text-generation model override. |
 | `EMBEDDING_MODEL` | No | Course embedding model | Embedding model override. |
 | `EMBEDDING_DIM` | No | `1536` | Must match the Pinecone index dimension. |
@@ -515,7 +519,7 @@ Polymarket, Kalshi, Google News, GDELT, Wikipedia, RSS, Bluesky, and the fallbac
 1. Create a Supabase project.
 2. Copy the project URL and service-role key into `.env`.
 3. Open the Supabase SQL editor.
-4. Run every file in `supabase/migrations/` in numeric order from `0001` through `0016`.
+4. Run every file in `supabase/migrations/` in numeric order from `0001` through `0017`.
 
 Migration responsibilities:
 
@@ -537,6 +541,7 @@ Migration responsibilities:
 | `0014` | Per-position stop-loss and take-profit price levels. |
 | `0015` | Daily equity snapshots. |
 | `0016` | Indexed social posts. |
+| `0017` | Atomic global LLM quota, usage telemetry, and deployment health RPC. |
 
 The migrations are idempotent (`if not exists`) and are designed to be applied in order. A `PGRST205` or "table not installed" message means the connected database is behind the repository; apply the missing migrations and allow Supabase's schema cache to refresh.
 
@@ -688,7 +693,7 @@ Each job runs in a subprocess with a 15-minute timeout, so one failure does not 
 
 Automation workflows are manual-only in the repository. Their cron blocks are intentionally commented out for grading and cost control. To enable them, uncomment the desired `schedule` entries and add all required credentials under repository **Settings -> Secrets and variables -> Actions**.
 
-The agenda worker stops after 40 recorded analyses per UTC day. This is not yet a system-wide quota: manual `/api/execute`, watchlist refreshes, and other strategy jobs have separate caps. Keep schedules manual until a centralized quota/rate limiter is added and LLMod usage has been estimated against the course budget.
+The agenda worker still stops after 40 recorded analyses per UTC day as a workload-specific guard. In addition, migration `0017` enforces `LLM_GLOBAL_DAILY_REQUEST_LIMIT` before every provider request across all API routes and jobs. The PostgreSQL reservation is atomic, so concurrent workers cannot race past the limit. Keep schedules manual until expected usage has been estimated against the course allowance.
 
 ## Testing and verification
 
@@ -730,8 +735,9 @@ Polymarkov is designed for Vercel:
 2. Add the variables from `.env.example` to the Vercel project.
 3. Apply all Supabase migrations and verify the Pinecone dimension first.
 4. Deploy from the repository root.
-5. Verify the root GUI and all four required course endpoints.
-6. Keep the Vercel project/account active until grading is complete.
+5. Verify `GET /api/health` returns `200`, `ready: true`, and schema version `0017`.
+6. Verify the root GUI and all four required course endpoints.
+7. Keep the Vercel project/account active until grading is complete.
 
 `vercel.json`:
 
@@ -747,6 +753,7 @@ After deployment, perform a production smoke test with:
 ```bash
 BASE=https://your-vercel-domain
 curl -f "$BASE/"
+curl -f "$BASE/api/health"
 curl -f "$BASE/api/team_info"
 curl -f "$BASE/api/agent_info"
 curl -f "$BASE/api/model_architecture" -o architecture.png
@@ -817,7 +824,11 @@ Confirm `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`, then apply all migrations. Wi
 
 ### `PGRST205`, "table not installed," or missing equity/social data
 
-The database schema is behind the code. Apply the missing migration files in numeric order. Equity history requires `0015`; stored social posts require `0016`.
+The database schema is behind the code. Apply the missing migration files in numeric order. Equity history requires `0015`, stored social posts require `0016`, and the global quota plus deployment-health RPC require `0017`.
+
+### Analysis says the global LLM budget is unavailable or exhausted
+
+If it says unavailable, install `0017_global_llm_budget.sql` in the same Supabase project referenced by `SUPABASE_URL`, then restart the backend. If it says exhausted, either wait for the UTC-day reset or deliberately adjust `LLM_GLOBAL_DAILY_REQUEST_LIMIT`; do not bypass the reservation in code. Check current usage with `GET /api/health`.
 
 ### Pinecone reports a vector dimension error
 
@@ -861,7 +872,8 @@ Regenerate the checked-in PNG and run the contract tests:
 - [ ] Module names match the registry, trace, and PNG.
 - [ ] `POST /api/execute` returns exactly `{status, error, response, steps}` without `?ui=1`.
 - [ ] The GUI displays the response and full module/prompt/response trace.
-- [ ] All 16 Supabase migrations are installed.
+- [ ] All 17 Supabase migrations are installed.
+- [ ] `GET /api/health` returns `200`, `ready: true`, schema `0017`, and a global budget status.
 - [ ] Pinecone uses the configured embedding dimension.
 - [ ] LLMod uses the course models and remains within budget.
 - [ ] `pytest`, TypeScript, lint, and production build pass.

@@ -322,8 +322,20 @@ export interface AgentStats {
   total_tokens_out: number;
   calibration: {
     scored_runs: number;
+    resolved_markets: number;
+    forecast_runs: number;
+    forecast_markets: number;
+    resolution_coverage_pct: number;
+    sample_status: "early" | "developing" | "established";
+    sample_warning: string | null;
     agent_brier: number;
     market_brier: number;
+    brier_skill_vs_market: number | null;
+    agent_log_loss: number;
+    market_log_loss: number;
+    expected_calibration_error: number;
+    buckets: CalibrationBucket[];
+    latest_per_market: CalibrationMetrics & { markets: number };
   } | null;
   recent: {
     market_id: string | null;
@@ -333,6 +345,24 @@ export interface AgentStats {
     latency_ms: number | null;
     created_at: string;
   }[];
+}
+
+export interface CalibrationBucket {
+  range: string;
+  count: number;
+  mean_forecast: number;
+  outcome_rate: number;
+  absolute_gap: number;
+}
+
+export interface CalibrationMetrics {
+  agent_brier: number;
+  market_brier: number;
+  brier_skill_vs_market: number | null;
+  agent_log_loss: number;
+  market_log_loss: number;
+  expected_calibration_error: number;
+  buckets: CalibrationBucket[];
 }
 
 export interface ExecuteOut {

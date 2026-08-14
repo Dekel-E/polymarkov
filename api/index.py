@@ -55,6 +55,15 @@ def team_info() -> dict:
     return config.TEAM_INFO
 
 
+@app.get("/api/health")
+async def health() -> JSONResponse:
+    """Deployment readiness without making paid LLM/Pinecone requests."""
+    from backend.health import deployment_health
+
+    payload, status_code = await asyncio.to_thread(deployment_health)
+    return JSONResponse(content=payload, status_code=status_code)
+
+
 _EXAMPLES_FILE = config.ASSETS_DIR / "agent_examples.json"
 _examples_cache: Optional[list] = None
 _examples_mtime_ns: Optional[int] = None

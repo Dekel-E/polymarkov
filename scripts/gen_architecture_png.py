@@ -355,7 +355,7 @@ label(155, 68.0, "May delegate to deterministic tools and the main pipeline.", c
 section(133, 19, 44, 41, "C  AUTONOMOUS DESK  |  explicitly scheduled; paper only")
 runner = box(
     137, 49, 36, 7, "Autopilot | GitHub Actions", kind="job",
-    sub="settings + halt + daily budget gates", title_size=8.0,
+    sub="settings + halt + workload gates", title_size=8.0,
 )
 indexers = box(
     137, 39.5, 36, 7, "MarketIndexer | NewsIndexer | RedditIndexer", kind="job",
@@ -395,7 +395,7 @@ box(
 )
 box(
     102, 5, 32, 7, "Supabase", kind="store",
-    sub="research | book | runs | settings | agenda", title_size=8.5,
+    sub="research | book | runs | atomic LLM quota", title_size=8.5,
 )
 box(
     137, 5, 36, 7, "Pinecone", kind="store",

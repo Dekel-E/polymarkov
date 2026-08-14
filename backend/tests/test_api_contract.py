@@ -104,6 +104,54 @@ def test_team_info_schema():
         assert student["email"].count("@") == 1
 
 
+def test_deployment_health_endpoint(monkeypatch):
+    from backend import health
+
+    monkeypatch.setattr(
+        health,
+        "deployment_health",
+        lambda: (
+            {
+                "service": "polymarkov",
+                "status": "healthy",
+                "ready": True,
+                "checked_at": "2026-08-14T00:00:00+00:00",
+                "checks": {
+                    "api": {"status": "ok"},
+                    "database": {"status": "ok", "schema_version": "0017"},
+                },
+            },
+            200,
+        ),
+    )
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    assert response.json()["ready"] is True
+    assert response.json()["checks"]["database"]["schema_version"] == "0017"
+
+
+def test_deployment_health_uses_503_when_not_ready(monkeypatch):
+    from backend import health
+
+    monkeypatch.setattr(
+        health,
+        "deployment_health",
+        lambda: (
+            {
+                "service": "polymarkov",
+                "status": "unhealthy",
+                "ready": False,
+                "checked_at": "2026-08-14T00:00:00+00:00",
+                "checks": {"database": {"status": "error"}},
+            },
+            503,
+        ),
+    )
+    response = client.get("/api/health")
+    assert response.status_code == 503
+    assert response.json()["ready"] is False
+
+
 def test_agent_info_includes_required_fields():
     data = client.get("/api/agent_info").json()
     assert set(data) >= {"description", "purpose", "prompt_template", "prompt_examples"}

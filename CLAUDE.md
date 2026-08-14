@@ -45,7 +45,7 @@ The frontend proxies `/api/*` to `:8000` in dev (`next.config.ts`). `.venv\Scrip
 - **Module names must match across three places**: the `steps[]` trace, the architecture PNG (`scripts/gen_architecture_png.py`), and `backend/agent/registry/tools.py`. The registry is the single source of truth (`CANONICAL_MODULES` derives from it); `/api/agent_info` serves it verbatim. Rename in all three or nowhere.
 - **The `/api/execute` envelope is graded**: top-level fields are exactly `{status, error, response, steps}`. The extra `ui` payload is stripped unless `?ui=1`. It never returns a non-200 — pipeline exceptions become `status:"error"` envelopes (`orchestrator.run_pipeline` wraps everything, plus a 270s `asyncio.wait_for` so Vercel's 300s kill can't win).
 - **No auth anywhere** (course requirement) and **single-user**: one shared paper book. `get_portfolio()` takes no args; the `strategy` column distinguishes agent vs manual trades. Do not reintroduce per-user semantics.
-- **Every LLM call goes through `RunContext.call_llm`** (`backend/llm/client.py`), which captures the step (including on failure), retries invalid JSON exactly once, and enforces the timeout. Tool steps use `add_tool_step`.
+- **Every LLM call goes through `RunContext.call_llm`** (`backend/llm/client.py`), which captures the step (including on failure), retries invalid JSON exactly once, and enforces the timeout. Every physical text request and embedding batch reserves the atomic global quota in `backend/llm/budget.py` first; never call the provider around it. Tool steps use `add_tool_step`.
 
 ## Architecture
 
@@ -67,11 +67,11 @@ The frontend proxies `/api/*` to `:8000` in dev (`next.config.ts`). `.venv\Scrip
 
 ## Storage & deploy
 
-Supabase (rows) + Pinecone (vectors) are Phase-3 optional — the agent runs degraded without them. Migrations in `supabase/migrations/` run in order (0001 → 0016) in the Supabase SQL editor. Background indexers run via GitHub Actions or the local autopilot, **never inside Vercel functions**.
+Supabase (rows) + Pinecone (vectors) are optional for standalone development. A configured deployment fails closed on model requests if the shared quota RPC is unavailable. Migrations in `supabase/migrations/` run in order (0001 → 0017) in the Supabase SQL editor. Background indexers run via GitHub Actions or the local autopilot, **never inside Vercel functions**.
 
 ## Gotchas
 
 - `backend/assets/agent_examples.json` (served by `/api/agent_info` as `prompt_examples`) is a **frozen recording** and goes stale when the pipeline changes — re-record with `scripts/record_examples.py` before submission.
 - `backend/config.py` `TEAM_INFO` has `TODO_*` placeholders that must be real before grading.
 - Wikipedia's API 403s generic User-Agents — it needs a contact-info UA (handled in `news.py`).
-- When adding a job, respect the settings gates (`strategies_allowed()`) and the `MAX_ANALYSES_PER_DAY` LLM budget.
+- When adding a job, respect the settings gates (`strategies_allowed()`) and workload cap (`MAX_ANALYSES_PER_DAY`). The actual global provider quota is enforced centrally by `backend/llm/budget.py`.
