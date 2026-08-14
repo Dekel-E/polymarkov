@@ -46,7 +46,7 @@ export async function fetchMarkets(limit = 20): Promise<MarketSummary[]> {
 }
 
 export async function fetchPortfolio(): Promise<Portfolio> {
-  const res = await fetch("/api/portfolio");
+  const res = await fetch("/api/portfolio", { cache: "no-store" });
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
   const data = (await res.json()) as { portfolio: Portfolio | null; error: string | null };
   if (!data.portfolio) throw new Error(data.error ?? "portfolio unavailable");
@@ -105,7 +105,7 @@ export async function setPositionLimits(
 }
 
 export async function fetchWorkingQuotes(): Promise<import("./types").WorkingQuote[]> {
-  const res = await fetch("/api/quotes");
+  const res = await fetch("/api/quotes", { cache: "no-store" });
   if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
   const data = (await res.json()) as {
     quotes: import("./types").WorkingQuote[];

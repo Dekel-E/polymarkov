@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import EquityChart from "@/components/EquityChart";
 import {
   cancelQuote,
@@ -156,21 +156,41 @@ export default function PortfolioPage() {
   const [sortKey, setSortKey] = useState<SortKey>("opened_at");
   const [sortAsc, setSortAsc] = useState(false);
   const [fundsDraft, setFundsDraft] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const loadInFlight = useRef(false);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    Promise.all([fetchPortfolio(), fetchWorkingQuotes().catch(() => [])])
-      .then(([p, q]) => {
-        setPortfolio(p);
-        setQuotes(q);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoading(false));
+  const load = useCallback(async (background = false) => {
+    if (loadInFlight.current) return;
+    loadInFlight.current = true;
+    if (background) setRefreshing(true);
+    else setLoading(true);
+    try {
+      const [p, q] = await Promise.all([fetchPortfolio(), fetchWorkingQuotes().catch(() => [])]);
+      setPortfolio(p);
+      setQuotes(q);
+      setLastUpdated(new Date());
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      loadInFlight.current = false;
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+    const timer = window.setInterval(refresh, 10_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [load]);
 
   async function act(label: string, fn: () => Promise<string>) {
@@ -178,7 +198,7 @@ export default function PortfolioPage() {
     setNote(null);
     try {
       setNote(await fn());
-      load();
+      await load(true);
     } catch (e) {
       setNote(`${label} failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -223,8 +243,37 @@ export default function PortfolioPage() {
           </h1>
           <p className="mt-1 text-sm text-desk-dim">
             Track automated and manual paper trades in one book. Entries and exits are
-            simulated against live order books; open positions use the latest indexed price.
+            simulated against live order books; open positions are marked from the live CLOB.
           </p>
+        </div>
+        <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-wider text-desk-faint">
+          <span className="flex items-center gap-1.5" aria-live="polite">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                error
+                  ? "bg-red-400"
+                  : refreshing
+                    ? "animate-pulse bg-amber-300"
+                    : "bg-emerald-400"
+              }`}
+            />
+            {error
+              ? "live refresh delayed"
+              : refreshing
+              ? "refreshing live prices"
+              : `live · ${
+                  lastUpdated
+                    ? lastUpdated.toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })
+                    : "connecting"
+                }`}
+          </span>
+          <button onClick={() => void load(true)} className="text-instrument hover:underline">
+            refresh
+          </button>
         </div>
       </header>
 
@@ -307,7 +356,7 @@ export default function PortfolioPage() {
           {error && (
             <div className="rounded-xl border border-amber-900/60 bg-amber-950/30 p-4 text-sm text-amber-300">
               Could not load portfolio: {error}
-              <button onClick={load} className="ml-2 text-instrument hover:underline">Retry</button>
+              <button onClick={() => void load()} className="ml-2 text-instrument hover:underline">Retry</button>
             </div>
           )}
           {note && <div className="rounded-xl border border-desk-edge bg-desk-panel p-3 text-sm text-desk-ink">{note}</div>}
@@ -338,7 +387,7 @@ export default function PortfolioPage() {
                 <div className="mb-3 flex items-baseline justify-between gap-4">
                   <h2 className="text-lg font-bold tracking-tight">Open positions</h2>
                   <span className="font-mono text-[10px] text-desk-faint">
-                    reference prices may be up to 2h old · open a row for controls
+                    live CLOB marks refresh every 10s · cached price used if the venue is unavailable
                   </span>
                 </div>
                 {openRows.length === 0 ? (
@@ -533,7 +582,17 @@ function PositionRow({
           </span>
         </td>
         <td className="px-4 py-3 tabular-nums text-desk-soft">{pct(p.entry_price)}</td>
-        <td className="px-4 py-3 tabular-nums text-desk-soft">{pct(p.current_price)}</td>
+        <td className="px-4 py-3 tabular-nums text-desk-soft">
+          <span className="inline-flex items-center gap-1.5">
+            {pct(p.current_price)}
+            <span
+              title={p.price_source === "live" ? "Live CLOB mark" : "Cached fallback mark"}
+              className={`h-1.5 w-1.5 rounded-full ${
+                p.price_source === "live" ? "bg-emerald-400" : "bg-amber-300"
+              }`}
+            />
+          </span>
+        </td>
         <td className="px-4 py-3 tabular-nums text-desk-soft">{usd(p.size_usd)}</td>
         <td className="px-4 py-3 tabular-nums"><Pnl value={p.unrealized_pnl} size={p.size_usd} /></td>
         <td className="px-4 py-3 font-mono text-[11px] tabular-nums text-desk-dim">

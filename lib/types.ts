@@ -185,6 +185,8 @@ export interface Position {
   current_price?: number | null;
   unrealized_pnl?: number | null;
   category?: string;
+  price_source?: "live" | "cache" | "unavailable";
+  yes_token_id?: string;
 }
 
 export interface PortfolioStats {
@@ -202,6 +204,7 @@ export interface PortfolioStats {
   largest_position_pct: number;
   exposure_by_strategy: Record<string, number>;
   exposure_by_category: Record<string, number>;
+  live_price_positions?: number;
 }
 
 export interface WorkingQuote {

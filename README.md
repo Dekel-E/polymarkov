@@ -355,7 +355,7 @@ Unless noted otherwise, GUI support endpoints return a domain payload plus an `e
 
 | Method | Path | Input | Purpose |
 |---|---|---|---|
-| `GET` | `/api/portfolio` | - | Open/resolved paper positions, lifetime statistics, and equity history. |
+| `GET` | `/api/portfolio` | - | Open/resolved paper positions, live CLOB marks with cache fallback, lifetime statistics, and equity history. |
 | `POST` | `/api/trade` | `{slug, side, size_usd}` | Manual paper fill; side is `BUY_YES`/`BUY_NO`, size is `> 0` and `<= 1000`. |
 | `POST` | `/api/position/close` | `{position_id, fraction}` | Close `0 < fraction <= 1` against the current book. |
 | `PUT` | `/api/position/limits` | `{position_id, sl_price?, tp_price?}` | Set/clear token-price stop and take-profit levels between 0 and 1. |

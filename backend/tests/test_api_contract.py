@@ -177,7 +177,34 @@ def test_model_architecture_is_png():
     res = client.get("/api/model_architecture")
     assert res.status_code == 200, "architecture.png missing — run scripts/gen_architecture_png.py"
     assert res.headers["content-type"] == "image/png"
+    assert res.headers["cache-control"] == "no-store, max-age=0"
     assert res.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_agent_page_uses_the_public_architecture_endpoint():
+    page = (config.REPO_ROOT / "app" / "agent" / "page.tsx").read_text(encoding="utf-8")
+    assert 'src="/api/model_architecture"' in page
+    assert "backend\\assets\\architecture.png" not in page
+
+
+def test_portfolio_endpoint_refreshes_live_prices_without_caching(monkeypatch):
+    from backend.sim import portfolio
+
+    data = {"open": [], "resolved": [], "stats": {}, "equity_history": []}
+    refreshed = []
+    monkeypatch.setattr(portfolio, "get_portfolio", lambda: data)
+
+    async def refresh(payload):
+        refreshed.append(payload)
+        return payload
+
+    monkeypatch.setattr(portfolio, "refresh_open_prices", refresh)
+    response = client.get("/api/portfolio")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store, max-age=0"
+    assert response.json()["portfolio"] == data
+    assert refreshed == [data]
 
 
 def test_market_news_uses_live_metadata_without_supabase(monkeypatch):

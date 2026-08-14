@@ -13,7 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 
-from fastapi import FastAPI, Query, Request  # noqa: E402
+from fastapi import FastAPI, Query, Request, Response  # noqa: E402
 from fastapi.exceptions import RequestValidationError  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
@@ -137,7 +137,11 @@ def model_architecture():
             status_code=500,
             content={"error": "architecture.png not generated yet — run scripts/gen_architecture_png.py"},
         )
-    return FileResponse(config.ARCHITECTURE_PNG, media_type="image/png")
+    return FileResponse(
+        config.ARCHITECTURE_PNG,
+        media_type="image/png",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
 # GUI support endpoints
@@ -162,12 +166,14 @@ async def markets(limit: int = Query(20, ge=1, le=500)) -> dict:
 
 
 @app.get("/api/portfolio")
-async def portfolio() -> dict:
+async def portfolio(response: Response) -> dict:
     """Paper positions + stats — one book (filter by strategy in the GUI)."""
     try:
-        from backend.sim.portfolio import get_portfolio
+        from backend.sim.portfolio import get_portfolio, refresh_open_prices
 
+        response.headers["Cache-Control"] = "no-store, max-age=0"
         data = await asyncio.to_thread(get_portfolio)
+        await refresh_open_prices(data)
         return {"portfolio": data, "error": None}
     except Exception as exc:
         return {"portfolio": None, "error": str(exc)}

@@ -9,9 +9,9 @@ export default function EquityChart({ portfolio }: { portfolio: Portfolio }) {
   const snapshots = portfolio.equity_history ?? [];
 
   const points: { t: number; v: number }[] = [];
-  if (snapshots.length >= 2) {
+  if (snapshots.length > 0) {
     for (const s of snapshots) {
-      points.push({ t: new Date(`${s.day}T12:00:00Z`).getTime(), v: s.equity_usd });
+      points.push({ t: new Date(`${s.day}T00:00:00Z`).getTime(), v: s.equity_usd });
     }
     points.push({ t: Date.now(), v: stats.equity_usd });
   } else {
@@ -22,14 +22,19 @@ export default function EquityChart({ portfolio }: { portfolio: Portfolio }) {
           new Date(a.resolved_at ?? a.opened_at).getTime() -
           new Date(b.resolved_at ?? b.opened_at).getTime(),
       );
-    if (settled.length === 0) return null;
-
-    const firstT = new Date(settled[0].resolved_at ?? settled[0].opened_at).getTime();
-    points.push({ t: firstT - 3_600_000, v: stats.bankroll_usd });
-    let running = stats.bankroll_usd;
-    for (const p of settled) {
-      running += Number(p.pnl);
-      points.push({ t: new Date(p.resolved_at ?? p.opened_at).getTime(), v: running });
+    if (settled.length === 0) {
+      // A newly reset portfolio still deserves a useful chart: show the
+      // starting balance and the current live-marked equity instead of
+      // removing the entire section.
+      points.push({ t: Date.now() - 3_600_000, v: stats.bankroll_usd });
+    } else {
+      const firstT = new Date(settled[0].resolved_at ?? settled[0].opened_at).getTime();
+      points.push({ t: firstT - 3_600_000, v: stats.bankroll_usd });
+      let running = stats.bankroll_usd;
+      for (const p of settled) {
+        running += Number(p.pnl);
+        points.push({ t: new Date(p.resolved_at ?? p.opened_at).getTime(), v: running });
+      }
     }
     points.push({ t: Date.now(), v: stats.equity_usd });
   }
@@ -55,15 +60,18 @@ export default function EquityChart({ portfolio }: { portfolio: Portfolio }) {
     <div className="rounded-2xl border border-desk-line bg-desk-panel/60 p-4">
       <div className="mb-2 flex items-baseline justify-between">
         <span className="font-mono text-[10px] uppercase tracking-widest text-desk-faint">
-          equity curve
+          total portfolio value
         </span>
-        <span className={`font-mono text-xs font-semibold tabular-nums ${up ? "text-emerald-400" : "text-red-400"}`}>
-          {up ? "+" : ""}
-          {(stats.equity_usd - stats.bankroll_usd).toLocaleString("en-US", {
-            style: "currency",
-            currency: "USD",
-          })}{" "}
-          all-time
+        <span className="font-mono text-xs font-semibold tabular-nums text-desk-ink">
+          {stats.equity_usd.toLocaleString("en-US", { style: "currency", currency: "USD" })}
+          <span className={`ml-2 ${up ? "text-emerald-400" : "text-red-400"}`}>
+            {up ? "+" : ""}
+            {(stats.equity_usd - stats.bankroll_usd).toLocaleString("en-US", {
+              style: "currency",
+              currency: "USD",
+            })}{" "}
+            all-time
+          </span>
         </span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Equity over time">
