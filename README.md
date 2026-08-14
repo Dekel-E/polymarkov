@@ -688,7 +688,7 @@ Each job runs in a subprocess with a 15-minute timeout, so one failure does not 
 
 Automation workflows are manual-only in the repository. Their cron blocks are intentionally commented out for grading and cost control. To enable them, uncomment the desired `schedule` entries and add all required credentials under repository **Settings -> Secrets and variables -> Actions**.
 
-The hard budget guard allows at most 40 full analyses per UTC day. Background automation should be enabled only after estimating LLMod usage against the course budget.
+The agenda worker stops after 40 recorded analyses per UTC day. This is not yet a system-wide quota: manual `/api/execute`, watchlist refreshes, and other strategy jobs have separate caps. Keep schedules manual until a centralized quota/rate limiter is added and LLMod usage has been estimated against the course budget.
 
 ## Testing and verification
 
