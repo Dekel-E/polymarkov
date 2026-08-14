@@ -192,6 +192,23 @@ async def test_local_position_id_when_supabase_off(monkeypatch):
     assert report.position_id.startswith("local-")
 
 
+async def test_paper_broker_trace_uses_configured_bankroll(monkeypatch, captured_positions):
+    import copy
+
+    settings = copy.deepcopy(config.DEFAULT_AGENT_SETTINGS)
+    settings["funds"]["bankroll_usd"] = 12_345
+    monkeypatch.setattr(supabase_client, "get_agent_settings", lambda: settings)
+    mock_book(monkeypatch, asks=[(0.50, 1_000.0)])
+    ctx = RunContext()
+
+    report = await paper_broker.execute_paper_trade(
+        ctx, make_market(), make_pricing(), size_usd=10.0
+    )
+
+    assert report is not None
+    assert "bankroll $12,345.00" in ctx.steps[-1].prompt.user_prompt
+
+
 # ---------------------------------------------------------------------------
 # max_position_usd cap: autonomous directional fills only
 # ---------------------------------------------------------------------------
