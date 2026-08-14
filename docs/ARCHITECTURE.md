@@ -10,8 +10,9 @@ LLMs *judge, read, and argue*; deterministic Python does *all* arithmetic
 (fair value, edge, verdict, Kelly size). This makes every run reproducible and
 auditable, and immune to a model hallucinating a probability.
 
-One `/api/execute` run makes **exactly 8 LLM calls** (amber below). Module
-names here are identical to the `steps[]` trace and the PNG served at
+One full `/api/execute` run invokes **8 logical LLM modules** (amber below).
+If a model returns invalid JSON, its repair attempt is traced as an additional
+call. Module names here are identical to the `steps[]` trace and the PNG served at
 `/api/model_architecture` — they must never drift (see *Naming invariant*).
 
 ```mermaid
@@ -33,7 +34,7 @@ flowchart TB
         SKEP["ResolutionSkeptic<br/><small>LLM #7</small>"]
     end
 
-    PRICE["Pricing engine<br/><small>pure code — fair value, edge,<br/>verdict, Kelly size</small>"]
+    PRICE["PricingEngine<br/><small>pure code — fair value, edge,<br/>verdict, Kelly size</small>"]
     JUDGE["Judge<br/><small>LLM #8 — narrative around the<br/>numbers the code computed</small>"]
     OUT["Response + Steps<br/><small>dossier + full trace</small>"]
     PB["PaperBroker<br/><small>tool — fills Kelly size on the live book<br/>(only when Trade: yes and verdict ≠ PASS)</small>"]

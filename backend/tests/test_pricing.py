@@ -244,6 +244,19 @@ def test_pass_on_thin_depth():
     assert any("depth" in r for r in result.pass_reasons)
 
 
+def test_buy_no_checks_no_side_depth():
+    market = make_market(depth_at_ask_usd=50_000.0, depth_at_no_ask_usd=100.0)
+    result = run(market=market, council=strong_no_council())
+    assert result.verdict == "PASS"
+    assert any("NO ask depth" in reason for reason in result.pass_reasons)
+
+
+def test_buy_no_ignores_thin_yes_side_when_no_side_is_liquid():
+    market = make_market(depth_at_ask_usd=100.0, depth_at_no_ask_usd=50_000.0)
+    result = run(market=market, council=strong_no_council())
+    assert not any("depth" in reason for reason in result.pass_reasons)
+
+
 def test_pass_on_wide_spread():
     result = run(
         market=make_market(spread=0.12, best_bid=0.44, best_ask=0.56),

@@ -102,6 +102,33 @@ function ExposureStrip({ title, data, total }: { title: string; data: Record<str
 
 type SortKey = "market_id" | "entry_price" | "current_price" | "size_usd" | "unrealized_pnl" | "opened_at";
 
+function SortHeader({
+  label,
+  column,
+  sortKey,
+  sortAsc,
+  onSort,
+}: {
+  label: string;
+  column?: SortKey;
+  sortKey: SortKey;
+  sortAsc: boolean;
+  onSort: (column: SortKey) => void;
+}) {
+  return (
+    <th className="px-4 py-3 font-semibold">
+      {column ? (
+        <button onClick={() => onSort(column)} className="transition hover:text-desk-ink">
+          {label}
+          {sortKey === column ? (sortAsc ? " ↑" : " ↓") : ""}
+        </button>
+      ) : (
+        label
+      )}
+    </th>
+  );
+}
+
 function exportCsv(rows: Position[]) {
   const header = "market,side,strategy,entry,size_usd,outcome,pnl,opened_at,resolved_at";
   const lines = rows.map((p) =>
@@ -179,28 +206,12 @@ export default function PortfolioPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolio, strategyFilter, sortKey, sortAsc]);
 
-  function Th({ label, k }: { label: string; k?: SortKey }) {
-    return (
-      <th className="px-4 py-3 font-semibold">
-        {k ? (
-          <button
-            onClick={() => {
-              if (sortKey === k) setSortAsc(!sortAsc);
-              else {
-                setSortKey(k);
-                setSortAsc(false);
-              }
-            }}
-            className="transition hover:text-desk-ink"
-          >
-            {label}
-            {sortKey === k ? (sortAsc ? " ↑" : " ↓") : ""}
-          </button>
-        ) : (
-          label
-        )}
-      </th>
-    );
+  function changeSort(column: SortKey) {
+    if (sortKey === column) setSortAsc(!sortAsc);
+    else {
+      setSortKey(column);
+      setSortAsc(false);
+    }
   }
 
   return (
@@ -255,8 +266,12 @@ export default function PortfolioPage() {
                   )
                 }
               />
-              <StatCard label="Equity" value={usd(stats.equity_usd)} sub={<>unrealized <Pnl value={stats.unrealized_pnl_usd} /></>} />
-              <StatCard label="Available" value={usd(stats.available_usd)} sub="balance − open exposure" />
+              <StatCard
+                label="Equity"
+                value={usd(stats.equity_usd)}
+                sub={<>unrealized <Pnl value={stats.unrealized_pnl_usd} /> after {usd(stats.open_fees_usd)} fees</>}
+              />
+              <StatCard label="Available" value={usd(stats.available_usd)} sub="balance − exposure − entry fees" />
               <StatCard
                 label="Open exposure"
                 value={usd(stats.open_exposure_usd)}
@@ -327,14 +342,14 @@ export default function PortfolioPage() {
                     <table className="w-full min-w-[760px] text-left text-sm">
                       <thead>
                         <tr className="border-b border-desk-line text-[11px] uppercase tracking-wider text-desk-dim">
-                          <Th label="Market" k="market_id" />
-                          <Th label="Side" />
-                          <Th label="Entry" k="entry_price" />
-                          <Th label="Now" k="current_price" />
-                          <Th label="Size" k="size_usd" />
-                          <Th label="Unrealized" k="unrealized_pnl" />
-                          <Th label="SL / TP" />
-                          <Th label="Opened" k="opened_at" />
+                          <SortHeader label="Market" column="market_id" sortKey={sortKey} sortAsc={sortAsc} onSort={changeSort} />
+                          <SortHeader label="Side" sortKey={sortKey} sortAsc={sortAsc} onSort={changeSort} />
+                          <SortHeader label="Entry" column="entry_price" sortKey={sortKey} sortAsc={sortAsc} onSort={changeSort} />
+                          <SortHeader label="Now" column="current_price" sortKey={sortKey} sortAsc={sortAsc} onSort={changeSort} />
+                          <SortHeader label="Size" column="size_usd" sortKey={sortKey} sortAsc={sortAsc} onSort={changeSort} />
+                          <SortHeader label="Unrealized" column="unrealized_pnl" sortKey={sortKey} sortAsc={sortAsc} onSort={changeSort} />
+                          <SortHeader label="SL / TP" sortKey={sortKey} sortAsc={sortAsc} onSort={changeSort} />
+                          <SortHeader label="Opened" column="opened_at" sortKey={sortKey} sortAsc={sortAsc} onSort={changeSort} />
                         </tr>
                       </thead>
                       <tbody>

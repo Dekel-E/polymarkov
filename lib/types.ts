@@ -44,6 +44,7 @@ export interface MarketState {
   best_ask: number | null;
   spread: number | null;
   depth_at_ask_usd: number;
+  depth_at_no_ask_usd: number | null;
   volume24h: number;
   price_history_7d: [number, number][]; // [unix_ts, price]
 }
@@ -193,6 +194,7 @@ export interface PortfolioStats {
   equity_usd: number;
   open_positions: number;
   open_exposure_usd: number;
+  open_fees_usd: number;
   unrealized_pnl_usd: number;
   resolved_positions: number;
   realized_pnl_usd: number;

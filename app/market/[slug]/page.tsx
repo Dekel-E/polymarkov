@@ -39,20 +39,38 @@ export default function MarketPage() {
   const [market, setMarket] = useState<MarketState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [watched, setWatchedState] = useState(false);
-  const { running, elapsed, result, fetchError, run } = useAgentRun();
+  const { running, elapsed, result, fetchError, run, reset } = useAgentRun();
 
   useEffect(() => {
     if (!slug) return;
+    let active = true;
+    reset();
+    setMarket(null);
+    setLoadError(null);
     fetchMarketDetail(slug)
-      .then(setMarket)
-      .catch((e) => setLoadError(e instanceof Error ? e.message : String(e)));
-  }, [slug]);
+      .then((nextMarket) => {
+        if (active) setMarket(nextMarket);
+      })
+      .catch((e) => {
+        if (active) setLoadError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      active = false;
+    };
+  }, [reset, slug]);
 
   useEffect(() => {
     if (!slug) return;
+    let active = true;
+    setWatchedState(false);
     fetchWatchlist()
-      .then((items) => setWatchedState(items.some((i) => i.market_id === slug)))
+      .then((items) => {
+        if (active) setWatchedState(items.some((i) => i.market_id === slug));
+      })
       .catch(() => undefined);
+    return () => {
+      active = false;
+    };
   }, [slug]);
 
   function toggleWatch() {

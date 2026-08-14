@@ -78,13 +78,15 @@ async def _vector_match(query: str) -> Optional[str]:
     return None
 
 
-async def resolve_market(ctx: RunContext, plan) -> ResolveResult:
+async def resolve_market(
+    ctx: RunContext, plan, explicit_ref: Optional[str] = None
+) -> ResolveResult:
     query = plan.market_query or " ".join(plan.entities) or ""
     result = ResolveResult()
     how = ""
 
     # 1) explicit URL/slug
-    ref = polymarket.parse_market_ref(plan.market_url or "")
+    ref = explicit_ref or polymarket.parse_market_ref(plan.market_url or "")
     if ref:
         result.market = await polymarket.get_market_state(ref)
         how = f"url ref {ref!r}"

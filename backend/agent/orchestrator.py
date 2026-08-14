@@ -1,7 +1,7 @@
 """Pipeline orchestrator: wires the stages together per execute.
 
-Any failure returns the error envelope with the steps collected so far
-(always HTTP 200).
+Any failure returns the course-contract error envelope with an empty steps
+array (always HTTP 200). Failed attempts remain observable in server logs.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from backend.agent.types import (
     PricingResult,
     SocialPulse,
 )
-from backend.data import supabase_client
+from backend.data import polymarket, supabase_client
 from backend.llm.client import RunContext
 from backend.sim import paper_broker
 
@@ -115,14 +115,14 @@ async def run_pipeline(user_prompt: str, history: list[dict] | None = None) -> E
                 "budget and was stopped. Please try again."
             ),
             response=None,
-            steps=ctx.steps,
+            steps=[],
         )
     except Exception as exc:  # noqa: BLE001
         return ExecuteOut(
             status="error",
             error=f"{type(exc).__name__}: {exc}",
             response=None,
-            steps=ctx.steps,
+            steps=[],
         )
 
 
@@ -198,7 +198,11 @@ async def _run(ctx: RunContext, user_prompt: str, started: float, history: list[
         )
         return ExecuteOut(status="ok", response=refusal, steps=ctx.steps)
 
-    resolved = await pipeline.resolve_market(ctx, plan)
+    # Resolve an exact URL/slug from the original request before considering
+    # the planner's natural-language query. The LLM is useful for intent and
+    # evidence planning, but it must never change which contract the user named.
+    explicit_ref = polymarket.parse_market_ref(user_prompt)
+    resolved = await pipeline.resolve_market(ctx, plan, explicit_ref=explicit_ref)
     if resolved.market is None:
         lines = ["I found several matching markets — please pick one and re-run:", ""]
         lines += [
@@ -235,6 +239,15 @@ async def _run(ctx: RunContext, user_prompt: str, started: float, history: list[
 
     risk = pricing.parse_resolution_risk(opinions["ResolutionSkeptic"].red_flags)
     priced = pricing.compute_pricing(market, opinions, risk, len(evidence.clusters))
+    ctx.add_tool_step(
+        "PricingEngine",
+        (
+            f"market={market.slug!r}; mid={market.mid}; resolution_risk={risk!r}; "
+            f"evidence_clusters={len(evidence.clusters)}; "
+            f"council={{{', '.join(f'{name}: {op.estimated_probability}' for name, op in opinions.items())}}}"
+        ),
+        priced.model_dump(mode="json"),
+    )
     verdict = await pipeline.run_judge(ctx, market, opinions, priced)
 
     # Paper trade only when requested and the verdict isn't PASS.

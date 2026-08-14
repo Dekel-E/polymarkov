@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class StepPrompt(BaseModel):
@@ -23,9 +23,17 @@ class Step(BaseModel):
 
 
 class ExecuteIn(BaseModel):
-    prompt: str
+    prompt: str = Field(min_length=1, max_length=4000)
     # optional back-and-forth support: [{role: user|assistant, content: str}]
-    history: list[dict] = Field(default_factory=list)
+    history: list[dict] = Field(default_factory=list, max_length=12)
+
+    @field_validator("prompt")
+    @classmethod
+    def prompt_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("prompt must contain non-whitespace text")
+        return value
 
 
 class ExecuteOut(BaseModel):
@@ -63,6 +71,9 @@ class MarketState(BaseModel):
     best_ask: Optional[float] = None
     spread: Optional[float] = None
     depth_at_ask_usd: float = 0.0
+    # Dollar liquidity available to buy NO, synthesized from the YES bids.
+    # None preserves compatibility with older cached MarketState payloads.
+    depth_at_no_ask_usd: Optional[float] = None
     volume24h: float = 0.0
     price_history_7d: list[tuple[float, float]] = Field(default_factory=list)  # (ts, price)
     # full order-book ladder (best-first), for microstructure indicators

@@ -64,9 +64,9 @@ TEAM_INFO = {
     "group_batch_order_number": "batch1_order1",
     "team_name": "Polymarkov Team",
     "students": [
-        {"name": "Dekel Elimelech", "email": "korikata8@protonmail.com"},
-        {"name": "Rom Katav", "email": "TODO_rom_katav@example.com"},
-        {"name": "Omer Perchuk", "email": "TODO_omer_perchuk@example.com"},
+        {"name": "Dekel Elimelech", "email": "dekele@campus.technion.ac.il"},
+        {"name": "Rom Katav", "email": "rom.katav@campus.technion.ac.il"},
+        {"name": "Omer Perchuk", "email": "omer.perchuk@campus.technion.ac.il"},
     ],
 }
 

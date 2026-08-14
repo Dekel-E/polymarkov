@@ -19,12 +19,17 @@ export interface ChatTurn {
   content: string;
 }
 
-export async function executeAgent(prompt: string, history: ChatTurn[] = []): Promise<ExecuteOut> {
+export async function executeAgent(
+  prompt: string,
+  history: ChatTurn[] = [],
+  signal?: AbortSignal,
+): Promise<ExecuteOut> {
   // ?ui=1 adds the structured dossier payload on top of the graded envelope.
   const res = await fetch("/api/execute?ui=1", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt, history }),
+    signal,
   });
   if (!res.ok) {
     throw new Error(`API returned HTTP ${res.status}`);

@@ -54,11 +54,20 @@ def test_normalize_market_handles_garbage():
         ("https://polymarket.com/event/fed-decision/fed-cut-september-2026", "fed-cut-september-2026"),
         ("https://polymarket.com/event/fed-decision-in-september", "fed-decision-in-september"),
         ("check https://polymarket.com/market/some-market-slug?tid=1 please", "some-market-slug"),
+        ("Market: exact-market-slug\nFocus: all\nTrade: no", "exact-market-slug"),
+        ("exact-market-slug", "exact-market-slug"),
         ("no url here", None),
     ],
 )
 def test_parse_market_ref(text, expected):
     assert polymarket.parse_market_ref(text) == expected
+
+
+def test_query_relevance_prefers_requested_event_child():
+    query = "fed interest rates september 2026 meeting no change"
+    no_change = "Will there be no change in Fed interest rates after the September 2026 meeting?"
+    cut = "Will the Fed decrease interest rates by 25 bps after the September 2026 meeting?"
+    assert polymarket._query_relevance(query, no_change) > polymarket._query_relevance(query, cut)
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +107,16 @@ def test_walk_book_exhausts_thin_book():
 def test_walk_book_empty_and_zero():
     assert polymarket.walk_book([], 100.0)["shares"] == 0.0
     assert polymarket.walk_book([(0.5, 10.0)], 0.0)["levels_consumed"] == 0
+
+
+def test_walk_book_ignores_invalid_levels_and_non_finite_size():
+    fill = polymarket.walk_book(
+        [(0.0, 10.0), (float("nan"), 10.0), (0.5, -2.0), (0.6, 10.0)],
+        3.0,
+    )
+    assert fill["vwap"] == pytest.approx(0.6)
+    assert fill["levels_consumed"] == 1
+    assert polymarket.walk_book([(0.5, 10.0)], float("nan"))["vwap"] is None
 
 
 def test_depth_usd():

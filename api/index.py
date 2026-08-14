@@ -13,9 +13,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 
-from fastapi import FastAPI  # noqa: E402
+from fastapi import FastAPI, Query, Request  # noqa: E402
+from fastapi.exceptions import RequestValidationError  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse  # noqa: E402
-from pydantic import BaseModel  # noqa: E402
+from pydantic import BaseModel, Field  # noqa: E402
 
 from backend import config  # noqa: E402
 from backend.agent.orchestrator import run_pipeline  # noqa: E402
@@ -25,6 +26,30 @@ from backend.data import polymarket, supabase_client  # noqa: E402
 app = FastAPI(title="Polymarkov", docs_url=None, redoc_url=None)
 
 
+@app.exception_handler(RequestValidationError)
+async def request_validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Return validation details without echoing non-JSON inputs like NaN."""
+    details = [
+        {key: error[key] for key in ("type", "loc", "msg") if key in error}
+        for error in exc.errors()
+    ]
+    if _request.url.path == "/api/execute":
+        message = "; ".join(
+            f"{'.'.join(str(part) for part in detail.get('loc', []))}: {detail.get('msg', 'invalid value')}"
+            for detail in details
+        )
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "error",
+                "error": f"Invalid request: {message}",
+                "response": None,
+                "steps": [],
+            },
+        )
+    return JSONResponse(status_code=422, content={"detail": details})
+
+
 @app.get("/api/team_info")
 def team_info() -> dict:
     return config.TEAM_INFO
@@ -32,18 +57,25 @@ def team_info() -> dict:
 
 _EXAMPLES_FILE = config.ASSETS_DIR / "agent_examples.json"
 _examples_cache: Optional[list] = None
+_examples_mtime_ns: Optional[int] = None
 
 
 def _load_examples() -> list:
     """Frozen real runs recorded by scripts/record_examples.py."""
-    global _examples_cache
-    if _examples_cache is None:
+    global _examples_cache, _examples_mtime_ns
+    try:
+        mtime_ns = _EXAMPLES_FILE.stat().st_mtime_ns
+    except OSError:
+        mtime_ns = None
+    if _examples_cache is None or mtime_ns != _examples_mtime_ns:
         try:
             import json
 
             _examples_cache = json.loads(_EXAMPLES_FILE.read_text(encoding="utf-8"))
+            _examples_mtime_ns = mtime_ns
         except (OSError, ValueError):
             _examples_cache = []
+            _examples_mtime_ns = mtime_ns
     return _examples_cache
 
 
@@ -106,12 +138,11 @@ _markets_cache: dict = {"ts": 0.0, "limit": 0, "markets": []}
 
 
 @app.get("/api/markets")
-async def markets(limit: int = 20) -> dict:
+async def markets(limit: int = Query(20, ge=1, le=500)) -> dict:
     """Trending markets for the GUI market browser (30s server cache)."""
     try:
         import time as _time
 
-        limit = min(limit, 500)
         if _time.time() - _markets_cache["ts"] < 30 and _markets_cache["limit"] >= limit:
             return {"markets": _markets_cache["markets"][:limit], "error": None}
         rows = await polymarket.get_trending_markets(limit)
@@ -134,12 +165,12 @@ async def portfolio() -> dict:
 
 
 @app.get("/api/search")
-async def search(q: str, limit: int = 12) -> dict:
+async def search(q: str, limit: int = Query(12, ge=1, le=20)) -> dict:
     """Text search over active Polymarket markets (Gamma public search)."""
     try:
         if not q.strip():
             return {"markets": [], "error": None}
-        results = await polymarket.search_markets(q.strip(), limit=min(limit, 20))
+        results = await polymarket.search_markets(q.strip(), limit=limit)
         return {"markets": results, "error": None}
     except Exception as exc:
         return {"markets": [], "error": str(exc)}
@@ -191,7 +222,7 @@ async def briefing() -> dict:
 
 
 @app.get("/api/activity")
-async def activity(limit: int = 25) -> dict:
+async def activity(limit: int = Query(25, ge=1, le=50)) -> dict:
     """Chronological feed of what the agent did: analyses, trades, settles."""
     try:
         if not supabase_client.is_configured():
@@ -226,7 +257,7 @@ async def activity(limit: int = 25) -> dict:
                      "outcome": p.get("resolved_outcome"), "pnl": p.get("pnl")}
                 )
             events.sort(key=lambda e: e["at"] or "", reverse=True)
-            return events[: min(limit, 50)]
+            return events[:limit]
 
         return {"events": await asyncio.to_thread(_collect), "error": None}
     except Exception as exc:
@@ -340,7 +371,7 @@ async def put_settings(body: SettingsIn) -> dict:
 
 class StrategyChatIn(BaseModel):
     question: str
-    history: list[dict] = []
+    history: list[dict] = Field(default_factory=list)
 
 
 @app.post("/api/strategy/chat")
@@ -358,14 +389,13 @@ async def strategy_chat_endpoint(body: StrategyChatIn) -> dict:
 
 
 @app.get("/api/market/news")
-async def market_news(slug: str, limit: int = 10) -> dict:
+async def market_news(slug: str, limit: int = Query(10, ge=1, le=15)) -> dict:
     """Latest news relevant to ONE market: live Google News search on the
     market question, merged with indexer-tagged articles. Semantic matches
     only count above the relevance floor."""
     try:
         from backend.data import news
 
-        limit = min(limit, 15)
         question = ""
         articles: list[dict] = []
 
@@ -388,6 +418,12 @@ async def market_news(slug: str, limit: int = 10) -> dict:
                 return (rows[0]["question"] if rows else "", tagged)
 
             question, articles = await asyncio.to_thread(_tagged)
+
+        # Storage is optional. Resolve live metadata so this endpoint still
+        # fulfills its no-Supabase degraded-mode contract.
+        if not question:
+            market = await polymarket.get_market(slug)
+            question = market["question"] if market else ""
 
         # live, query-relevant headlines (works even when nothing is indexed)
         if question:
@@ -500,9 +536,9 @@ async def import_wallets(body: ImportWalletsIn) -> dict:
 
 
 class TradeIn(BaseModel):
-    slug: str
+    slug: str = Field(min_length=1, max_length=300)
     side: Literal["BUY_YES", "BUY_NO"]
-    size_usd: float = 50.0
+    size_usd: float = Field(default=50.0, gt=0, le=1000, allow_inf_nan=False)
 
 
 @app.post("/api/trade")
@@ -512,7 +548,7 @@ async def manual_trade(body: TradeIn) -> dict:
         from backend.llm.client import RunContext
         from backend.sim import paper_broker
 
-        size_usd = max(1.0, min(body.size_usd, 1000.0))  # sane paper limits
+        size_usd = max(1.0, body.size_usd)  # minimum useful paper fill
         market = await polymarket.get_market_state(body.slug)
         if market is None:
             return {"fill": None, "error": f"no market found for {body.slug!r}"}
@@ -533,8 +569,8 @@ async def manual_trade(body: TradeIn) -> dict:
 
 
 class CloseIn(BaseModel):
-    position_id: str
-    fraction: float = 1.0  # 0.25 = close a quarter
+    position_id: str = Field(min_length=1, max_length=100)
+    fraction: float = Field(default=1.0, gt=0, le=1, allow_inf_nan=False)
 
 
 @app.post("/api/position/close")
@@ -543,16 +579,16 @@ async def close_position(body: CloseIn) -> dict:
     try:
         from backend.sim import paper_broker
 
-        fraction = max(0.01, min(1.0, body.fraction))
+        fraction = max(0.01, body.fraction)
         return await paper_broker.close_position(body.position_id, fraction=fraction)
     except Exception as exc:
         return {"error": str(exc)}
 
 
 class LimitsIn(BaseModel):
-    position_id: str
-    sl_price: Optional[float] = None  # None clears the level
-    tp_price: Optional[float] = None
+    position_id: str = Field(min_length=1, max_length=100)
+    sl_price: Optional[float] = Field(default=None, gt=0, lt=1, allow_inf_nan=False)
+    tp_price: Optional[float] = Field(default=None, gt=0, lt=1, allow_inf_nan=False)
 
 
 @app.put("/api/position/limits")
@@ -560,10 +596,6 @@ async def set_position_limits(body: LimitsIn) -> dict:
     """Set/clear per-position stop-loss / take-profit price levels. The risk
     manager enforces them on its next pass."""
     try:
-        for level in (body.sl_price, body.tp_price):
-            if level is not None and not (0 < level < 1):
-                return {"error": "price levels must be between 0 and 1"}
-
         def _update():
             client = supabase_client.get_client()
             rows = client.table("positions").select("status").eq("id", body.position_id).limit(1).execute().data
@@ -624,7 +656,7 @@ async def cancel_quote(body: CancelQuoteIn) -> dict:
 
 class DeskChatIn(BaseModel):
     question: str
-    history: list[dict] = []
+    history: list[dict] = Field(default_factory=list)
     slug: Optional[str] = None  # market in view, so "buy $50 yes"/"watch this" scope to it
 
 
@@ -645,7 +677,7 @@ async def desk_chat_endpoint(body: DeskChatIn) -> dict:
 class MarketChatIn(BaseModel):
     slug: str
     question: str
-    history: list[dict] = []
+    history: list[dict] = Field(default_factory=list)
 
 
 @app.post("/api/market/chat")

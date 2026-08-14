@@ -1,7 +1,8 @@
 """LLMod.ai chat wrapper with per-request step capture.
 
 Every LLM call goes through RunContext.call_llm: it requests JSON, retries once
-on invalid JSON, records each call as a step, and tallies token usage.
+on invalid JSON, records every generated response (including repair attempts)
+as a separate step, and tallies token usage.
 """
 
 from __future__ import annotations
@@ -36,8 +37,15 @@ def _client():
 
 
 def parse_json_response(text: str) -> Any:
-    """Parse model output as JSON, tolerating markdown code fences."""
-    return json.loads(_FENCE_RE.sub("", text.strip()).strip())
+    """Parse strict JSON model output, tolerating markdown code fences."""
+
+    def reject_constant(value: str) -> None:
+        raise json.JSONDecodeError(f"non-finite JSON number: {value}", value, 0)
+
+    return json.loads(
+        _FENCE_RE.sub("", text.strip()).strip(),
+        parse_constant=reject_constant,
+    )
 
 
 class RunContext:
@@ -84,50 +92,105 @@ class RunContext:
         return resp.choices[0].message.content or ""
 
     async def call_llm(self, module: str, system_prompt: str, user_prompt: str) -> Any:
-        """One captured LLM call returning parsed JSON. Raises on failure."""
+        """Run one logical module call and trace every completion attempt."""
         if not is_configured():
             raise RuntimeError(
                 "LLM is not configured — set LLMOD_API_KEY and LLMOD_BASE_URL in .env"
             )
         messages = [{"role": "user", "content": user_prompt}]
-        t0 = time.monotonic()
-        tin0, tout0 = self.tokens_in, self.tokens_out
 
-        def _metric() -> dict:
-            return {
+        async def _attempt(trace_user_prompt: str) -> tuple[str, dict]:
+            t0 = time.monotonic()
+            tin0, tout0 = self.tokens_in, self.tokens_out
+            try:
+                text = await self._completion(system_prompt, messages)
+            except Exception as exc:
+                metric = {
+                    "kind": "llm",
+                    "latency_ms": int((time.monotonic() - t0) * 1000),
+                    "tokens_in": self.tokens_in - tin0,
+                    "tokens_out": self.tokens_out - tout0,
+                }
+                self.steps.append(
+                    Step(
+                        module=module,
+                        prompt=StepPrompt(
+                            system_prompt=system_prompt,
+                            user_prompt=trace_user_prompt,
+                        ),
+                        response={"error": f"{type(exc).__name__}: {exc}"},
+                    )
+                )
+                self.step_metrics.append(metric)
+                raise
+            metric = {
                 "kind": "llm",
                 "latency_ms": int((time.monotonic() - t0) * 1000),
                 "tokens_in": self.tokens_in - tin0,
                 "tokens_out": self.tokens_out - tout0,
             }
+            return text, metric
 
+        text, metric = await _attempt(user_prompt)
         try:
-            text = await self._completion(system_prompt, messages)
-            try:
-                parsed = parse_json_response(text)
-            except json.JSONDecodeError:
-                # one retry with an explicit nudge
-                messages += [
-                    {"role": "assistant", "content": text},
-                    {
-                        "role": "user",
-                        "content": "Your previous reply was not valid JSON. "
-                        "Return ONLY the valid JSON object, no prose, no code fences.",
-                    },
-                ]
-                text = await self._completion(system_prompt, messages)
-                parsed = parse_json_response(text)  # let it raise this time
-        except Exception as exc:
-            # record the failed call before re-raising
+            parsed = parse_json_response(text)
+        except json.JSONDecodeError as first_error:
             self.steps.append(
                 Step(
                     module=module,
                     prompt=StepPrompt(system_prompt=system_prompt, user_prompt=user_prompt),
-                    response={"error": f"{type(exc).__name__}: {exc}"},
+                    response={
+                        "error": f"invalid JSON: {first_error.msg}",
+                        "raw_response": text,
+                    },
                 )
             )
-            self.step_metrics.append(_metric())
-            raise
+            self.step_metrics.append(metric)
+
+            repair_instruction = (
+                "Your previous reply was not valid JSON. Return ONLY the valid "
+                "JSON object, no prose, no code fences."
+            )
+            messages += [
+                {"role": "assistant", "content": text},
+                {"role": "user", "content": repair_instruction},
+            ]
+            retry_trace = (
+                f"{user_prompt}\n\n--- PREVIOUS ASSISTANT RESPONSE (INVALID JSON) ---\n"
+                f"{text}\n\n--- REPAIR INSTRUCTION ---\n{repair_instruction}"
+            )
+            retry_text, retry_metric = await _attempt(retry_trace)
+            try:
+                parsed = parse_json_response(retry_text)
+            except json.JSONDecodeError as retry_error:
+                self.steps.append(
+                    Step(
+                        module=module,
+                        prompt=StepPrompt(
+                            system_prompt=system_prompt,
+                            user_prompt=retry_trace,
+                        ),
+                        response={
+                            "error": f"invalid JSON: {retry_error.msg}",
+                            "raw_response": retry_text,
+                        },
+                    )
+                )
+                self.step_metrics.append(retry_metric)
+                raise
+
+            self.steps.append(
+                Step(
+                    module=module,
+                    prompt=StepPrompt(
+                        system_prompt=system_prompt,
+                        user_prompt=retry_trace,
+                    ),
+                    response=parsed,
+                )
+            )
+            self.step_metrics.append(retry_metric)
+            return parsed
 
         self.steps.append(
             Step(
@@ -136,7 +199,7 @@ class RunContext:
                 response=parsed,
             )
         )
-        self.step_metrics.append(_metric())
+        self.step_metrics.append(metric)
         return parsed
 
 

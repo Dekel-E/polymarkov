@@ -275,7 +275,7 @@ export default function StrategiesPage() {
           })}
         </div>
         <p className="mt-2 font-mono text-[11px] text-desk-faint">
-          Autonomous runs happen on the automation schedule (every 4h once deployed);
+          Autonomous runs happen through the local autopilot or after enabling the GitHub workflow schedule;
           copy trading mirrors wallets followed in the{" "}
           <Link href="/league" className="text-instrument hover:underline">Smart Money League</Link>.
         </p>

@@ -75,17 +75,22 @@ async def run_risk_checks() -> dict:
 
     # 1. stop-loss / take-profit on every open position (any book)
     data = portfolio.get_portfolio()
+    closed_any = False
     for position in data["open"]:
         reason = evaluate_position(position, position.get("current_price"), risk)
         if reason is None:
             continue
         result = await paper_broker.close_position(str(position["id"]))
+        closed_any = closed_any or result.get("error") is None
         report["closed"].append(
             {"market_id": position["market_id"], "reason": reason,
              "pnl": result.get("pnl"), "error": result.get("error")}
         )
 
     # 2. daily circuit breaker: realized loss today + open (unrealized) drawdown
+    # Refresh after closes so a realized loss is not also counted as open drawdown.
+    if closed_any:
+        data = portfolio.get_portfolio()
     realized = realized_pnl_today()
     report["realized_today"] = realized
     unrealized = float(data["stats"].get("unrealized_pnl_usd") or 0)

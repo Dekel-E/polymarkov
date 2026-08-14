@@ -7,6 +7,7 @@ and numbers as strings, so parse defensively. CLOB book levels are unsorted.
 from __future__ import annotations
 
 import json
+import math
 import re
 from typing import Any, Optional
 
@@ -40,21 +41,64 @@ def _json_list(value: Any) -> list:
 
 def _to_float(value: Any, default: float = 0.0) -> float:
     try:
-        return float(value)
+        result = float(value)
+        return result if math.isfinite(result) else default
     except (TypeError, ValueError):
         return default
 
 
 def parse_market_ref(text: str) -> Optional[str]:
-    """Extract a market/event slug from a pasted Polymarket URL, else None."""
+    """Extract a market/event slug from a URL or an explicitly labelled slug."""
     match = re.search(
         r"polymarket\.com/(?:event|market)/([a-z0-9-]+)(?:/([a-z0-9-]+))?",
         text.lower(),
     )
-    if not match:
-        return None
-    # prefer the market slug over the event slug
-    return match.group(2) or match.group(1)
+    if match:
+        # Prefer the market slug over the parent event slug.
+        return match.group(2) or match.group(1)
+
+    # The GUI and submission examples use `Market: <slug>`. Treat that as an
+    # exact identifier instead of asking the LLM to paraphrase it into a text
+    # search, which can select a higher-volume sibling in a multi-market event.
+    labelled = re.search(
+        r"(?:^|\n)\s*market:\s*([a-z0-9][a-z0-9-]{5,})\s*(?:$|\n)",
+        text.lower(),
+    )
+    if labelled:
+        return labelled.group(1)
+
+    # Also accept a bare slug, but never a natural-language phrase.
+    stripped = text.strip().lower()
+    if re.fullmatch(r"[a-z0-9][a-z0-9-]{5,}", stripped) and "-" in stripped:
+        return stripped
+    return None
+
+
+_SEARCH_STOPWORDS = {
+    "a", "after", "an", "and", "at", "be", "before", "by", "for", "from",
+    "in", "is", "of", "on", "or", "the", "to", "will", "with",
+}
+
+
+def _query_relevance(query: str, question: str) -> tuple[int, float]:
+    """Lexical relevance used only to choose a child within one Gamma event."""
+    query_lower = query.lower()
+    question_lower = question.lower()
+    query_tokens = {
+        token for token in re.findall(r"[a-z0-9]+", query_lower)
+        if token not in _SEARCH_STOPWORDS
+    }
+    question_tokens = set(re.findall(r"[a-z0-9]+", question_lower))
+    overlap = len(query_tokens & question_tokens)
+    # Child contracts commonly differ only by phrases such as "no change" or
+    # "25 bps". Reward multi-word phrases so volume cannot override the user's
+    # explicitly requested outcome.
+    phrase_bonus = sum(
+        2 for phrase in ("no change", "increase", "decrease", "25 bps", "50 bps")
+        if phrase in query_lower and phrase in question_lower
+    )
+    coverage = overlap / max(len(query_tokens), 1)
+    return overlap + phrase_bonus, coverage
 
 
 # Gamma's category is usually empty; infer from question text. First match wins.
@@ -255,16 +299,20 @@ async def search_markets(query: str, limit: int = 10) -> list[dict]:
         resp.raise_for_status()
         events = resp.json().get("events") or []
         markets: list[dict] = []
-        # Gamma returns events sorted by relevance. We should preserve that order
-        # but pick the highest-volume market within each relevant event.
+        # Gamma returns events sorted by relevance. Preserve that event order,
+        # then pick the child contract matching the query. Pure volume ranking
+        # is incorrect for mutually exclusive siblings such as "no change" vs
+        # "decrease 25 bps".
         for event in events:
             event_markets = []
             for m in event.get("markets") or []:
                 m.setdefault("events", [{k: event.get(k) for k in ("id", "title", "category")}])
                 event_markets.append(normalize_market(m))
             if event_markets:
-                # Pick the highest volume market from this specific event
-                best_in_event = max(event_markets, key=lambda m: m["volume24h"])
+                best_in_event = max(
+                    event_markets,
+                    key=lambda m: (_query_relevance(query, m["question"]), m["volume24h"]),
+                )
                 markets.append(best_in_event)
                 
         return markets[:limit]
@@ -304,7 +352,12 @@ async def get_order_book(token_id: str) -> dict:
         raw = resp.json()
 
     def levels(key: str) -> list[tuple[float, float]]:
-        return [(_to_float(l.get("price")), _to_float(l.get("size"))) for l in raw.get(key) or []]
+        parsed = [
+            (_to_float(level.get("price")), _to_float(level.get("size")))
+            for level in raw.get(key) or []
+            if isinstance(level, dict)
+        ]
+        return [(price, size) for price, size in parsed if 0 < price < 1 and size > 0]
 
     return {
         "bids": sorted(levels("bids"), key=lambda l: l[0], reverse=True),
@@ -331,17 +384,22 @@ def depth_usd(levels: list[tuple[float, float]]) -> float:
 
 def walk_book(asks: list[tuple[float, float]], size_usd: float) -> dict:
     """Simulate a taker buy of size_usd against ask levels (best-first)."""
-    if size_usd <= 0 or not asks:
+    valid_asks = [
+        (price, size)
+        for price, size in asks
+        if math.isfinite(price) and math.isfinite(size) and 0 < price < 1 and size > 0
+    ]
+    if not math.isfinite(size_usd) or size_usd <= 0 or not valid_asks:
         return {
             "filled_usd": 0.0, "shares": 0.0, "vwap": None,
             "levels_consumed": 0, "slippage_pts": 0.0, "slippage_bps": 0.0,
-            "exhausted": bool(asks),
+            "exhausted": False,
         }
-    best_ask = asks[0][0]
+    best_ask = valid_asks[0][0]
     remaining = size_usd
     shares = 0.0
     levels_consumed = 0
-    for price, size in asks:
+    for price, size in valid_asks:
         if remaining <= 0:
             break
         level_notional = price * size
@@ -401,6 +459,9 @@ async def get_market_state(slug_or_id: str) -> Optional[MarketState]:
         best_ask=best_ask,
         spread=spread,
         depth_at_ask_usd=round(depth_usd(book["asks"]), 2),
+        depth_at_no_ask_usd=round(
+            sum((1 - price) * size for price, size in book["bids"]), 2
+        ),
         volume24h=market["volume24h"],
         price_history_7d=history,
         bids=book["bids"],

@@ -73,16 +73,18 @@ def _stats(open_rows: list[dict], resolved: list[dict]) -> dict:
     realized = sum(float(r.get("pnl") or 0) for r in resolved)
     unrealized = sum(float(r.get("unrealized_pnl") or 0) for r in open_rows)
     open_exposure = sum(float(r.get("size_usd") or 0) for r in open_rows)
+    open_fees = sum(float(r.get("fee_paid") or 0) for r in open_rows)
     balance = bankroll + realized
     wins = sum(1 for r in resolved if float(r.get("pnl") or 0) > 0)
     largest = max((float(r.get("size_usd") or 0) for r in open_rows), default=0.0)
     return {
         "bankroll_usd": round(bankroll, 2),
         "balance_usd": round(balance, 2),
-        "available_usd": round(balance - open_exposure, 2),
-        "equity_usd": round(balance + unrealized, 2),
+        "available_usd": round(balance - open_exposure - open_fees, 2),
+        "equity_usd": round(balance + unrealized - open_fees, 2),
         "open_positions": len(open_rows),
         "open_exposure_usd": round(open_exposure, 2),
+        "open_fees_usd": round(open_fees, 2),
         "unrealized_pnl_usd": round(unrealized, 2),
         "resolved_positions": len(resolved),
         "realized_pnl_usd": round(realized, 2),

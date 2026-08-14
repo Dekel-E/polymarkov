@@ -63,7 +63,7 @@ export default function WatchlistPage() {
           Watchlist
         </h1>
         <p className="mt-1 text-sm text-desk-dim">
-          Markets you follow. The agent re-analyzes them automatically on schedule, so the
+          Markets you follow. The agent re-analyzes them when autopilot or the GitHub schedule is enabled, so the
           verdict here stays current.
         </p>
       </header>

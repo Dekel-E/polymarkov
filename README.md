@@ -38,7 +38,7 @@ Council (concurrent, one shared context)                (LLM #4–7)
   Bull · Bear · Quant · ResolutionSkeptic → interpretable weights
   │
   ▼
-Deterministic pricing engine ── fair value, edge, verdict, Kelly size   (pure code)
+PricingEngine ── fair value, edge, verdict, Kelly size                 (pure code)
   │
   ▼
 Judge ── writes the narrative around the computed numbers   (LLM #8)
@@ -47,7 +47,7 @@ Judge ── writes the narrative around the computed numbers   (LLM #8)
   └─▶ PaperBroker ── fills the Kelly size on the live book   (only when Trade: yes and verdict ≠ PASS)
 ```
 
-**Exactly 8 LLM calls per `/api/execute`** (fewer on short-circuits: cache hit = 0, out-of-scope = 1, empty evidence skips sentiment). A 15-minute dossier cache serves repeats with zero LLM calls. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full walkthrough.
+**Eight logical LLM modules per full `/api/execute` run** (fewer on short-circuits: cache hit = 0, out-of-scope = 1, empty evidence skips sentiment). An invalid-JSON repair attempt is rare and is traced as an additional call. A 15-minute dossier cache serves repeats with zero LLM calls. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full walkthrough.
 
 ---
 
@@ -88,7 +88,7 @@ curl -s $BASE/api/model_architecture -o architecture.png && file architecture.pn
 curl -s -X POST $BASE/api/execute \
   -H 'Content-Type: application/json' \
   -d '{"prompt": "Market: fed-decision-in-september\nFocus: all\nTrade: no"}' | jq '{status, error, response, steps: (.steps | length)}'
-# → {status:"ok", error:null, response:"<dossier>", steps:7}
+# → {status:"ok", error:null, response:"<dossier>", steps:15}  # normal full run
 ```
 
 The GUI at `$BASE/` exercises the same `/api/execute` — enter a prompt, click **Run Agent**, and expand the **Run log** to inspect every step.
@@ -124,10 +124,25 @@ npm run dev                   # Next.js on :3000, /api/* proxied to :8000
 
 Open http://localhost:3000.
 
+### Reset the paper portfolio
+
+The reset clears positions, copied-trade records, market-making quotes, and
+equity snapshots, restores the paper bankroll to `$10,000`, and releases an
+active risk halt. It preserves watchlists, research, run history, strategy
+toggles, and risk limits.
+
+```bash
+# Preview row counts; makes no changes
+.venv\Scripts\python -m scripts.reset_portfolio
+
+# Apply the destructive reset after reviewing the preview
+.venv\Scripts\python -m scripts.reset_portfolio --confirm RESET
+```
+
 ## Tests & checks
 
 ```bash
-.venv\Scripts\python -m pytest backend/tests -q      # full suite (237 tests)
+.venv\Scripts\python -m pytest backend/tests -q      # full suite
 npx tsc --noEmit                                      # frontend type-check
 npm run lint                                          # frontend lint
 .venv\Scripts\python -m scripts.gen_architecture_png  # regenerate the PNG after any module rename
@@ -144,12 +159,12 @@ npm run lint                                          # frontend lint
    .venv\Scripts\python -m scripts.seed_precedents    # ≥200 resolved markets
    ```
    Every job supports `--dry-run` to preview without writing.
-4. **GitHub Actions** — add the env values as repo secrets so the scheduled workflows can run.
+4. **GitHub Actions** — add the env values as repo secrets. The checked-in workflows are manual-only for grading; uncomment their `schedule` blocks when you are ready to pay for unattended runs.
 
 ## Autonomy layer (optional, reuses the same pipeline)
 
 - **Local autopilot (no GitHub needed):** `.venv\Scripts\python -m jobs.autopilot` runs the entire desk in one crash-proof process — risk manager every 30 min, indexers every 2h, sentinel/agenda/market-maker hourly, trading strategies every 4h, settlement + briefing daily. `--once` = single pass, `--dry-run` = no writes.
-- **Scheduled (GitHub Actions):** `indexers.yml` (index markets/news/Reddit, settle positions, harvest precedents) and `automation.yml` (AutoTrade + RefreshWatchlist).
+- **GitHub Actions (manual by default):** `indexers.yml`, `autonomy.yml`, and `automation.yml` expose `workflow_dispatch`. Their cron blocks are intentionally disabled for grading and must be enabled explicitly for unattended operation.
 - **Real-time:** `python -m jobs.watch_live` — a persistent WebSocket watcher (needs a persistent host, not Actions) that reacts to book updates in seconds.
 
 Every strategy gates on `agent_settings` (toggles + risk rules + halt) read at run time, respects the `MAX_ANALYSES_PER_DAY` LLM budget, and self-tunes (a strategy that lost ≥ `TUNE_DISABLE_LOSS_USD` over ≥ `TUNE_MIN_TRADES` trades in 7 days disables itself — no LLM involved).
@@ -164,8 +179,3 @@ Deployed as a single serverless function. `vercel.json` sets `maxDuration: 300`;
 - `backend/assets/agent_examples.json` (served as `prompt_examples`) is a **frozen recording**; re-record with `scripts/record_examples.py` if the pipeline changes.
 - `backend/config.py` `TEAM_INFO` must hold your real team name, student names/emails, and batch/order number before submission.
 - Wikipedia's API 403s generic User-Agents — it needs a contact-info UA (handled in `news.py`).
-
----
-
-Vercel URL: {url}
-GitHub Repo URL: {url}

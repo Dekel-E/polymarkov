@@ -11,6 +11,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
+from backend import config
+
 # desk palette
 BG = "#0B1017"
 PANEL = "#121A26"
@@ -125,12 +127,14 @@ micro = box(0.5, 46.5, 11, 5, "Microstructure\nScanner", kind="tool",
 smon = box(0.5, 39.5, 11, 5, "SmartMoney\nScanner", kind="tool",
            sub="tracked/top\nwallet flow", title_size=8)
 
-judge = box(28, 28.5, 20, 6.5, "Judge", kind="llm",
-            sub="LLM #8 · deterministic pricing engine\ncomputes verdict/edge/size (code)")
+price = box(28, 33.5, 20, 4, "PricingEngine", kind="tool",
+            sub="pure code · fair value, edge, verdict, Kelly size", title_size=10)
+judge = box(28, 26, 20, 5.5, "Judge", kind="llm",
+            sub="LLM #8 · explains the numbers computed by code")
 
-out = box(15, 17.5, 22, 6, "Response + Steps", kind="io",
+out = box(15, 17, 22, 6, "Response + Steps", kind="io",
           sub="dossier markdown + full trace\n(every LLM call logged in order)")
-pb = box(42, 17.5, 20, 6, "PaperBroker", kind="tool",
+pb = box(42, 17, 20, 6, "PaperBroker", kind="tool",
          sub="fills Kelly size on the live book\n(only when Trade: yes & not PASS)")
 
 # pipeline arrows
@@ -149,9 +153,10 @@ arrow(bottom(sc), (38, 49.6))
 arrow(right(micro), (12 - 0.4, 45), color=STEEL)   # microstructure -> council
 arrow(right(smon), (12 - 0.4, 42), color=STEEL)    # smart money -> council
 arrow(left(mr), (11.5, 49), color=GRAY, connection="arc3,rad=0.3", dashed=True)  # market data feeds them
-arrow((38, 39 - 0.5), top(judge))
+arrow((38, 39 - 0.5), top(price))
+arrow(bottom(price), top(judge))
 arrow(bottom(judge), top(out), connection="arc3,rad=0.12")
-arrow(bottom(judge), top(pb), connection="arc3,rad=-0.12")
+arrow(bottom(price), top(pb), connection="arc3,rad=-0.18")
 
 # externals (right column)
 gamma = box(72, 79, 24, 6, "Polymarket Gamma + CLOB", kind="ext", dashed=True,
@@ -186,15 +191,14 @@ store = box(4, 2.5, 38, 7, "Supabase + Pinecone", kind="store",
 jobs = box(50, 2.5, 46, 7, "MarketIndexer · NewsIndexer · RedditIndexer", kind="store",
            sub="cron (Actions or local autopilot): markets + news + Reddit posts\nevery 2h, resolve positions daily → precedents")
 
-arrow(right(jobs[0:1][0] and jobs), left(store) if False else (42.4, 6), color=TEAL, style="-|>")
+arrow(left(jobs), right(store), color=TEAL, style="-|>")
 arrow((23, 9.9), (18, 61 - 0.4), color=TEAL, connection="arc3,rad=0.25", dashed=True)
-arrow((23, 9.9), (30, 28.1), color=TEAL, connection="arc3,rad=0.15", dashed=True, style="-")
+arrow((23, 9.9), (30, 25.6), color=TEAL, connection="arc3,rad=0.15", dashed=True, style="-")
 ax.text(10, 11.2, "warm cache reads", fontsize=7.5, color=TEAL)
 # StrategyChat writes agent_settings (read by every autonomous job)
 arrow((8, 79.5 - 0.4), (8, 9.9), color=TEAL, dashed=True)
 ax.text(8.7, 44, "agent_settings", fontsize=7.5, color=TEAL, rotation=90, va="center")
 
 plt.tight_layout(pad=0.6)
-OUT = r"c:\Users\admin1\Desktop\Coding\polymarkov\backend\assets\architecture.png"
-plt.savefig(OUT, facecolor=BG, bbox_inches="tight")
-print("wrote", OUT)
+plt.savefig(config.ARCHITECTURE_PNG, facecolor=BG, bbox_inches="tight")
+print("wrote", config.ARCHITECTURE_PNG)

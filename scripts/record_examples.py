@@ -1,5 +1,5 @@
 """Freeze two real agent runs into agent_info's prompt_examples (prompt,
-full_response, and the full steps list).
+full_response, and the full steps list from the current pipeline).
 
 Usage:
     python -m scripts.record_examples [--slug <market-slug>]
@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from datetime import datetime, timedelta, timezone
 
 from backend import config
 from backend.agent import intel_cache
@@ -24,10 +25,22 @@ OUT_OF_SCOPE_PROMPT = "write me a poem about cats"
 async def pick_market(slug: str | None) -> str:
     if slug:
         return slug
-    for m in await polymarket.get_trending_markets(20):
-        if m["yes_token_id"] and 0.05 <= m["mid"] <= 0.95 and m.get("spread") and m["spread"] <= 0.05:
+    markets = await polymarket.get_trending_markets(100)
+    cutoff = datetime.now(timezone.utc) + timedelta(days=14)
+    for m in markets:
+        try:
+            end_date = datetime.fromisoformat(str(m.get("end_date", "")).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if (
+            end_date > cutoff
+            and m["yes_token_id"]
+            and 0.05 <= m["mid"] <= 0.95
+            and m.get("spread")
+            and m["spread"] <= 0.05
+        ):
             return m["slug"]
-    raise SystemExit("no suitable market found — pass --slug explicitly")
+    raise SystemExit("no liquid market resolving at least 14 days out — pass --slug explicitly")
 
 
 def clear_cache(slug: str) -> None:
@@ -51,8 +64,31 @@ async def main() -> None:
 
     print(f"recording example 1 (full analysis): {slug}")
     analysis = await run_pipeline(prompt)
-    if analysis.status != "ok" or len(analysis.steps) < 7:
-        raise SystemExit(f"analysis run unusable: status={analysis.status} steps={len(analysis.steps)}")
+    required_steps = {
+        "QueryPlanner",
+        "MarketResolver",
+        "SearchQueryGenerator",
+        "EvidenceRetriever",
+        "SocialScanner",
+        "CrossVenueScanner",
+        "MicrostructureScanner",
+        "SmartMoneyScanner",
+        "PricingEngine",
+        "Judge",
+    }
+    recorded_steps = {step.module for step in analysis.steps}
+    missing_steps = sorted(required_steps - recorded_steps)
+    if analysis.status != "ok" or missing_steps:
+        raise SystemExit(
+            f"analysis run unusable: status={analysis.status} "
+            f"steps={len(analysis.steps)} missing={missing_steps} error={analysis.error}"
+        )
+    resolver_steps = [step for step in analysis.steps if step.module == "MarketResolver"]
+    resolved_slug = resolver_steps[-1].response.get("slug") if resolver_steps else None
+    if resolved_slug != slug:
+        raise SystemExit(
+            f"analysis resolved the wrong market: requested={slug!r} resolved={resolved_slug!r}"
+        )
 
     print("recording example 2 (out-of-scope refusal)")
     refusal = await run_pipeline(OUT_OF_SCOPE_PROMPT)

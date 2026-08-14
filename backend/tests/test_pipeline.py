@@ -202,7 +202,7 @@ def mocked_pipeline(monkeypatch):
 
 LLM_MODULES = {"QueryPlanner", "SearchQueryGenerator", "SentimentScorer", "BullAnalyst", "BearAnalyst", "QuantAnalyst", "ResolutionSkeptic", "Judge"}
 TOOL_MODULES = {"MarketResolver", "EvidenceRetriever", "SocialScanner", "CrossVenueScanner",
-                "MicrostructureScanner", "SmartMoneyScanner"}
+                "MicrostructureScanner", "SmartMoneyScanner", "PricingEngine"}
 
 
 async def test_full_run_envelope_and_steps(mocked_pipeline):
@@ -292,6 +292,20 @@ async def test_repeat_request_served_from_cache(mocked_pipeline):
     assert "Cached dossier" in third.response
 
 
+async def test_exact_labelled_slug_bypasses_text_search(mocked_pipeline, monkeypatch):
+    async def search_must_not_run(*_args, **_kwargs):
+        raise AssertionError("an exact labelled slug must not use text search")
+
+    monkeypatch.setattr(polymarket, "search_markets", search_must_not_run)
+    result = await orchestrator.run_pipeline(
+        f"Market: {FIXTURE_MARKET.slug}\nFocus: all\nTrade: no"
+    )
+    assert result.status == "ok"
+    resolver = next(step for step in result.steps if step.module == "MarketResolver")
+    assert resolver.response["slug"] == FIXTURE_MARKET.slug
+    assert f"url ref '{FIXTURE_MARKET.slug}'" in resolver.prompt.user_prompt
+
+
 async def test_wants_trade_executes_paper_broker(mocked_pipeline, monkeypatch):
     # user asks to trade + stronger bull evidence -> BUY_YES -> PaperBroker runs
     monkeypatch.setitem(
@@ -362,3 +376,47 @@ async def test_failed_llm_call_recorded_in_steps(monkeypatch):
     assert len(ctx.steps) == 1
     assert ctx.steps[0].module == "QueryPlanner"
     assert "gateway exploded" in ctx.steps[0].response["error"]
+
+
+async def test_invalid_json_retry_records_both_llm_attempts(monkeypatch):
+    from backend.llm import client as llm_client
+
+    monkeypatch.setattr(llm_client, "is_configured", lambda: True)
+    replies = iter(["not json", '{"ok": true}'])
+
+    async def completion(self, system_prompt, messages):
+        return next(replies)
+
+    monkeypatch.setattr(llm_client.RunContext, "_completion", completion)
+    ctx = llm_client.RunContext()
+    result = await ctx.call_llm("QueryPlanner", "sys", "user")
+
+    assert result == {"ok": True}
+    assert len(ctx.steps) == 2
+    assert len(ctx.step_metrics) == 2
+    assert ctx.steps[0].response["raw_response"] == "not json"
+    assert "invalid JSON" in ctx.steps[0].response["error"]
+    assert "REPAIR INSTRUCTION" in ctx.steps[1].prompt.user_prompt
+    assert ctx.steps[1].response == {"ok": True}
+
+
+async def test_pipeline_failure_discards_partial_steps_for_course_contract(monkeypatch):
+    async def fail_after_step(ctx, user_prompt, started, history):
+        ctx.add_tool_step("MarketResolver", "input", {"ok": True})
+        raise RuntimeError("late failure")
+
+    monkeypatch.setattr(orchestrator, "_run", fail_after_step)
+    result = await orchestrator.run_pipeline("analyze anything")
+    assert result.status == "error"
+    assert "late failure" in result.error
+    assert result.steps == []
+
+
+def test_model_json_rejects_non_finite_numbers():
+    import json
+
+    from backend.llm.client import parse_json_response
+
+    assert parse_json_response('```json\n{"value": 1.5}\n```') == {"value": 1.5}
+    with pytest.raises(json.JSONDecodeError):
+        parse_json_response('{"value": NaN}')

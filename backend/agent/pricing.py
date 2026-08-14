@@ -135,9 +135,13 @@ def compute_pricing(
             f"council estimates disagree by {max(estimates) - min(estimates):.2f} "
             f"(> {config.MAX_COUNCIL_DISAGREEMENT})"
         )
-    if market.depth_at_ask_usd < config.MIN_DEPTH_USD:
+    side_name = "YES" if gross_edge >= 0 else "NO"
+    side_depth = market.depth_at_ask_usd
+    if gross_edge < 0 and market.depth_at_no_ask_usd is not None:
+        side_depth = market.depth_at_no_ask_usd
+    if side_depth < config.MIN_DEPTH_USD:
         pass_reasons.append(
-            f"depth ${market.depth_at_ask_usd:,.0f} below ${config.MIN_DEPTH_USD:,}"
+            f"{side_name} ask depth ${side_depth:,.0f} below ${config.MIN_DEPTH_USD:,}"
         )
     if net_edge <= 0:
         pass_reasons.append("net edge non-positive after costs")

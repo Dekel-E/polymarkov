@@ -54,30 +54,48 @@ export default function ChatPanel<E>({
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hydratedKey, setHydratedKey] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const busyRef = useRef(false);
 
   // Restore before first paint of the list. Without this, navigating from the
   // desk to a market page and back drops the whole conversation, so follow-ups
   // ("buy $50 of that") arrive with no antecedent.
   useEffect(() => {
-    if (!storageKey) return;
+    if (!storageKey) {
+      setHydratedKey(null);
+      return;
+    }
     try {
       const saved = sessionStorage.getItem(storageKey);
-      if (saved) setMessages(JSON.parse(saved) as ChatMessage<E>[]);
+      const parsed: unknown = saved ? JSON.parse(saved) : [];
+      const valid = Array.isArray(parsed)
+        ? parsed.filter(
+            (item): item is ChatMessage<E> =>
+              typeof item === "object" &&
+              item !== null &&
+              ((item as { role?: unknown }).role === "user" ||
+                (item as { role?: unknown }).role === "assistant") &&
+              typeof (item as { content?: unknown }).content === "string",
+          )
+        : [];
+      setMessages(valid.slice(-40));
     } catch {
-      /* corrupt or unavailable storage: start empty */
+      setMessages([]);
+    } finally {
+      setHydratedKey(storageKey);
     }
   }, [storageKey]);
 
   useEffect(() => {
-    if (!storageKey) return;
+    if (!storageKey || hydratedKey !== storageKey) return;
     try {
       // Cap what we persist so a long session can't blow the quota.
       sessionStorage.setItem(storageKey, JSON.stringify(messages.slice(-40)));
     } catch {
       /* quota or private mode: persistence is best-effort */
     }
-  }, [messages, storageKey]);
+  }, [hydratedKey, messages, storageKey]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -85,7 +103,8 @@ export default function ChatPanel<E>({
 
   async function handleSend() {
     const question = input.trim();
-    if (!question || busy) return;
+    if (!question || busyRef.current) return;
+    busyRef.current = true;
     setInput("");
     setError(null);
     setBusy(true);
@@ -110,6 +129,7 @@ export default function ChatPanel<E>({
       setMessages((prev) => prev.slice(0, -1));
       setInput(question);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }

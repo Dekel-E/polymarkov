@@ -49,6 +49,17 @@ def test_sanitize_empty_and_garbage():
     ) == {}
 
 
+def test_sanitize_rejects_non_finite_numbers_and_string_booleans():
+    patch = supabase_client.sanitize_settings_patch(
+        {
+            "strategies": {"copy_trading": "false"},
+            "risk": {"stop_loss_pct": float("nan")},
+            "funds": {"bankroll_usd": float("inf")},
+        }
+    )
+    assert patch == {}
+
+
 # ---------------------------------------------------------------------------
 # _settings_diff (pure)
 # ---------------------------------------------------------------------------

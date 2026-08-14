@@ -5,6 +5,7 @@ Supabase is not configured, so the agent degrades instead of crashing.
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Optional
@@ -480,11 +481,14 @@ def sanitize_settings_patch(raw: dict, allow_halt_activation: bool = False) -> d
     patch: dict = {}
     strategies = raw.get("strategies")
     if isinstance(strategies, dict):
-        cleaned = {
-            k: bool(v)
-            for k, v in strategies.items()
-            if k in config.DEFAULT_AGENT_SETTINGS["strategies"]
-        }
+        cleaned = {}
+        for key, value in strategies.items():
+            if key not in config.DEFAULT_AGENT_SETTINGS["strategies"]:
+                continue
+            if isinstance(value, bool):
+                cleaned[key] = value
+            elif isinstance(value, (int, float)) and value in (0, 1):
+                cleaned[key] = bool(value)
         if cleaned:
             patch["strategies"] = cleaned
     risk = raw.get("risk")
@@ -493,7 +497,9 @@ def sanitize_settings_patch(raw: dict, allow_halt_activation: bool = False) -> d
         for key, (lo, hi) in config.RISK_BOUNDS.items():
             if key in risk:
                 try:
-                    cleaned[key] = max(lo, min(hi, float(risk[key])))
+                    value = float(risk[key])
+                    if math.isfinite(value):
+                        cleaned[key] = max(lo, min(hi, value))
                 except (TypeError, ValueError):
                     continue
         if cleaned:
@@ -512,7 +518,9 @@ def sanitize_settings_patch(raw: dict, allow_halt_activation: bool = False) -> d
     if isinstance(funds, dict) and "bankroll_usd" in funds:
         lo, hi = config.BANKROLL_BOUNDS
         try:
-            patch["funds"] = {"bankroll_usd": max(lo, min(hi, float(funds["bankroll_usd"])))}
+            value = float(funds["bankroll_usd"])
+            if math.isfinite(value):
+                patch["funds"] = {"bankroll_usd": max(lo, min(hi, value))}
         except (TypeError, ValueError):
             pass
     return patch

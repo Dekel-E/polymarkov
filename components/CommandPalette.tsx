@@ -68,13 +68,23 @@ export default function CommandPalette() {
       return;
     }
     setSearching(true);
+    let cancelled = false;
     const id = setTimeout(() => {
       searchMarkets(q)
-        .then((r) => setResults(r.slice(0, 6)))
-        .catch(() => setResults([]))
-        .finally(() => setSearching(false));
+        .then((r) => {
+          if (!cancelled) setResults(r.slice(0, 6));
+        })
+        .catch(() => {
+          if (!cancelled) setResults([]);
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false);
+        });
     }, 220);
-    return () => clearTimeout(id);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
   }, [query]);
 
   const items = useMemo<Item[]>(() => {

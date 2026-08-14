@@ -9,10 +9,10 @@
     "down": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 -Stop",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint app components lib"
   },
   "dependencies": {
-    "next": "^15.3.3",
+    "next": "^16.3.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0"
@@ -22,7 +22,9 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.20",
-    "postcss": "^8.5.3",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.1",
+    "postcss": "^8.5.26",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"
   }

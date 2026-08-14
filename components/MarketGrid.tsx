@@ -67,13 +67,23 @@ export default function MarketGrid() {
       return;
     }
     setSearching(true);
+    let cancelled = false;
     const id = setTimeout(() => {
       searchMarkets(q)
-        .then(setResults)
-        .catch(() => setResults([]))
-        .finally(() => setSearching(false));
+        .then((next) => {
+          if (!cancelled) setResults(next);
+        })
+        .catch(() => {
+          if (!cancelled) setResults([]);
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false);
+        });
     }, 400);
-    return () => clearTimeout(id);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
   }, [query]);
 
   useEffect(() => {

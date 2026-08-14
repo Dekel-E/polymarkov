@@ -146,6 +146,21 @@ MODULES: list[dict] = [
         "data_sources": [],
     },
     {
+        "name": "PricingEngine",
+        "kind": "tool",
+        "prompt_file": None,
+        "implementation": "backend/agent/pricing.py",
+        "description": (
+            "Deterministically combines the market prior, council opinions, "
+            "resolution-risk haircut, spread, fees, evidence quality and risk "
+            "limits into fair value, net edge, verdict and fractional-Kelly "
+            "size. No LLM performs or can override this arithmetic."
+        ),
+        "inputs": "MarketState + council opinions + resolution risk + evidence count",
+        "outputs": "PricingResult {fair_raw, fair_adj, edge_net, verdict, size_pct_bankroll}",
+        "data_sources": [],
+    },
+    {
         "name": "Judge",
         "kind": "llm",
         "prompt_file": "judge",
