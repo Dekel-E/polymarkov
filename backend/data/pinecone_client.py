@@ -1,5 +1,5 @@
 """Thin Pinecone wrapper: one index, dim 1536, cosine, namespaces
-`markets` / `news` / `precedents`. Degrades to no-ops when unconfigured.
+`markets` / `news` / `precedents` / `social`. Degrades to no-ops when unconfigured.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from backend import config
 
-NAMESPACES = ("markets", "news", "precedents")
+NAMESPACES = ("markets", "news", "precedents", "social")
 
 
 def is_configured() -> bool:
