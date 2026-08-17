@@ -44,7 +44,7 @@ The frontend proxies `/api/*` to `:8000` in dev (`next.config.ts`). `.venv\Scrip
 - **Exactly 8 LLM calls per `/api/execute`**: QueryPlanner → SearchQueryGenerator → SentimentScorer → Bull/Bear/Quant/ResolutionSkeptic (concurrent) → Judge. Fewer on short-circuits (cache hit = 0, meta/out-of-scope = 1, empty sentiment items skips SentimentScorer). Adding/removing an LLM call to the execute path changes a graded contract and must be reflected in the steps trace, the architecture PNG, and test_pipeline.py's count — don't do it casually.
 - **Module names must match across three places**: the `steps[]` trace, the architecture PNG (`scripts/gen_architecture_png.py`), and `backend/agent/registry/tools.py`. The registry is the single source of truth (`CANONICAL_MODULES` derives from it); `/api/agent_info` serves it verbatim. Rename in all three or nowhere.
 - **The `/api/execute` envelope is graded**: top-level fields are exactly `{status, error, response, steps}`. The extra `ui` payload is stripped unless `?ui=1`. It never returns a non-200 — pipeline exceptions become `status:"error"` envelopes (`orchestrator.run_pipeline` wraps everything, plus a 270s `asyncio.wait_for` so Vercel's 300s kill can't win).
-- **No auth anywhere** (course requirement) and **single-user**: one shared paper book. `get_portfolio()` takes no args; the `strategy` column distinguishes agent vs manual trades. Do not reintroduce per-user semantics.
+- **No auth anywhere** (course requirement) and **single-user**: one shared paper book. `get_portfolio()` takes no args; the `strategy` column distinguishes agent vs manual trades. Do not reintroduce per-user semantics. DeskChat trades/closes must remain two-step actions claimed through the migration-0018 idempotency ledger.
 - **Every LLM call goes through `RunContext.call_llm`** (`backend/llm/client.py`), which captures the step (including on failure), retries invalid JSON exactly once, and enforces the timeout. Every physical text request and embedding batch reserves the atomic global quota in `backend/llm/budget.py` first; never call the provider around it. Tool steps use `add_tool_step`.
 
 ## Architecture
@@ -67,7 +67,7 @@ The frontend proxies `/api/*` to `:8000` in dev (`next.config.ts`). `.venv\Scrip
 
 ## Storage & deploy
 
-Supabase (rows) + Pinecone (vectors) are optional for standalone development. A configured deployment fails closed on model requests if the shared quota RPC is unavailable. Migrations in `supabase/migrations/` run in order (0001 → 0017) in the Supabase SQL editor. Background indexers run via GitHub Actions or the local autopilot, **never inside Vercel functions**.
+Supabase (rows) + Pinecone (vectors) are optional for standalone development. A configured deployment fails closed on model requests if the shared quota RPC is unavailable. Migrations in `supabase/migrations/` run in order (0001 → 0018) in the Supabase SQL editor. Background indexers run via GitHub Actions or the local autopilot, **never inside Vercel functions**.
 
 ## Gotchas
 

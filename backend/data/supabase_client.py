@@ -6,7 +6,8 @@ Supabase is not configured, so the agent degrades instead of crashing.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Optional
 
@@ -31,6 +32,73 @@ def _now() -> str:
 def today_utc() -> str:
     """Date-only UTC stamp. The halt breaker's `at` field must use this format; risk.py string-compares it."""
     return datetime.now(timezone.utc).date().isoformat()
+
+
+def record_automation_heartbeat(data: dict) -> None:
+    """Upsert the latest state of one GitHub Actions workflow job."""
+    if not is_configured():
+        raise RuntimeError("Supabase is required for automation heartbeats")
+    row = {
+        key: data[key]
+        for key in (
+            "workflow", "job", "run_id", "run_attempt", "event", "status",
+            "started_at", "finished_at", "updated_at", "run_url", "commit_sha",
+        )
+        if data.get(key) is not None
+    }
+    get_client().table("automation_heartbeats").upsert(
+        row, on_conflict="workflow,job"
+    ).execute()
+
+
+def get_automation_heartbeats() -> list[dict]:
+    if not is_configured():
+        return []
+    return (
+        get_client()
+        .table("automation_heartbeats")
+        .select("workflow,job,run_id,run_attempt,event,status,started_at,finished_at,updated_at,run_url,commit_sha")
+        .order("updated_at", desc=True)
+        .execute()
+        .data
+        or []
+    )
+
+
+def create_chat_action(action_type: str, payload: dict, ttl_minutes: int = 10) -> dict:
+    """Persist a confirmation request before any trade/close side effect."""
+    if not is_configured():
+        raise RuntimeError("Supabase is required for confirmed chat actions")
+    now = datetime.now(timezone.utc)
+    row = {
+        "token": str(uuid.uuid4()),
+        "action_type": action_type,
+        "payload": payload,
+        "status": "pending",
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(minutes=ttl_minutes)).isoformat(),
+    }
+    result = get_client().table("chat_actions").insert(row).execute().data or []
+    return result[0] if result else row
+
+
+def claim_chat_action(token: str) -> dict:
+    """Atomically claim a pending action or return its existing terminal state."""
+    if not is_configured():
+        raise RuntimeError("Supabase is required for confirmed chat actions")
+    data = get_client().rpc("claim_chat_action", {"p_token": token}).execute().data
+    if isinstance(data, list):
+        return data[0] if data else {"status": "not_found", "claimed": False}
+    return data if isinstance(data, dict) else {"status": "not_found", "claimed": False}
+
+
+def finish_chat_action(token: str, status: str, result: dict) -> None:
+    """Store the stable response returned by all later retries."""
+    if not is_configured():
+        raise RuntimeError("Supabase is required for confirmed chat actions")
+    get_client().table("chat_actions").update(
+        {"status": status, "result": result, "completed_at": _now()}
+    ).eq("token", token).execute()
 
 
 def upsert_markets(markets: list[dict]) -> int:

@@ -46,8 +46,8 @@ def deployment_health() -> tuple[dict, int]:
             db_data = response.data
             if isinstance(db_data, list):
                 db_data = db_data[0] if db_data else {}
-            if not isinstance(db_data, dict) or db_data.get("schema_version") != "0017":
-                raise RuntimeError("database schema is not at migration 0017")
+            if not isinstance(db_data, dict) or db_data.get("schema_version") != "0018":
+                raise RuntimeError("database schema is not at migration 0018")
             checks["database"] = {
                 "status": "ok",
                 "schema_version": db_data["schema_version"],

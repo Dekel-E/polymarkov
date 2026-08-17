@@ -27,6 +27,9 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Start automation heartbeat
+        run: python -m jobs.heartbeat start
+        continue-on-error: true
       - name: ManageRisk # first: close breached positions, arm the breaker
         run: python -m jobs.manage_risk
       - name: AutoTrade
@@ -37,3 +40,7 @@ jobs:
         run: python -m jobs.scan_arbitrage
       - name: CopyTrade
         run: python -m jobs.copy_trade
+      - name: Finish automation heartbeat
+        if: always()
+        run: python -m jobs.heartbeat finish --status "${{ job.status }}"
+        continue-on-error: true

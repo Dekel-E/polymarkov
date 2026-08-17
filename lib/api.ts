@@ -357,6 +357,15 @@ export interface DeskChatResult extends MarketChatResult {
   watchlisted?: { slug: string; action: "add" | "remove" } | null;
   analyzed?: { slug: string; verdict: string | null } | null; // full pipeline run
   closed?: { position_id: string; fraction: number; pnl: number } | null; // position exited
+  pending_action?: DeskPendingAction | null;
+  idempotent_replay?: boolean;
+}
+
+export interface DeskPendingAction {
+  token: string;
+  action_type: "trade" | "close";
+  summary: string;
+  expires_at?: string | null;
 }
 
 export async function deskChat(
@@ -373,6 +382,53 @@ export async function deskChat(
   const data = (await res.json()) as DeskChatResult;
   if (data.error) throw new Error(data.error);
   return data;
+}
+
+export async function decideDeskAction(
+  token: string,
+  decision: "confirm" | "cancel",
+): Promise<DeskChatResult> {
+  const res = await fetch("/api/chat/action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, decision }),
+  });
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as DeskChatResult;
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+export interface AutomationJobStatus {
+  workflow: string;
+  job: string;
+  label: string;
+  cadence: string;
+  schedule_enabled: boolean;
+  status: "never_run" | "running" | "stale" | "success" | "failure" | "cancelled" | "skipped";
+  event?: string | null;
+  run_id?: string | null;
+  run_attempt?: number | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  updated_at?: string | null;
+  run_url?: string | null;
+  commit_sha?: string | null;
+}
+
+export interface AutomationStatus {
+  source: "github_actions";
+  schedules_enabled: boolean;
+  jobs: AutomationJobStatus[];
+  checked_at: string;
+}
+
+export async function fetchAutomationStatus(): Promise<AutomationStatus> {
+  const res = await fetch("/api/automation/status", { cache: "no-store" });
+  if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+  const data = (await res.json()) as { automation: AutomationStatus | null; error: string | null };
+  if (!data.automation) throw new Error(data.error ?? "Automation status unavailable");
+  return data.automation;
 }
 
 export interface StrategyChatResult {

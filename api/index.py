@@ -8,6 +8,7 @@ import asyncio
 import sys
 from pathlib import Path
 from typing import Literal, Optional
+from uuid import UUID
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -682,6 +683,11 @@ class DeskChatIn(BaseModel):
     slug: Optional[str] = None  # market in view, so "buy $50 yes"/"watch this" scope to it
 
 
+class ChatActionIn(BaseModel):
+    token: UUID
+    decision: Literal["confirm", "cancel"]
+
+
 @app.post("/api/chat")
 async def desk_chat_endpoint(body: DeskChatIn) -> dict:
     """Global chat (DeskChat module): the single omni-chat. Routes a message to
@@ -694,6 +700,29 @@ async def desk_chat_endpoint(body: DeskChatIn) -> dict:
         return await chat.desk_chat(body.question, body.history[:24], slug=body.slug)
     except Exception as exc:
         return {"answer": None, "citations": [], "market": None, "error": str(exc)}
+
+
+@app.post("/api/chat/action")
+async def desk_chat_action(body: ChatActionIn) -> dict:
+    """Confirm or cancel one durable, idempotent DeskChat trade/close."""
+    try:
+        from backend.agent import chat
+
+        return await chat.decide_chat_action(str(body.token), body.decision)
+    except Exception as exc:
+        return {"answer": None, "citations": [], "market": None, "error": str(exc)}
+
+
+@app.get("/api/automation/status")
+async def automation_status_endpoint(response: Response) -> dict:
+    """Checked-in schedule state plus latest GitHub Actions heartbeats."""
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    try:
+        from backend.automation_status import automation_status
+
+        return {"automation": await asyncio.to_thread(automation_status), "error": None}
+    except Exception as exc:
+        return {"automation": None, "error": str(exc)}
 
 
 class MarketChatIn(BaseModel):

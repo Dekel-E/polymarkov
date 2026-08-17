@@ -61,7 +61,7 @@ ENABLE_X = False
 DESK_USER_ID = "00000000-0000-0000-0000-000000000000"
 
 TEAM_INFO = {
-    "group_batch_order_number": "batch1_order1",
+    "group_batch_order_number": "batch3_order1",
     "team_name": "Polymarkov Team",
     "students": [
         {"name": "Dekel Elimelech", "email": "dekele@campus.technion.ac.il"},

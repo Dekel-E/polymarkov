@@ -17,7 +17,7 @@ class _RPC:
 class _Client:
     def rpc(self, name, _params=None):
         assert name == "deployment_health"
-        return _RPC({"database": "ok", "schema_version": "0017"})
+        return _RPC({"database": "ok", "schema_version": "0018"})
 
 
 def test_health_is_ready_without_spending_model_budget(monkeypatch):
@@ -37,7 +37,7 @@ def test_health_is_ready_without_spending_model_budget(monkeypatch):
     assert status_code == 200
     assert payload["status"] == "healthy"
     assert payload["ready"] is True
-    assert payload["checks"]["database"]["schema_version"] == "0017"
+    assert payload["checks"]["database"]["schema_version"] == "0018"
     assert payload["checks"]["budget"]["remaining"] == 145
 
 

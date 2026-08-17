@@ -29,12 +29,19 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Start automation heartbeat
+        run: python -m jobs.heartbeat start
+        continue-on-error: true
       - name: Sentinel
         run: python -m jobs.sentinel
       - name: WorkAgenda
         run: python -m jobs.work_agenda
       - name: MarketMaker
         run: python -m jobs.market_maker
+      - name: Finish automation heartbeat
+        if: always()
+        run: python -m jobs.heartbeat finish --status "${{ job.status }}"
+        continue-on-error: true
 
   briefing:
     if: github.event.schedule == '0 6 * * *' || github.event_name == 'workflow_dispatch'
@@ -47,7 +54,14 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Start automation heartbeat
+        run: python -m jobs.heartbeat start
+        continue-on-error: true
       - name: BuildRelations
         run: python -m jobs.build_relations
       - name: DailyBriefing
         run: python -m jobs.daily_briefing
+      - name: Finish automation heartbeat
+        if: always()
+        run: python -m jobs.heartbeat finish --status "${{ job.status }}"
+        continue-on-error: true

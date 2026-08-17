@@ -1,14 +1,35 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import ChatPanel, { CitationsList, GatheredBadge } from "@/components/ChatPanel";
-import { deskChat, type DeskChatResult } from "@/lib/api";
+import {
+  decideDeskAction,
+  deskChat,
+  type DeskChatResult,
+  type DeskPendingAction,
+} from "@/lib/api";
 import type { AgentSettings } from "@/lib/types";
 
 type Extras = Pick<
   DeskChatResult,
-  "citations" | "gathered" | "market" | "fill" | "watchlisted" | "analyzed" | "closed"
+  "citations" | "gathered" | "market" | "fill" | "watchlisted" | "analyzed" | "closed" |
+  "pending_action" | "idempotent_replay"
 >;
+
+function extrasFrom(res: DeskChatResult): Extras {
+  return {
+    citations: res.citations,
+    gathered: res.gathered,
+    market: res.market,
+    fill: res.fill,
+    watchlisted: res.watchlisted,
+    analyzed: res.analyzed,
+    closed: res.closed,
+    pending_action: res.pending_action,
+    idempotent_replay: res.idempotent_replay,
+  };
+}
 
 // Replayed into history so the model remembers what it actually did, not just
 // what it wrote — "close that one" needs the earlier trade to be on the record.
@@ -19,7 +40,57 @@ function summarizeExtras(e: Extras): string | null {
   if (e.fill) parts.push(`placed paper trade: ${e.fill.side} $${e.fill.size_usd.toFixed(0)}`);
   if (e.closed) parts.push(`closed position ${e.closed.position_id} · pnl $${e.closed.pnl.toFixed(2)}`);
   if (e.watchlisted) parts.push(`watchlist ${e.watchlisted.action}: ${e.watchlisted.slug}`);
+  if (e.pending_action) parts.push(`awaiting confirmation: ${e.pending_action.summary}`);
   return parts.length ? parts.join(" · ") : null;
+}
+
+function PendingActionControls({
+  action,
+  resolve,
+}: {
+  action: DeskPendingAction;
+  resolve: (result: { content: string; extras?: Extras }) => void;
+}) {
+  const [busy, setBusy] = useState<"confirm" | "cancel" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function decide(decision: "confirm" | "cancel") {
+    if (busy) return;
+    setBusy(decision);
+    setError(null);
+    try {
+      const res = await decideDeskAction(action.token, decision);
+      resolve({ content: res.answer ?? "(no answer)", extras: extrasFrom(res) });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-amber-700/50 bg-amber-950/20 p-3">
+      <div className="font-mono text-[10px] uppercase tracking-wider text-amber-300">
+        confirmation required · expires in 10 minutes
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          onClick={() => decide("confirm")}
+          disabled={busy !== null}
+          className="rounded-lg bg-amber-300 px-3 py-1.5 text-xs font-bold text-desk-deep disabled:opacity-50"
+        >
+          {busy === "confirm" ? "Confirming…" : `Confirm ${action.action_type}`}
+        </button>
+        <button
+          onClick={() => decide("cancel")}
+          disabled={busy !== null}
+          className="rounded-lg border border-desk-edge px-3 py-1.5 text-xs text-desk-soft disabled:opacity-50"
+        >
+          {busy === "cancel" ? "Cancelling…" : "Cancel"}
+        </button>
+      </div>
+      {error && <div className="mt-2 text-xs text-red-300">{error}</div>}
+    </div>
+  );
 }
 
 // The single omni-chat. Talks about markets, runs paper trades, edits the
@@ -58,15 +129,7 @@ export default function DeskChat({
           if (res.settings && onApplied) onApplied(res.settings);
           return {
             content: res.answer ?? "(no answer)",
-            extras: {
-              citations: res.citations,
-              gathered: res.gathered,
-              market: res.market,
-              fill: res.fill,
-              watchlisted: res.watchlisted,
-              analyzed: res.analyzed,
-              closed: res.closed,
-            },
+            extras: extrasFrom(res),
           };
         }}
         renderExtrasTop={(e) => (
@@ -109,7 +172,17 @@ export default function DeskChat({
             <GatheredBadge gathered={e.gathered} />
           </>
         )}
-        renderExtrasBottom={(e) => <CitationsList citations={e.citations} />}
+        renderExtrasBottom={(e, resolve) => (
+          <>
+            {e.pending_action && <PendingActionControls action={e.pending_action} resolve={resolve} />}
+            {e.idempotent_replay && (
+              <div className="mt-2 font-mono text-[10px] uppercase tracking-wider text-desk-faint">
+                duplicate confirmation · original result replayed
+              </div>
+            )}
+            <CitationsList citations={e.citations} />
+          </>
+        )}
       />
     </div>
   );

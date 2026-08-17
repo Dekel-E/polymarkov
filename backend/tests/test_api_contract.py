@@ -118,7 +118,7 @@ def test_deployment_health_endpoint(monkeypatch):
                 "checked_at": "2026-08-14T00:00:00+00:00",
                 "checks": {
                     "api": {"status": "ok"},
-                    "database": {"status": "ok", "schema_version": "0017"},
+                    "database": {"status": "ok", "schema_version": "0018"},
                 },
             },
             200,
@@ -127,7 +127,7 @@ def test_deployment_health_endpoint(monkeypatch):
     response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json()["ready"] is True
-    assert response.json()["checks"]["database"]["schema_version"] == "0017"
+    assert response.json()["checks"]["database"]["schema_version"] == "0018"
 
 
 def test_deployment_health_uses_503_when_not_ready(monkeypatch):
@@ -241,6 +241,41 @@ def test_api_rejects_invalid_numeric_inputs():
         headers={"Content-Type": "application/json"},
     )
     assert response.status_code == 422
+
+
+def test_chat_action_rejects_invalid_token():
+    response = client.post(
+        "/api/chat/action", json={"token": "not-a-uuid", "decision": "confirm"}
+    )
+    assert response.status_code == 422
+
+
+def test_chat_action_calls_idempotent_executor(monkeypatch):
+    from backend.agent import chat
+
+    async def fake_decide(token: str, decision: str):
+        return {"answer": f"{decision}:{token}", "citations": [], "market": None, "error": None}
+
+    monkeypatch.setattr(chat, "decide_chat_action", fake_decide)
+    token = "00000000-0000-0000-0000-000000000099"
+    data = client.post(
+        "/api/chat/action", json={"token": token, "decision": "confirm"}
+    ).json()
+    assert data["answer"] == f"confirm:{token}"
+
+
+def test_automation_status_endpoint_is_not_cached(monkeypatch):
+    from backend import automation_status
+
+    monkeypatch.setattr(
+        automation_status,
+        "automation_status",
+        lambda: {"source": "github_actions", "schedules_enabled": False, "jobs": [], "checked_at": "now"},
+    )
+    response = client.get("/api/automation/status")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store, max-age=0"
+    assert response.json()["automation"]["source"] == "github_actions"
 
 
 def test_arbitrage_execute_rejects_basket_missing_from_fresh_scan(monkeypatch):

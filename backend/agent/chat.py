@@ -451,8 +451,43 @@ async def _resolve_slug(query: str, slug: Optional[str]) -> Optional[str]:
     return hits[0]["slug"] if hits else None
 
 
-async def _desk_trade(ctx: RunContext, route_raw: dict, slug: Optional[str]) -> dict:
-    """Place a chat-directed paper trade immediately (paper only)."""
+async def _halt_reason() -> Optional[str]:
+    settings = await asyncio.to_thread(supabase_client.get_agent_settings)
+    halt = settings.get("halt") or {}
+    if halt.get("active"):
+        return str(halt.get("reason") or "no reason recorded")
+    return None
+
+
+async def _pending_action(action_type: str, payload: dict, summary: str, market: dict) -> dict:
+    try:
+        row = await asyncio.to_thread(
+            supabase_client.create_chat_action, action_type, payload
+        )
+    except Exception:
+        return {
+            "answer": (
+                "I couldn't create a durable confirmation. No action was taken. "
+                "Install migration 0018 and try again."
+            ),
+            "citations": [], "market": market, "error": None,
+        }
+    return {
+        "answer": f"Ready for confirmation: **{summary}**. Nothing has been changed yet.",
+        "citations": [],
+        "market": market,
+        "pending_action": {
+            "token": str(row["token"]),
+            "action_type": action_type,
+            "summary": summary,
+            "expires_at": row.get("expires_at"),
+        },
+        "error": None,
+    }
+
+
+async def _desk_trade(route_raw: dict, slug: Optional[str]) -> dict:
+    """Resolve an exact paper trade and persist it for explicit confirmation."""
     query = str(route_raw.get("market_query") or "")
     target = await _resolve_slug(query, slug)
     if not target:
@@ -464,12 +499,8 @@ async def _desk_trade(ctx: RunContext, route_raw: dict, slug: Optional[str]) -> 
         return {"answer": "Tell me which side — **BUY YES** or **BUY NO** — and I'll place the paper trade.",
                 "citations": [], "market": None, "error": None}
 
-    # The broker's halt gate lives in backend/sim/risk.py and is consulted by
-    # jobs, not by execute_paper_trade — so without this check the chat can arm
-    # the circuit breaker in one turn and trade through it in the next.
-    settings = await asyncio.to_thread(supabase_client.get_agent_settings)
-    if (settings.get("halt") or {}).get("active"):
-        reason = (settings.get("halt") or {}).get("reason") or "no reason recorded"
+    reason = await _halt_reason()
+    if reason:
         return {"answer": f"Trading is halted ({reason}) — no paper trade was placed. "
                           "Say **resume trading** to lift the circuit breaker first.",
                 "citations": [], "market": None, "error": None}
@@ -484,6 +515,35 @@ async def _desk_trade(ctx: RunContext, route_raw: dict, slug: Optional[str]) -> 
     if market is None:
         return {"answer": f"No live market found for `{target}`.", "citations": [], "market": None, "error": None}
 
+    market_ref = {"slug": target, "question": market.question}
+    summary = f"{side.replace('_', ' ')} ${size_usd:.2f} on {market.question}"
+    return await _pending_action(
+        "trade",
+        {"slug": target, "side": side, "size_usd": size_usd, "question": market.question},
+        summary,
+        market_ref,
+    )
+
+
+async def _execute_trade_action(payload: dict) -> dict:
+    """Execute one already-claimed trade action against a fresh live book."""
+    reason = await _halt_reason()
+    if reason:
+        return {
+            "answer": f"Trading is halted ({reason}) — no paper trade was placed.",
+            "citations": [], "market": None, "error": None,
+        }
+
+    target = str(payload.get("slug") or "")
+    side = payload.get("side")
+    size_usd = float(payload.get("size_usd") or 0)
+    if not target or side not in ("BUY_YES", "BUY_NO") or size_usd <= 0:
+        return {"answer": "That confirmation payload is invalid. No trade was placed.",
+                "citations": [], "market": None, "error": None}
+    market = await polymarket.get_market_state(target)
+    if market is None:
+        return {"answer": f"No live market found for `{target}`.", "citations": [], "market": None, "error": None}
+
     from backend.agent.types import PricingResult
     from backend.sim import paper_broker
 
@@ -493,6 +553,7 @@ async def _desk_trade(ctx: RunContext, route_raw: dict, slug: Optional[str]) -> 
         net_edge_pts=0.0, verdict=side, suggested_size_pct_bankroll=0.0,
         resolution_risk="medium",
     )
+    ctx = RunContext()
     fill = await paper_broker.execute_paper_trade(ctx, market, priced, size_usd=size_usd, strategy="manual")
     market_ref = {"slug": target, "question": market.question}
     if fill is None:
@@ -547,8 +608,7 @@ async def _desk_analyze(route_raw: dict, slug: Optional[str]) -> dict:
 
 
 async def _desk_close(route_raw: dict, slug: Optional[str]) -> dict:
-    """Close all or part of an open paper position named in chat."""
-    from backend.sim import paper_broker
+    """Resolve an exact open position and persist a close confirmation."""
     from backend.sim.portfolio import get_portfolio
 
     portfolio = await asyncio.to_thread(get_portfolio)
@@ -577,26 +637,109 @@ async def _desk_close(route_raw: dict, slug: Optional[str]) -> dict:
     # Several rows can share a market (different strategies); close the largest
     # rather than guessing, and say so.
     position = max(matches, key=lambda r: float(r.get("size_usd") or 0))
-    report = await paper_broker.close_position(str(position["id"]), fraction=fraction)
     market_ref = {"slug": str(position["market_id"]), "question": str(position["market_id"])}
+    portion = "all" if fraction >= 0.999 else f"{fraction * 100:.0f}%"
+    summary = (
+        f"close {portion} of {position.get('side', '')} ${float(position.get('size_usd') or 0):.2f} "
+        f"on {position['market_id']}"
+    )
+    return await _pending_action(
+        "close",
+        {
+            "position_id": str(position["id"]),
+            "fraction": fraction,
+            "market_id": str(position["market_id"]),
+            "side": str(position.get("side") or ""),
+            "matching_positions": len(matches),
+        },
+        summary,
+        market_ref,
+    )
+
+
+async def _execute_close_action(payload: dict) -> dict:
+    from backend.sim import paper_broker
+
+    position_id = str(payload.get("position_id") or "")
+    fraction = max(0.01, min(1.0, float(payload.get("fraction") or 1.0)))
+    market_id = str(payload.get("market_id") or "")
+    side = str(payload.get("side") or "")
+    market_ref = {"slug": market_id, "question": market_id}
+    if not position_id or not market_id:
+        return {"answer": "That confirmation payload is invalid. No position was closed.",
+                "citations": [], "market": None, "error": None}
+    report = await paper_broker.close_position(position_id, fraction=fraction)
     if report.get("error"):
         return {"answer": f"Couldn't close that position: {report['error']}.",
                 "citations": [], "market": market_ref, "error": None}
 
     pnl = float(report.get("pnl") or 0)
     portion = "in full" if fraction >= 0.999 else f"{fraction * 100:.0f}% of it"
-    extra = f" ({len(matches)} positions share this market — I closed the largest.)" if len(matches) > 1 else ""
+    count = int(payload.get("matching_positions") or 0)
+    extra = f" ({count} positions share this market — I closed the largest.)" if count > 1 else ""
     return {
         "answer": (
-            f"✅ Closed {portion}: **{position.get('side', '')}** on *{position['market_id']}* "
+            f"✅ Closed {portion}: **{side}** on *{market_id}* "
             f"at {float(report.get('exit_price') or 0) * 100:.1f}% — "
             f"realized PnL **{'+' if pnl >= 0 else '-'}${abs(pnl):,.2f}**.{extra} "
             "Paper trading only — not financial advice."
         ),
         "citations": [], "market": market_ref,
-        "closed": {"position_id": str(position["id"]), "fraction": fraction, "pnl": pnl},
+        "closed": {"position_id": position_id, "fraction": fraction, "pnl": pnl},
         "error": None,
     }
+
+
+async def decide_chat_action(token: str, decision: str) -> dict:
+    """Confirm/cancel once; retries receive the original stored result."""
+    try:
+        action = await asyncio.to_thread(supabase_client.claim_chat_action, token)
+    except Exception:
+        return {"answer": "Confirmation storage is unavailable. No action was taken.",
+                "citations": [], "market": None, "error": None}
+
+    status = action.get("status")
+    if not action.get("claimed"):
+        stored = action.get("result")
+        if status == "completed" and isinstance(stored, dict):
+            return {**stored, "idempotent_replay": True}
+        if status == "processing":
+            return {"answer": "This action is already being processed. It will not run twice.",
+                    "citations": [], "market": None, "error": None, "idempotent_replay": True}
+        if status == "cancelled":
+            reason = stored.get("reason") if isinstance(stored, dict) else None
+            answer = "This confirmation expired. No action was taken." if reason == "expired" else "This action was already cancelled."
+            return {"answer": answer, "citations": [], "market": None, "error": None,
+                    "idempotent_replay": True}
+        if status == "failed" and isinstance(stored, dict):
+            return {**stored, "idempotent_replay": True}
+        return {"answer": "That confirmation was not found. No action was taken.",
+                "citations": [], "market": None, "error": None}
+
+    if decision == "cancel":
+        result = {"answer": "Cancelled. No action was taken.", "citations": [], "market": None, "error": None}
+        await asyncio.to_thread(supabase_client.finish_chat_action, token, "cancelled", result)
+        return result
+
+    payload = action.get("payload") if isinstance(action.get("payload"), dict) else {}
+    try:
+        if action.get("action_type") == "trade":
+            result = await _execute_trade_action(payload)
+        elif action.get("action_type") == "close":
+            result = await _execute_close_action(payload)
+        else:
+            result = {"answer": "Unknown action type. No action was taken.",
+                      "citations": [], "market": None, "error": None}
+        await asyncio.to_thread(supabase_client.finish_chat_action, token, "completed", result)
+        return result
+    except Exception as exc:
+        result = {"answer": f"The action failed before completion: {exc}",
+                  "citations": [], "market": None, "error": None}
+        try:
+            await asyncio.to_thread(supabase_client.finish_chat_action, token, "failed", result)
+        except Exception:
+            pass
+        return result
 
 
 async def _desk_watchlist(route_raw: dict, slug: Optional[str]) -> dict:
@@ -646,7 +789,7 @@ async def desk_chat(question: str, history: list[dict], slug: Optional[str] = No
         return {"answer": self_description(), "citations": [], "market": None, "error": None}
 
     if route == "trade":
-        return await _desk_trade(ctx, route_raw, slug)
+        return await _desk_trade(route_raw, slug)
 
     if route == "analyze":
         return await _desk_analyze(route_raw, slug)

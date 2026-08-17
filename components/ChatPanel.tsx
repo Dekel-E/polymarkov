@@ -48,7 +48,10 @@ export default function ChatPanel<E>({
     history: { role: "user" | "assistant"; content: string }[],
   ) => Promise<ChatTransportResult<E>>;
   renderExtrasTop?: (extras: E) => ReactNode;
-  renderExtrasBottom?: (extras: E) => ReactNode;
+  renderExtrasBottom?: (
+    extras: E,
+    resolve: (result: ChatTransportResult<E>) => void,
+  ) => ReactNode;
 }) {
   const [messages, setMessages] = useState<ChatMessage<E>[]>([]);
   const [input, setInput] = useState("");
@@ -181,7 +184,15 @@ export default function ChatPanel<E>({
                   <div className="text-sm text-desk-ink">
                     <Markdown>{m.content}</Markdown>
                   </div>
-                  {m.extras !== undefined && renderExtrasBottom?.(m.extras)}
+                   {m.extras !== undefined && renderExtrasBottom?.(m.extras, (result) => {
+                     setMessages((prev) =>
+                       prev.map((item, index) =>
+                         index === i
+                           ? { ...item, content: result.content, extras: result.extras }
+                           : item,
+                       ),
+                     );
+                   })}
                 </div>
               </div>
             ),

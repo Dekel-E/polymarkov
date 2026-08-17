@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import ActivityFeed from "@/components/ActivityFeed";
+import AutomationStatus from "@/components/AutomationStatus";
 import DeskBriefing from "@/components/DeskBriefing";
 import DeskChat from "@/components/DeskChat";
 import { executeArbitrage, fetchArbitrage, fetchSettings, updateSettings } from "@/lib/api";
@@ -191,6 +192,8 @@ export default function StrategiesPage() {
           Autonomous runs require the local autopilot or an enabled workflow schedule.
         </p>
       </header>
+
+      <AutomationStatus />
 
       {settings?.halt.active && (
         <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-red-800 bg-red-950/40 p-4">

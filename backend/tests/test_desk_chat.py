@@ -153,6 +153,19 @@ async def test_desk_chat_trade_route_places_paper_trade(monkeypatch):
         return make_market("fed-cut")
 
     captured: dict = {}
+    pending: dict = {}
+    finished: dict = {}
+
+    def fake_create(action_type, payload, ttl_minutes=10):
+        pending.update(action_type=action_type, payload=payload)
+        return {"token": "00000000-0000-0000-0000-000000000001", "expires_at": "soon"}
+
+    def fake_claim(token):
+        assert token == "00000000-0000-0000-0000-000000000001"
+        return {"status": "processing", "claimed": True, **pending}
+
+    def fake_finish(token, status, result):
+        finished.update(token=token, status=status, result=result)
 
     async def fake_exec(ctx, market, priced, size_usd=50.0, strategy="manual"):
         captured.update(side=priced.verdict, size=size_usd, strategy=strategy)
@@ -164,11 +177,18 @@ async def test_desk_chat_trade_route_places_paper_trade(monkeypatch):
     monkeypatch.setattr(polymarket, "search_markets", fake_search)
     monkeypatch.setattr(polymarket, "get_market_state", fake_state)
     monkeypatch.setattr(paper_broker, "execute_paper_trade", fake_exec)
+    monkeypatch.setattr(chat.supabase_client, "create_chat_action", fake_create)
+    monkeypatch.setattr(chat.supabase_client, "claim_chat_action", fake_claim)
+    monkeypatch.setattr(chat.supabase_client, "finish_chat_action", fake_finish)
 
     result = await chat.desk_chat("buy 25 yes on the fed market", [])
+    assert captured == {}  # preparation never executes the side effect
+    assert result["pending_action"]["action_type"] == "trade"
+    result = await chat.decide_chat_action(result["pending_action"]["token"], "confirm")
     assert captured == {"side": "BUY_YES", "size": 25.0, "strategy": "manual"}
     assert result["fill"]["side"] == "BUY_YES"
     assert "Paper trade filled" in result["answer"]
+    assert finished["status"] == "completed"
 
 
 @pytest.mark.asyncio
@@ -191,11 +211,20 @@ async def test_desk_chat_trade_uses_current_market_slug(monkeypatch):
 
     monkeypatch.setattr(polymarket, "get_market_state", fake_state)
     monkeypatch.setattr(paper_broker, "execute_paper_trade", fake_exec)
+    created: dict = {}
+
+    def fake_create(action_type, payload, ttl_minutes=10):
+        created.update(action_type=action_type, payload=payload)
+        return {"token": "00000000-0000-0000-0000-000000000002", "expires_at": "soon"}
+
+    monkeypatch.setattr(chat.supabase_client, "create_chat_action", fake_create)
 
     result = await chat.desk_chat("buy no here", [], slug="live-market")
     assert seen["slug"] == "live-market"  # scoped to the market in view, no search
-    assert seen["size"] == config.CHAT_DEFAULT_TRADE_USD  # default applied when omitted
-    assert result["fill"]["side"] == "BUY_NO"
+    assert "size" not in seen  # still waiting for confirmation
+    assert created["payload"]["size_usd"] == config.CHAT_DEFAULT_TRADE_USD
+    assert created["payload"]["side"] == "BUY_NO"
+    assert result["pending_action"]["action_type"] == "trade"
 
 
 @pytest.mark.asyncio
@@ -342,6 +371,14 @@ async def test_desk_chat_close_route_closes_position(monkeypatch):
         "resolved": [], "stats": {}, "equity_history": [],
     })
     seen: dict = {}
+    pending: dict = {}
+
+    def fake_create(action_type, payload, ttl_minutes=10):
+        pending.update(action_type=action_type, payload=payload)
+        return {"token": "00000000-0000-0000-0000-000000000003", "expires_at": "soon"}
+
+    def fake_claim(token):
+        return {"status": "processing", "claimed": True, **pending}
 
     async def fake_close(position_id, fraction=1.0):
         seen.update(position_id=position_id, fraction=fraction)
@@ -349,10 +386,54 @@ async def test_desk_chat_close_route_closes_position(monkeypatch):
                 "closed_fraction": fraction, "exit_price": 0.61, "pnl": 8.25}
 
     monkeypatch.setattr(paper_broker, "close_position", fake_close)
+    monkeypatch.setattr(chat.supabase_client, "create_chat_action", fake_create)
+    monkeypatch.setattr(chat.supabase_client, "claim_chat_action", fake_claim)
+    monkeypatch.setattr(chat.supabase_client, "finish_chat_action", lambda *args: None)
     result = await chat.desk_chat("close half of this", [], slug="fed-cut")
+    assert seen == {}  # preparation never closes the position
+    result = await chat.decide_chat_action(result["pending_action"]["token"], "confirm")
     assert seen == {"position_id": "p1", "fraction": 0.5}
     assert result["closed"]["pnl"] == 8.25
     assert "+$8.25" in result["answer"]
+
+
+@pytest.mark.asyncio
+async def test_chat_action_duplicate_confirmation_replays_result(monkeypatch):
+    stored = {
+        "answer": "Paper trade filled once.", "citations": [], "market": None,
+        "fill": {"position_id": "p1"}, "error": None,
+    }
+    monkeypatch.setattr(
+        chat.supabase_client,
+        "claim_chat_action",
+        lambda token: {"status": "completed", "claimed": False, "result": stored},
+    )
+
+    async def must_not_execute(_payload):
+        raise AssertionError("duplicate confirmation executed again")
+
+    monkeypatch.setattr(chat, "_execute_trade_action", must_not_execute)
+    result = await chat.decide_chat_action("00000000-0000-0000-0000-000000000004", "confirm")
+    assert result["fill"] == {"position_id": "p1"}
+    assert result["idempotent_replay"] is True
+
+
+@pytest.mark.asyncio
+async def test_chat_action_can_be_cancelled_without_execution(monkeypatch):
+    finished: dict = {}
+    monkeypatch.setattr(
+        chat.supabase_client,
+        "claim_chat_action",
+        lambda token: {"status": "processing", "claimed": True, "action_type": "trade", "payload": {}},
+    )
+    monkeypatch.setattr(
+        chat.supabase_client,
+        "finish_chat_action",
+        lambda token, status, result: finished.update(status=status, result=result),
+    )
+    result = await chat.decide_chat_action("00000000-0000-0000-0000-000000000005", "cancel")
+    assert finished["status"] == "cancelled"
+    assert "No action was taken" in result["answer"]
 
 
 @pytest.mark.asyncio

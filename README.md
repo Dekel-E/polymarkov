@@ -259,7 +259,7 @@ Returns exactly:
 
 ```json
 {
-  "group_batch_order_number": "batch1_order1",
+  "group_batch_order_number": "batch3_order1",
   "team_name": "Polymarkov Team",
   "students": [
     { "name": "Dekel Elimelech", "email": "dekele@campus.technion.ac.il" },
@@ -351,6 +351,7 @@ Unless noted otherwise, GUI support endpoints return a domain payload plus an `e
 | `GET` | `/api/market/news?slug=...&limit=10` | `limit: 1..15` | Relevant indexed and live headlines. |
 | `POST` | `/api/market/chat` | `{slug, question, history?}` | Grounded market Q&A with citations and optional fresh search. |
 | `POST` | `/api/chat` | `{question, history?, slug?}` | Global DeskChat router. |
+| `POST` | `/api/chat/action` | `{token, decision}` | Confirm or cancel a pending DeskChat trade/close. Confirmations are durable and idempotent. |
 
 ### Portfolio and risk
 
@@ -384,6 +385,7 @@ Unless noted otherwise, GUI support endpoints return a domain payload plus an `e
 | `GET` | `/api/agenda` | - | Pending sentinel work items. |
 | `GET` | `/api/briefing` | - | Latest daily briefing. |
 | `GET` | `/api/activity?limit=25` | `limit: 1..50` | Recent analyses, trades, and settlements. |
+| `GET` | `/api/automation/status` | - | Checked-in cron state plus the latest GitHub Actions job heartbeats. |
 | `GET` | `/api/agent/stats` | - | Run history, verdict distribution, latency, and calibration. |
 | `GET` | `/api/health` | - | Deployment readiness, schema version, dependency configuration, and current global LLM budget. Returns `503` when core dependencies are not ready. |
 
@@ -429,6 +431,11 @@ DeskChat supports shorter operational messages such as:
 - `Set the stop loss to 30%.`
 - `Turn off copy trading.`
 - `Why did the last analysis pass?`
+
+Trade and close instructions are two-step operations: DeskChat first resolves the exact
+market, side, size, or position and displays a ten-minute confirmation. Confirming claims
+that action atomically in Supabase; retries replay the stored result instead of executing
+the paper trade or close twice.
 
 ## Technology stack
 
@@ -520,7 +527,7 @@ Polymarket, Kalshi, Google News, GDELT, Wikipedia, RSS, Bluesky, and the fallbac
 1. Create a Supabase project.
 2. Copy the project URL and service-role key into `.env`.
 3. Open the Supabase SQL editor.
-4. Run every file in `supabase/migrations/` in numeric order from `0001` through `0017`.
+4. Run every file in `supabase/migrations/` in numeric order from `0001` through `0018`.
 
 Migration responsibilities:
 
@@ -543,6 +550,7 @@ Migration responsibilities:
 | `0015` | Daily equity snapshots. |
 | `0016` | Indexed social posts. |
 | `0017` | Atomic global LLM quota, usage telemetry, and deployment health RPC. |
+| `0018` | GitHub Actions heartbeats and durable, idempotent chat-action confirmations. |
 
 The migrations are idempotent (`if not exists`) and are designed to be applied in order. A `PGRST205` or "table not installed" message means the connected database is behind the repository; apply the missing migrations and allow Supabase's schema cache to refresh.
 
@@ -694,6 +702,11 @@ Each job runs in a subprocess with a 15-minute timeout, so one failure does not 
 
 Automation workflows are manual-only in the repository. Their cron blocks are intentionally commented out for grading and cost control. To enable them, uncomment the desired `schedule` entries and add all required credentials under repository **Settings -> Secrets and variables -> Actions**.
 
+Each automation job writes a non-blocking start/final heartbeat to Supabase. The Strategy
+Desk combines those live records with the checked-in workflow files, showing whether cron
+is enabled, the latest trigger/result, and a link to the exact GitHub Actions run. Heartbeat
+telemetry never causes the underlying automation job to fail.
+
 The agenda worker still stops after 40 recorded analyses per UTC day as a workload-specific guard. In addition, migration `0017` enforces `LLM_GLOBAL_DAILY_REQUEST_LIMIT` before every provider request across all API routes and jobs. The PostgreSQL reservation is atomic, so concurrent workers cannot race past the limit. Keep schedules manual until expected usage has been estimated against the course allowance.
 
 ## Testing and verification
@@ -736,7 +749,7 @@ Polymarkov is designed for Vercel:
 2. Add the variables from `.env.example` to the Vercel project.
 3. Apply all Supabase migrations and verify the Pinecone dimension first.
 4. Deploy from the repository root.
-5. Verify `GET /api/health` returns `200`, `ready: true`, and schema version `0017`.
+5. Verify `GET /api/health` returns `200`, `ready: true`, and schema version `0018`.
 6. Verify the root GUI and all four required course endpoints.
 7. Keep the Vercel project/account active until grading is complete.
 
@@ -825,7 +838,7 @@ Confirm `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`, then apply all migrations. Wi
 
 ### `PGRST205`, "table not installed," or missing equity/social data
 
-The database schema is behind the code. Apply the missing migration files in numeric order. Equity history requires `0015`, stored social posts require `0016`, and the global quota plus deployment-health RPC require `0017`.
+The database schema is behind the code. Apply the missing migration files in numeric order. Equity history requires `0015`, stored social posts require `0016`, the global quota requires `0017`, and automation heartbeats plus chat confirmations require `0018`.
 
 ### Analysis says the global LLM budget is unavailable or exhausted
 
@@ -873,8 +886,8 @@ Regenerate the checked-in PNG and run the contract tests:
 - [ ] Module names match the registry, trace, and PNG.
 - [ ] `POST /api/execute` returns exactly `{status, error, response, steps}` without `?ui=1`.
 - [ ] The GUI displays the response and full module/prompt/response trace.
-- [ ] All 17 Supabase migrations are installed.
-- [ ] `GET /api/health` returns `200`, `ready: true`, schema `0017`, and a global budget status.
+- [ ] All 18 Supabase migrations are installed.
+- [ ] `GET /api/health` returns `200`, `ready: true`, schema `0018`, and a global budget status.
 - [ ] Pinecone uses the configured embedding dimension.
 - [ ] LLMod uses the course models and remains within budget.
 - [ ] `pytest`, TypeScript, lint, and production build pass.
@@ -887,7 +900,7 @@ Regenerate the checked-in PNG and run the contract tests:
 
 **Team:** Polymarkov Team
 
-**Presentation order:** `batch1_order1`
+**Presentation order:** `batch3_order1`
 
 | Student | Official email |
 |---|---|
