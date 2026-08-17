@@ -73,11 +73,3 @@ def query(
         {"id": m["id"], "score": m["score"], "metadata": dict(m.get("metadata") or {})}
         for m in resp.get("matches", [])
     ]
-
-
-def namespace_count(namespace: str) -> int:
-    if not is_configured():
-        return 0
-    stats = get_index().describe_index_stats()
-    ns = (stats.get("namespaces") or {}).get(namespace) or {}
-    return int(ns.get("vector_count", 0))

@@ -5,6 +5,7 @@ Polymarkov is an AI research and paper-trading desk for active Polymarket predic
 The project is educational. It never submits a real-money order and it is not financial advice.
 
 - Repository: [github.com/Dekel-E/polymarkov](https://github.com/Dekel-E/polymarkov)
+- Live deployment: [polymarkov.vercel.app](https://polymarkov.vercel.app)
 - Detailed architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - API entry point: [api/index.py](api/index.py)
 - Canonical module registry: [backend/agent/registry/tools.py](backend/agent/registry/tools.py)

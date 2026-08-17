@@ -81,17 +81,6 @@ class MarketState(BaseModel):
     asks: list[tuple[float, float]] = Field(default_factory=list)
 
 
-class Article(BaseModel):
-    id: str
-    url: str
-    title: str
-    domain: str
-    published_at: Optional[str] = None
-    snippet: str = ""
-    sentiment: Optional[float] = None            # -1..1, filled by SentimentScorer
-    stance: Optional[Literal["yes", "no", "neutral"]] = None
-
-
 class EvidenceCluster(BaseModel):
     id: str                                       # e.g. "c1"
     headline: str
